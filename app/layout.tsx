@@ -63,8 +63,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${rubik.variable} h-full`}>
-      <body className="flex min-h-full flex-col bg-surface text-ink antialiased">
+    <html lang="en" className={`${rubik.variable} h-full`} suppressHydrationWarning>
+      <body className="flex min-h-full flex-col bg-surface text-ink antialiased" suppressHydrationWarning>
         <OfflineBanner />
         {children}
         <Toaster />

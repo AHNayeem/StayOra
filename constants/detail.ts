@@ -234,19 +234,40 @@ export interface BookingField {
   multiplier: boolean;
 }
 
+/** An optional extra service the traveller can toggle on for a booking. */
+export interface BookingAddOn {
+  key: string;
+  label: string;
+  /** Base USD price. Charged once, or per guest when {@link perPerson} is set. */
+  price: number;
+  /** When true, the price is multiplied by the guest/traveller count. */
+  perPerson?: boolean;
+}
+
 export type BookingDateMode = "range" | "single" | "none";
 
 /** Per-vertical configuration for the sticky booking-inquiry widget. */
 export interface BookingWidgetConfig {
+  /** Panel heading, e.g. "Book Your Room". */
+  title: string;
+  /** Supporting line under the heading. */
+  subtitle: string;
   dateMode: BookingDateMode;
   checkInLabel?: string;
   checkOutLabel?: string;
+  /** Static check-in/out times shown under the labels (stays only). */
+  checkInTime?: string;
+  checkOutTime?: string;
   singleDateLabel?: string;
   /** In range mode, the rate is per night/day → the duration multiplies the total. */
   perDuration: boolean;
   /** Singular noun for the duration unit, e.g. "night", "day". */
   durationUnit?: string;
   fields: BookingField[];
+  /** Optional extra services rendered as checkboxes below the quantities. */
+  addOns?: BookingAddOn[];
+  /** Noun for the priced unit in the summary line, e.g. "Room", "Traveller". */
+  summaryNoun: string;
   ctaLabel: string;
   /** Reassurance line under the CTA. */
   note: string;
@@ -254,56 +275,96 @@ export interface BookingWidgetConfig {
 
 export const BOOKING_CONFIG: Record<BookingVertical, BookingWidgetConfig> = {
   hotels: {
+    title: "Book Your Room",
+    subtitle:
+      "Reserve your ideal room early for a hassle-free trip; secure comfort and convenience!",
     dateMode: "range",
-    checkInLabel: "Check-in",
-    checkOutLabel: "Check-out",
+    checkInLabel: "Check in",
+    checkOutLabel: "Check out",
+    checkInTime: "12:00 PM",
+    checkOutTime: "01:00 PM",
     perDuration: true,
     durationUnit: "night",
     fields: [
-      { key: "rooms", label: "Rooms", min: 1, max: 10, default: 1, multiplier: true },
-      { key: "guests", label: "Guests", hint: "Adults & children", min: 1, max: 20, default: 2, multiplier: false },
+      { key: "rooms", label: "Room Quantity", min: 1, max: 10, default: 1, multiplier: true },
+      { key: "guests", label: "Guest Capability", hint: "Adults & children", min: 1, max: 20, default: 3, multiplier: false },
     ],
-    ctaLabel: "Reserve now",
+    addOns: [
+      { key: "buffet", label: "Buffet Dinner", price: 100, perPerson: true },
+      { key: "airport", label: "Airport Transportation", price: 100 },
+    ],
+    summaryNoun: "Room",
+    ctaLabel: "Book Now",
     note: "You won't be charged yet",
   },
   apartments: {
+    title: "Book Your Stay",
+    subtitle:
+      "Secure your home away from home — reserve early for the best rate and peace of mind.",
     dateMode: "range",
-    checkInLabel: "Check-in",
-    checkOutLabel: "Check-out",
+    checkInLabel: "Check in",
+    checkOutLabel: "Check out",
+    checkInTime: "03:00 PM",
+    checkOutTime: "11:00 AM",
     perDuration: true,
     durationUnit: "night",
     fields: [
-      { key: "guests", label: "Guests", hint: "Max occupancy applies", min: 1, max: 16, default: 2, multiplier: false },
+      { key: "guests", label: "Guest Capability", hint: "Max occupancy applies", min: 1, max: 16, default: 2, multiplier: false },
     ],
-    ctaLabel: "Reserve now",
+    addOns: [
+      { key: "cleaning", label: "Mid-stay Cleaning", price: 40 },
+      { key: "parking", label: "Private Parking", price: 25 },
+    ],
+    summaryNoun: "Stay",
+    ctaLabel: "Book Now",
     note: "You won't be charged yet",
   },
   resorts: {
+    title: "Book Your Escape",
+    subtitle:
+      "Reserve your all-inclusive getaway early and lock in comfort, convenience and value.",
     dateMode: "range",
-    checkInLabel: "Check-in",
-    checkOutLabel: "Check-out",
+    checkInLabel: "Check in",
+    checkOutLabel: "Check out",
+    checkInTime: "02:00 PM",
+    checkOutTime: "12:00 PM",
     perDuration: true,
     durationUnit: "night",
     fields: [
-      { key: "rooms", label: "Rooms", min: 1, max: 8, default: 1, multiplier: true },
-      { key: "guests", label: "Guests", hint: "Adults & children", min: 1, max: 20, default: 2, multiplier: false },
+      { key: "rooms", label: "Room Quantity", min: 1, max: 8, default: 1, multiplier: true },
+      { key: "guests", label: "Guest Capability", hint: "Adults & children", min: 1, max: 20, default: 2, multiplier: false },
     ],
-    ctaLabel: "Reserve now",
+    addOns: [
+      { key: "spa", label: "Spa Package", price: 150, perPerson: true },
+      { key: "airport", label: "Airport Transportation", price: 120 },
+    ],
+    summaryNoun: "Room",
+    ctaLabel: "Book Now",
     note: "You won't be charged yet",
   },
   "shared-rooms": {
+    title: "Book Your Bed",
+    subtitle:
+      "Grab your spot in the dorm early — sociable, safe and easy on the budget.",
     dateMode: "range",
-    checkInLabel: "Check-in",
-    checkOutLabel: "Check-out",
+    checkInLabel: "Check in",
+    checkOutLabel: "Check out",
+    checkInTime: "02:00 PM",
+    checkOutTime: "10:00 AM",
     perDuration: true,
     durationUnit: "night",
     fields: [
       { key: "beds", label: "Beds", hint: "Priced per bed", min: 1, max: 12, default: 1, multiplier: true },
+      { key: "guests", label: "Guest Capability", min: 1, max: 12, default: 1, multiplier: false },
     ],
-    ctaLabel: "Reserve now",
+    summaryNoun: "Bed",
+    ctaLabel: "Book Now",
     note: "You won't be charged yet",
   },
   "convention-hall": {
+    title: "Reserve the Venue",
+    subtitle:
+      "Secure your event date and let our team handle the rest, from AV to layout.",
     dateMode: "range",
     checkInLabel: "From",
     checkOutLabel: "To",
@@ -312,10 +373,18 @@ export const BOOKING_CONFIG: Record<BookingVertical, BookingWidgetConfig> = {
     fields: [
       { key: "attendees", label: "Attendees", hint: "Capacity applies", min: 10, max: 2000, default: 100, multiplier: false },
     ],
-    ctaLabel: "Request quote",
+    addOns: [
+      { key: "catering", label: "Catering & Beverages", price: 45, perPerson: true },
+      { key: "staffing", label: "Event Staffing", price: 400 },
+    ],
+    summaryNoun: "Venue",
+    ctaLabel: "Request Quote",
     note: "No payment taken — we'll confirm availability",
   },
   transport: {
+    title: "Book Your Transfer",
+    subtitle:
+      "Reserve reliable door-to-door travel with a professional driver.",
     dateMode: "single",
     singleDateLabel: "Travel date",
     perDuration: false,
@@ -323,36 +392,65 @@ export const BOOKING_CONFIG: Record<BookingVertical, BookingWidgetConfig> = {
       { key: "vehicles", label: "Vehicles", min: 1, max: 20, default: 1, multiplier: true },
       { key: "passengers", label: "Passengers", hint: "Seats per vehicle apply", min: 1, max: 200, default: 2, multiplier: false },
     ],
-    ctaLabel: "Book transfer",
+    addOns: [
+      { key: "childseat", label: "Child Seat", price: 15 },
+      { key: "meet", label: "Meet & Greet", price: 20 },
+    ],
+    summaryNoun: "Vehicle",
+    ctaLabel: "Book Transfer",
     note: "Free cancellation up to 24h before",
   },
   tours: {
+    title: "Book This Tour",
+    subtitle:
+      "Reserve your place on the itinerary — pay later and travel with confidence.",
     dateMode: "single",
     singleDateLabel: "Departure date",
     perDuration: false,
     fields: [
       { key: "travelers", label: "Travellers", hint: "Priced per person", min: 1, max: 30, default: 2, multiplier: true },
     ],
-    ctaLabel: "Book this tour",
+    addOns: [
+      { key: "insurance", label: "Travel Insurance", price: 35, perPerson: true },
+      { key: "transfer", label: "Airport Transfer", price: 60 },
+    ],
+    summaryNoun: "Traveller",
+    ctaLabel: "Book This Tour",
     note: "Reserve now, pay later",
   },
   activities: {
+    title: "Book This Activity",
+    subtitle:
+      "Reserve your session early and skip the queue on the day.",
     dateMode: "single",
     singleDateLabel: "Activity date",
     perDuration: false,
     fields: [
       { key: "participants", label: "Participants", hint: "Priced per person", min: 1, max: 30, default: 2, multiplier: true },
     ],
-    ctaLabel: "Book now",
+    addOns: [
+      { key: "photos", label: "Photo Package", price: 25 },
+      { key: "pickup", label: "Hotel Pick-up", price: 15, perPerson: true },
+    ],
+    summaryNoun: "Participant",
+    ctaLabel: "Book Now",
     note: "Free cancellation up to 24h before",
   },
   visa: {
+    title: "Start Your Application",
+    subtitle:
+      "Begin your visa application with specialists who handle every step.",
     dateMode: "none",
     perDuration: false,
     fields: [
       { key: "applicants", label: "Applicants", hint: "Priced per person", min: 1, max: 20, default: 1, multiplier: true },
     ],
-    ctaLabel: "Start application",
+    addOns: [
+      { key: "priority", label: "Priority Processing", price: 80, perPerson: true },
+      { key: "courier", label: "Document Courier", price: 30 },
+    ],
+    summaryNoun: "Applicant",
+    ctaLabel: "Start Application",
     note: "Free eligibility check",
   },
 };

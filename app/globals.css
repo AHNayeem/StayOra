@@ -272,6 +272,21 @@
     animation: ken-burns 7s var(--ease-out-soft) forwards;
   }
 
+  /* Continuous horizontal marquee (partner/logo strips). The track duplicates
+     its content, so translating by -50% loops seamlessly. Reduced-motion is
+     handled globally below (iteration-count → 1 halts the loop). */
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  .animate-marquee {
+    animation: marquee 45s linear infinite;
+  }
+
   /* Multi-line truncation */
   .line-clamp-2 {
     display: -webkit-box;

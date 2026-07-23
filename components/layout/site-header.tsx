@@ -5,7 +5,7 @@ import { LogIn, Menu, UserPlus } from "lucide-react";
 import { useAuth } from "@/features/auth";
 import { SearchTrigger } from "@/features/search/global";
 import { Container } from "@/components/ui/container";
-import { useScrolledPast } from "@/hooks/use-scroll-position";
+import { useHideOnScrollDown, useScrolledPast } from "@/hooks/use-scroll-position";
 import { cn } from "@/lib/utils";
 import { AuthModal } from "./auth-modal";
 import { DesktopNav } from "./desktop-nav";
@@ -24,6 +24,7 @@ type AuthMode = "signin" | "signup";
  */
 export function SiteHeader() {
   const scrolled = useScrolledPast(8);
+  const topBarHidden = useHideOnScrollDown(44);
   const { status, user } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
@@ -37,7 +38,14 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50">
-      <TopBar />
+      <div
+        className={cn(
+          "overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+          topBarHidden ? "max-h-0 opacity-0" : "max-h-11 opacity-100",
+        )}
+      >
+        <TopBar />
+      </div>
 
       <div
         className={cn(

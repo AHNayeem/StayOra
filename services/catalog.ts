@@ -59,10 +59,15 @@ export function getListings(
   return mockDelay(paginate(BY_VERTICAL[vertical], page, pageSize));
 }
 
-/** Featured listings for a vertical (home-page rails). */
+/**
+ * Featured listings for a vertical (home-page rails). Curated `featured` anchors
+ * lead, then the rest of the vertical tops up to `limit` — so a rail always
+ * shows a full set of cards even though only a handful of listings are flagged
+ * featured.
+ */
 export function getFeatured(vertical: BookingVertical, limit = 6): Promise<Listing[]> {
-  const items = BY_VERTICAL[vertical].filter((l) => l.featured);
-  const pool = items.length > 0 ? items : BY_VERTICAL[vertical];
+  const all = BY_VERTICAL[vertical];
+  const pool = [...all.filter((l) => l.featured), ...all.filter((l) => !l.featured)];
   return mockDelay(pool.slice(0, limit));
 }
 

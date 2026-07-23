@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { ElementType, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CardImage } from "./card-image";
 
 /**
  * Card system — a small set of composable, presentational parts shared by every
@@ -45,6 +45,8 @@ const aspectMap = {
 interface CardMediaProps {
   src: string;
   alt: string;
+  /** Shown when `src` is missing or fails to load. Defaults to a themed placeholder. */
+  fallbackSrc?: string;
   /** If set, the image becomes a link (with a full-card stretched overlay). */
   href?: string;
   aspect?: keyof typeof aspectMap;
@@ -70,6 +72,7 @@ interface CardMediaProps {
 export function CardMedia({
   src,
   alt,
+  fallbackSrc,
   href,
   aspect = "card",
   sizes = "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw",
@@ -82,9 +85,10 @@ export function CardMedia({
 }: CardMediaProps) {
   return (
     <div className={cn("relative overflow-hidden", aspectMap[aspect], className)}>
-      <Image
+      <CardImage
         src={src}
         alt={alt}
+        fallbackSrc={fallbackSrc}
         fill
         sizes={sizes}
         className={cn(

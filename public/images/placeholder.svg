@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-label="Image unavailable">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e8eef5" />
+      <stop offset="1" stop-color="#cfdae7" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky)" />
+  <circle cx="620" cy="150" r="54" fill="#f4c66a" opacity="0.85" />
+  <path d="M0 600 L230 340 L360 470 L520 250 L800 600 Z" fill="#9fb3c8" />
+  <path d="M0 600 L180 430 L340 560 L560 380 L800 560 L800 600 Z" fill="#7c93ab" />
+  <g fill="#5c6f85" opacity="0.9" transform="translate(400 470)">
+    <path d="M-26 0 h52 v6 h-52 z" />
+    <path d="M-4 -34 h8 v34 h-8 z" />
+    <path d="M4 -30 l40 12 l-40 12 z" />
+  </g>
+  <text x="400" y="545" text-anchor="middle" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif" font-size="26" fill="#5c6f85" opacity="0.8">Image unavailable</text>
+</svg>

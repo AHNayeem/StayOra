@@ -13,6 +13,14 @@ import type {
   Testimonial,
 } from "@/types/content";
 import type { BlogCategory, BlogDetail } from "@/types/blog";
+import type {
+  Award,
+  CountryHighlight,
+  FlashDeal,
+  InspirationTheme,
+  Partner,
+  TravelPackage,
+} from "@/types/home";
 import {
   BLOG_POSTS,
   DESTINATIONS,
@@ -21,6 +29,14 @@ import {
   STATS,
   TESTIMONIALS,
 } from "@/constants/content";
+import {
+  AWARDS,
+  COUNTRY_HIGHLIGHTS,
+  FLASH_DEALS,
+  INSPIRATION_THEMES,
+  PARTNERS,
+  TRAVEL_PACKAGES,
+} from "@/constants/home-data";
 import { buildBlogDetail } from "@/lib/blog-detail";
 import { mockDelay } from "./http";
 
@@ -66,3 +82,25 @@ export const getTestimonials = (): Promise<Testimonial[]> => mockDelay(TESTIMONI
 export const getFeatures = (): Promise<Feature[]> => mockDelay(FEATURES);
 
 export const getStats = (): Promise<Stat[]> => mockDelay(STATS);
+
+/** Time-limited flash deals for the home "Flash deals" band. */
+export const getFlashDeals = (limit?: number): Promise<FlashDeal[]> =>
+  mockDelay(limit ? FLASH_DEALS.slice(0, limit) : FLASH_DEALS);
+
+/** Curated multi-item packages for the "Trending packages" rail. */
+export const getTravelPackages = (limit?: number): Promise<TravelPackage[]> =>
+  mockDelay(limit ? TRAVEL_PACKAGES.slice(0, limit) : TRAVEL_PACKAGES);
+
+/** "Browse by country" highlights. */
+export const getCountryHighlights = (limit?: number): Promise<CountryHighlight[]> =>
+  mockDelay(limit ? COUNTRY_HIGHLIGHTS.slice(0, limit) : COUNTRY_HIGHLIGHTS);
+
+/** Mood/interest inspiration themes. */
+export const getInspirationThemes = (): Promise<InspirationTheme[]> =>
+  mockDelay(INSPIRATION_THEMES);
+
+/** Partner brands for the trust strip. */
+export const getPartners = (): Promise<Partner[]> => mockDelay(PARTNERS);
+
+/** Industry awards / recognitions. */
+export const getAwards = (): Promise<Award[]> => mockDelay(AWARDS);

@@ -24,12 +24,12 @@ export const HOME_SECTIONS = {
       "Hand-picked cities and escapes travellers love — browse thousands of stays in each.",
   },
   tours: {
-    eyebrow: "Featured tours",
+    eyebrow: "Popular tours",
     title: "Trips worth taking",
     description: "Curated multi-day journeys led by trusted local operators.",
   },
   hotels: {
-    eyebrow: "Featured hotels",
+    eyebrow: "Popular hotels",
     title: "Stays our guests rate highest",
     description: "Comfort, location and value — the properties booking best right now.",
   },
@@ -72,7 +72,68 @@ export const HOME_SECTIONS = {
     eyebrow: "Fun facts",
     title: "Trusted by travellers worldwide",
   },
+  resorts: {
+    eyebrow: "Featured resorts",
+    title: "Escapes worth every mile",
+    description: "Beachfront villas and all-inclusive retreats, hand-picked by our team.",
+  },
+  apartments: {
+    eyebrow: "Featured apartments",
+    title: "Feel at home, anywhere",
+    description: "Space to spread out — kitchens, laundry and city views included.",
+  },
+  slider: {
+    eyebrow: "Where to next",
+    title: "Trending destinations",
+    description: "The cities and islands travellers are booking most this season.",
+  },
+  countries: {
+    eyebrow: "Go global",
+    title: "Browse by country",
+    description: "From weekend city breaks to once-in-a-lifetime adventures — start with a place.",
+  },
+  packages: {
+    eyebrow: "All-in-one trips",
+    title: "Trending packages",
+    description: "Flights, stays and experiences bundled into one easy, great-value booking.",
+  },
+  flash: {
+    eyebrow: "Ends soon",
+    title: "Flash deals",
+    description: "Deep discounts on a handful of listings — once they're gone, they're gone.",
+  },
+  inspiration: {
+    eyebrow: "Find your vibe",
+    title: "Travel inspiration",
+    description: "Not sure where to go? Start with the kind of trip you're dreaming of.",
+  },
+  awards: {
+    eyebrow: "Recognised worldwide",
+    title: "Award-winning service",
+    description: "Independently rated among the best in travel, year after year.",
+  },
+  faqs: {
+    eyebrow: "Good to know",
+    title: "Frequently asked questions",
+    description: "Everything you need to book with total confidence.",
+  },
 } satisfies Record<string, SectionCopy>;
+
+/** Trust strip + closing CTA copy. */
+export const HOME_PARTNERS = {
+  title: "Trusted by leading travel brands worldwide",
+} as const;
+
+export const HOME_CTA = {
+  eyebrow: "Your next trip starts here",
+  title: "Ready to plan your next journey?",
+  description:
+    "Create a free account to unlock member prices, save your favourites and check out in seconds — across every kind of stay and experience.",
+  primary: { label: "Get started free", href: "/register" },
+  secondary: { label: "Explore destinations", href: "/destinations" },
+  image: img("photo-1476514525535-07fb3b4ae5f1"),
+  imageAlt: "A winding mountain road at golden hour",
+} as const;
 
 /** "About" intro band content. */
 export const HOME_ABOUT = {
