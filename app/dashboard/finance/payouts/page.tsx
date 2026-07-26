@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/features/dashboard/components/placeholder-page";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
+import { PermissionDenied } from "@/features/dashboard/components/state-views";
+import { PayoutsList } from "@/features/dashboard/modules/payouts";
 
 export const metadata: Metadata = { title: "Payouts" };
 
 export default function Page() {
   return (
-    <PlaceholderPage
-      title="Payouts"
-      description="Merchant payouts and settlements."
-      phase={4}
-      anyPermission={["finance:read"]}
-      features={["Data table", "Filters", "Export", "Detail view", ]}
-    />
+    <PermissionGuard anyPermission={["finance:read"]} fallback={<PermissionDenied />}>
+      <PageHeader title="Payouts" description="Merchant payouts and disbursements." />
+      <PayoutsList />
+    </PermissionGuard>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { type ReactNode } from "react";
 import { useQuery, useMutation } from "../../data";
 import { useResourceList } from "../../crud";
 import { bookingColumns } from "./columns";
@@ -7,13 +8,14 @@ import { bookingKeys, bookingsService } from "./service";
 import type { Booking, CreateBookingInput } from "./types";
 
 /** List bookings with server-side search/sort/pagination + selection. */
-export function useBookings() {
+export function useBookings(rowActions?: (row: Booking) => ReactNode) {
   return useResourceList<Booking>({
     queryKey: bookingKeys.all,
     fetcher: (params, signal) => bookingsService.list(params, signal),
     columns: bookingColumns,
     getRowId: (row) => row.id,
     initialSort: { field: "checkIn", direction: "desc" },
+    rowActions,
   });
 }
 
@@ -34,7 +36,15 @@ export function useCreateBooking() {
   });
 }
 
-/** Delete a booking (used by the table's bulk action). */
+/** Update a booking (edit drawer). */
+export function useUpdateBooking() {
+  return useMutation<Booking, { id: string; input: CreateBookingInput }>({
+    mutationFn: ({ id, input }) => bookingsService.update(id, input),
+    invalidateKeys: [bookingKeys.all],
+  });
+}
+
+/** Delete a booking (used by the table's bulk action + per-row action). */
 export function useDeleteBooking() {
   return useMutation<void, string>({
     mutationFn: (id) => bookingsService.remove(id),

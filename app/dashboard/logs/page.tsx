@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/features/dashboard/components/placeholder-page";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
+import { PermissionDenied } from "@/features/dashboard/components/state-views";
+import { AuditLogsList } from "@/features/dashboard/modules/logs";
 
 export const metadata: Metadata = { title: "Audit Logs" };
 
 export default function Page() {
   return (
-    <PlaceholderPage
-      title="Audit Logs"
-      description="Audit, login and API activity logs."
-      phase={5}
-      anyPermission={["logs:read"]}
-      features={["Audit trail", "Login logs", "API logs", "Filters & export", ]}
-    />
+    <PermissionGuard anyPermission={["logs:read"]} fallback={<PermissionDenied />}>
+      <PageHeader title="Audit Logs" description="Audit, login and API activity logs." />
+      <AuditLogsList />
+    </PermissionGuard>
   );
 }

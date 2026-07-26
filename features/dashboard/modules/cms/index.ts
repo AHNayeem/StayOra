@@ -1,6 +1,14 @@
-/** CMS module — pages/blog/FAQ (types, service, columns, hooks, UI). */
+/** CMS module — pages/blog/FAQ (types, schema, service, columns, hooks, UI). */
 export * from "./types";
+export { cmsPageSchema } from "./schemas";
+export type { CmsPageFormValues } from "./schemas";
 export { cmsService, cmsKeys } from "./service";
 export { cmsColumns } from "./columns";
-export { useCmsPages } from "./hooks";
+export {
+  useCmsPages,
+  useCreateCmsPage,
+  useUpdateCmsPage,
+  useDeleteCmsPage,
+} from "./hooks";
 export { CmsPagesList } from "./list";
+export { CmsPageForm } from "./form";

@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/features/dashboard/components/placeholder-page";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
+import { PermissionDenied } from "@/features/dashboard/components/state-views";
+import { UsersList } from "@/features/dashboard/modules/users";
 
 export const metadata: Metadata = { title: "Users" };
 
 export default function Page() {
   return (
-    <PlaceholderPage
-      title="Users"
-      description="Platform user directory and access management."
-      phase={4}
-      anyPermission={["users:read"]}
-      features={["User table", "Invite & deactivate", "Role assignment", "Sessions", ]}
-    />
+    <PermissionGuard anyPermission={["users:read"]} fallback={<PermissionDenied />}>
+      <PageHeader
+        title="Users"
+        description="Platform user directory and access management."
+      />
+      <UsersList />
+    </PermissionGuard>
   );
 }

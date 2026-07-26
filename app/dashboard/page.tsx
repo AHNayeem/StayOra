@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { PageHeader } from "@/features/dashboard/components/page-header";
 import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
 import { PermissionDenied } from "@/features/dashboard/components/state-views";
 import { DashboardOverview } from "@/features/dashboard/modules/overview";
+
+export const metadata: Metadata = { title: "Dashboard" };
 
 /**
  * Dashboard overview. Phase 4 connects the KPI grid, performance chart, recent

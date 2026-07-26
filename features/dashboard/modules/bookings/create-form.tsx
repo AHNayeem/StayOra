@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { getErrorMessage } from "../../data";
 import { useZodForm, applyServerErrors } from "../../forms";
 import {
@@ -16,8 +15,11 @@ import {
 } from "../../ui";
 import { statusOptions } from "../../lib/status";
 import { createBookingSchema } from "./schemas";
-import { useCreateBooking } from "./hooks";
-import { BOOKING_STATUSES } from "./types";
+import { useCreateBooking, useUpdateBooking } from "./hooks";
+import { BOOKING_STATUSES, type Booking } from "./types";
+
+const LIST_HREF = "/dashboard/bookings";
+const toDateInput = (iso: string) => (iso ? iso.slice(0, 10) : "");
 
 // Reference option lists — placeholders for the catalog / localization feeds
 // (kept out of JSX; a real deployment fetches these).
@@ -31,36 +33,51 @@ const CURRENCY_OPTIONS = ["USD", "EUR", "GBP", "AED"].map((v) => ({
   label: v,
 }));
 
+interface BookingFormProps {
+  /** Present ⇒ edit mode. */
+  initial?: Booking;
+  onDone?: () => void;
+  onCancel?: () => void;
+}
+
 /**
- * Create-booking form — the reference form flow: `useZodForm` for typed,
- * schema-validated fields, `useCreateBooking` for the mutation, inline server
- * error mapping via {@link applyServerErrors}, and redirect on success.
+ * BookingForm — the reference form flow: `useZodForm` for typed,
+ * schema-validated fields, create/update mutations, inline server error mapping
+ * via {@link applyServerErrors}. Serves the create route and the row edit
+ * drawer; `onDone`/`onCancel` default to list navigation.
  */
-export function BookingCreateForm() {
+export function BookingForm({ initial, onDone, onCancel }: BookingFormProps) {
   const router = useRouter();
   const create = useCreateBooking();
+  const update = useUpdateBooking();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const isEdit = Boolean(initial);
+  const pending = create.isPending || update.isPending;
 
   const form = useZodForm(createBookingSchema, {
     defaultValues: {
-      guestName: "",
-      guestEmail: "",
-      property: "",
-      propertyType: "Hotel",
-      checkIn: "",
-      checkOut: "",
-      guests: 1,
-      amount: 0,
-      currency: "USD",
-      status: "pending",
+      guestName: initial?.guestName ?? "",
+      guestEmail: initial?.guestEmail ?? "",
+      property: initial?.property ?? "",
+      propertyType: initial?.propertyType ?? "Hotel",
+      checkIn: toDateInput(initial?.checkIn ?? ""),
+      checkOut: toDateInput(initial?.checkOut ?? ""),
+      guests: initial?.guests ?? 1,
+      amount: initial?.amount ?? 0,
+      currency: initial?.currency ?? "USD",
+      status: initial?.status ?? "pending",
     },
   });
+
+  const finish = () => (onDone ? onDone() : router.push(LIST_HREF));
+  const cancel = () => (onCancel ? onCancel() : router.push(LIST_HREF));
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      await create.mutateAsync(values);
-      router.push("/dashboard/bookings");
+      if (initial) await update.mutateAsync({ id: initial.id, input: values });
+      else await create.mutateAsync(values);
+      finish();
     } catch (error) {
       if (!applyServerErrors(form.setError, error)) {
         setSubmitError(getErrorMessage(error));
@@ -71,7 +88,7 @@ export function BookingCreateForm() {
   return (
     <form onSubmit={onSubmit} noValidate className="rounded-card border border-line bg-surface px-6 py-2">
       {submitError && (
-        <Alert tone="danger" title="Couldn't create booking" className="my-4">
+        <Alert tone="danger" title="Couldn't save booking" className="my-4">
           {submitError}
         </Alert>
       )}
@@ -167,16 +184,18 @@ export function BookingCreateForm() {
       </FormSection>
 
       <FormActions>
-        <Link
-          href="/dashboard/bookings"
-          className="inline-flex h-9 items-center justify-center rounded-pill px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface-muted"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={cancel}>
           Cancel
-        </Link>
-        <Button type="submit" size="sm" loading={create.isPending}>
-          Create booking
+        </Button>
+        <Button type="submit" size="sm" loading={pending}>
+          {isEdit ? "Save changes" : "Create booking"}
         </Button>
       </FormActions>
     </form>
   );
+}
+
+/** Thin wrapper for the create route — renders {@link BookingForm} in create mode. */
+export function BookingCreateForm() {
+  return <BookingForm />;
 }

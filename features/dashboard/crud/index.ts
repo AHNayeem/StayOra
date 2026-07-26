@@ -22,6 +22,8 @@ export type {
 } from "./use-resource-list";
 export { ResourceTable } from "./resource-table";
 export { ResourceListView } from "./resource-list-view";
+export { RowActions } from "./row-actions";
+export { ConfirmDialog } from "./confirm-dialog";
 
 // Re-export the TanStack column helpers so modules have one import surface.
 export {

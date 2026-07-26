@@ -8,6 +8,7 @@ import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { cn } from "@/lib/utils";
 
 export type DrawerSide = "left" | "right" | "bottom";
+export type DrawerSize = "sm" | "md" | "lg";
 
 const sideMap: Record<DrawerSide, { position: string; anim: string; size: string }> = {
   left: {
@@ -27,11 +28,20 @@ const sideMap: Record<DrawerSide, { position: string; anim: string; size: string
   },
 };
 
+/** Width presets for side drawers (ignored for the bottom sheet). */
+const sizeMap: Record<DrawerSize, string> = {
+  sm: "w-[min(22rem,90vw)]",
+  md: "w-[min(32rem,94vw)]",
+  lg: "w-[min(44rem,96vw)]",
+};
+
 interface DrawerProps {
   open: boolean;
   onClose: () => void;
   /** Edge the drawer slides in from. Default "right". */
   side?: DrawerSide;
+  /** Width preset for left/right drawers. Default "sm". */
+  size?: DrawerSize;
   title?: string;
   children: ReactNode;
   /** Sticky footer area (actions). */
@@ -49,6 +59,7 @@ export function Drawer({
   open,
   onClose,
   side = "right",
+  size = "sm",
   title,
   children,
   footer,
@@ -83,7 +94,7 @@ export function Drawer({
           "absolute flex flex-col bg-surface shadow-menu focus:outline-none",
           s.position,
           s.anim,
-          s.size,
+          side === "bottom" ? s.size : sizeMap[size],
           className,
         )}
       >

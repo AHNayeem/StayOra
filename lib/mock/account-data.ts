@@ -14,6 +14,7 @@
 
 import type {
   AccountNotification,
+  AccountSession,
   Coupon,
   Invoice,
   MessageThread,
@@ -688,6 +689,13 @@ const WISHLIST_SEED_IDS: string[] = new SeededRandom("stayora:wishlist:v1")
   .slice(0, 6)
   .map((l) => l.id);
 
+/** Active sign-ins shown on the Security page. */
+const SESSIONS: AccountSession[] = [
+  { id: "ses_01", device: "Chrome · macOS", meta: "San Francisco, US · Active now", kind: "desktop", current: true },
+  { id: "ses_02", device: "Safari · iPhone", meta: "San Francisco, US · 2 days ago", kind: "mobile", current: false },
+  { id: "ses_03", device: "Chrome · Windows", meta: "London, UK · 3 weeks ago", kind: "desktop", current: false },
+];
+
 export const ACCOUNT_DATA = {
   bookings: BOOKINGS,
   invoices: INVOICES,
@@ -699,5 +707,6 @@ export const ACCOUNT_DATA = {
   rewards: REWARDS,
   savedCards: SEED_SAVED_CARDS,
   savedTravelers: SEED_SAVED_TRAVELERS,
+  sessions: SESSIONS,
   wishlistSeedIds: WISHLIST_SEED_IDS,
 };

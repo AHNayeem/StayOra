@@ -28,4 +28,6 @@ export const merchantKeys = {
   all: ["merchants"] as const,
   list: () => ["merchants", "list"] as const,
   detail: (id: string) => ["merchants", "detail", id] as const,
+  /** Full profile (KYC/wallet/settlement/audit) — distinct shape from `detail`. */
+  fullDetail: (id: string) => ["merchants", "detail", id, "full"] as const,
 };

@@ -1,16 +1,16 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/features/dashboard/components/placeholder-page";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
+import { PermissionDenied } from "@/features/dashboard/components/state-views";
+import { InvoicesList } from "@/features/dashboard/modules/invoices";
 
 export const metadata: Metadata = { title: "Invoices" };
 
 export default function Page() {
   return (
-    <PlaceholderPage
-      title="Invoices"
-      description="Invoice generation and history."
-      phase={4}
-      anyPermission={["finance:read"]}
-      features={["Data table", "Filters", "Export", "Detail view", ]}
-    />
+    <PermissionGuard anyPermission={["finance:read"]} fallback={<PermissionDenied />}>
+      <PageHeader title="Invoices" description="Merchant invoices and billing." />
+      <InvoicesList />
+    </PermissionGuard>
   );
 }

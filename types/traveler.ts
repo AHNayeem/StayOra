@@ -244,6 +244,19 @@ export interface TravelStats {
   totalSpentUsd: number;
 }
 
+/** An active sign-in on the traveler's account (security page). */
+export interface AccountSession {
+  id: string;
+  /** Browser + OS label, e.g. "Chrome · macOS". */
+  device: string;
+  /** Location + last-seen, e.g. "London, UK · 3 weeks ago". */
+  meta: string;
+  /** Device form factor — the view maps this to an icon. */
+  kind: "desktop" | "mobile";
+  /** The session making this request (can't be signed out remotely). */
+  current: boolean;
+}
+
 /** Everything the overview dashboard needs in one payload. */
 export interface AccountOverview {
   stats: TravelStats;

@@ -37,6 +37,11 @@ export const bookingsService = createStubService<Booking, CreateBookingInput>({
       createdAt: new Date(input.checkIn).toISOString(),
     };
   },
+  applyUpdate: (existing, input) => {
+    const checkIn = input.checkIn ?? existing.checkIn;
+    const checkOut = input.checkOut ?? existing.checkOut;
+    return { ...existing, ...input, nights: nightsBetween(checkIn, checkOut) };
+  },
 });
 
 /** Query-key factory — keeps `useQuery` keys and invalidations consistent. */

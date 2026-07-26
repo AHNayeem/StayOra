@@ -15,7 +15,7 @@ export function resolveCurrentUser(
   const role = getRole(roleId);
   return {
     id: "usr_demo",
-    name: "Ava Rahman",
+    name: "AH Nayeem",
     email: "ava@stayora.app",
     roleId: role.id,
     permissions: expandPermissions(role.permissions),

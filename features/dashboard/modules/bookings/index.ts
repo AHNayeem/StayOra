@@ -8,8 +8,9 @@ export {
   useBookings,
   useBooking,
   useCreateBooking,
+  useUpdateBooking,
   useDeleteBooking,
 } from "./hooks";
 export { BookingsList } from "./list";
 export { BookingDetail } from "./detail";
-export { BookingCreateForm } from "./create-form";
+export { BookingCreateForm, BookingForm } from "./create-form";

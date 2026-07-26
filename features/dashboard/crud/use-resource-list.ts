@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   getCoreRowModel,
   useReactTable,
@@ -31,6 +31,12 @@ export interface UseResourceListOptions<T> {
   enableSelection?: boolean;
   /** Serve cached page this fresh (ms) before refetching. Default 0. */
   staleTime?: number;
+  /**
+   * Render per-row actions. When supplied, a trailing (non-sortable,
+   * non-hideable) actions column is appended automatically — typically a
+   * {@link import("./row-actions").RowActions} menu.
+   */
+  rowActions?: (row: T) => ReactNode;
 }
 
 export interface UseResourceListResult<T> {
@@ -77,6 +83,7 @@ export function useResourceList<T>({
   initialFilters,
   enableSelection = true,
   staleTime = 0,
+  rowActions,
 }: UseResourceListOptions<T>): UseResourceListResult<T> {
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -130,6 +137,21 @@ export function useResourceList<T>({
     staleTime,
   });
 
+  // Append a trailing actions column when the caller supplies `rowActions`.
+  const tableColumns: ColumnDef<T>[] = rowActions
+    ? [
+        ...columns,
+        {
+          id: "actions",
+          header: "",
+          enableSorting: false,
+          enableHiding: false,
+          meta: { align: "right", widthClass: "w-px", label: "Actions" },
+          cell: ({ row }) => rowActions(row.original),
+        },
+      ]
+    : columns;
+
   const rows = useMemo(() => query.data?.items ?? [], [query.data]);
   const total = query.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
@@ -175,7 +197,7 @@ export function useResourceList<T>({
   // eslint-disable-next-line react-hooks/incompatible-library
   const table = useReactTable<T>({
     data: rows,
-    columns,
+    columns: tableColumns,
     getRowId: (row) => getRowId(row),
     getCoreRowModel: getCoreRowModel(),
     manualPagination: true,

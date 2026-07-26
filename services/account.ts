@@ -10,6 +10,7 @@
 
 import type {
   AccountOverview,
+  AccountSession,
   Coupon,
   Invoice,
   MessageThread,
@@ -176,6 +177,13 @@ export function getTravelHistory(): Promise<TravelerBooking[]> {
     .filter((b) => b.status === "completed")
     .sort(byNewest((b) => b.checkOut));
   return mockDelay(history);
+}
+
+// -------------------------------- Sessions --------------------------------
+
+/** Active sign-ins for the account's Security page. */
+export function getSessions(): Promise<AccountSession[]> {
+  return mockDelay(ACCOUNT_DATA.sessions);
 }
 
 // -------------------------------- Overview --------------------------------

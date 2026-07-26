@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import type { ComponentProps } from "react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Shipped in /public/images — a themed, always-loadable graceful fallback. */
 const DEFAULT_FALLBACK = "/images/placeholder.svg";
@@ -20,11 +20,16 @@ type CardImageProps = Omit<ComponentProps<typeof Image>, "src"> & {
  * host not in `images.remotePatterns`) can't error a second time.
  */
 export function CardImage({ src, fallbackSrc = DEFAULT_FALLBACK, alt, ...props }: CardImageProps) {
-  const initial = src || fallbackSrc;
-  const [current, setCurrent] = useState(initial);
+  const resolved = src || fallbackSrc;
+  const [current, setCurrent] = useState(resolved);
 
-  // Keep in sync if the parent later supplies a real src.
-  useEffect(() => setCurrent(src || fallbackSrc), [src, fallbackSrc]);
+  // Reset during render when the parent later supplies a real src — the
+  // documented alternative to a state-syncing effect (no extra render pass).
+  const [prevResolved, setPrevResolved] = useState(resolved);
+  if (resolved !== prevResolved) {
+    setPrevResolved(resolved);
+    setCurrent(resolved);
+  }
 
   const isFallback = current === fallbackSrc;
 

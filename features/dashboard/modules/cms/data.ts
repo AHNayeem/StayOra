@@ -14,7 +14,7 @@ const PAGES: [string, string, string][] = [
   ["Careers", "careers", "Page"],
   ["City guides: London", "blog/london-guide", "Blog"],
 ];
-const AUTHORS = ["Ava Rahman", "Ben Silva", "Chen Wong", "Dana Meyer"];
+const AUTHORS = ["AH Nayeem", "Ben Silva", "Chen Wong", "Dana Meyer"];
 const STATUSES: CmsStatus[] = ["draft", "published", "scheduled"];
 
 function iso(dayOffset: number): string {

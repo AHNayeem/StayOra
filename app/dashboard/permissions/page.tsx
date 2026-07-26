@@ -1,16 +1,19 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/features/dashboard/components/placeholder-page";
+import { PageHeader } from "@/features/dashboard/components/page-header";
+import { PermissionGuard } from "@/features/dashboard/rbac/permission-guard";
+import { PermissionDenied } from "@/features/dashboard/components/state-views";
+import { PermissionsView } from "@/features/dashboard/modules/access";
 
 export const metadata: Metadata = { title: "Permissions" };
 
 export default function Page() {
   return (
-    <PlaceholderPage
-      title="Permissions"
-      description="Fine-grained permission catalogue and mapping."
-      phase={4}
-      anyPermission={["permissions:read"]}
-      features={["Permission catalogue", "Menu / route / field scopes", "API permissions", ]}
-    />
+    <PermissionGuard anyPermission={["permissions:read"]} fallback={<PermissionDenied />}>
+      <PageHeader
+        title="Permissions"
+        description="Fine-grained permission catalogue and mapping."
+      />
+      <PermissionsView />
+    </PermissionGuard>
   );
 }

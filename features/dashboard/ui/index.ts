@@ -31,7 +31,7 @@ export type { FieldOwnProps } from "@/components/ui/field";
 export { Modal } from "@/components/ui/modal";
 export type { ModalSize } from "@/components/ui/modal";
 export { Drawer } from "@/components/ui/drawer";
-export type { DrawerSide } from "@/components/ui/drawer";
+export type { DrawerSide, DrawerSize } from "@/components/ui/drawer";
 export { Tabs } from "@/components/ui/tabs";
 export type { TabItem, TabsVariant } from "@/components/ui/tabs";
 export { Tooltip } from "@/components/ui/tooltip";
