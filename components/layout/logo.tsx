@@ -34,6 +34,9 @@ export function Logo({
         width={LOGO_WIDTH}
         height={LOGO_HEIGHT}
         preload={preload}
+        // Rendered ~146px wide (h-7) / ~188px (sm:h-9); without this the
+        // optimizer would serve the full-width source.
+        sizes="(min-width: 640px) 188px, 146px"
         className={cn(
           "h-7 w-auto sm:h-9",
           tone === "light" && "brightness-0 invert",
