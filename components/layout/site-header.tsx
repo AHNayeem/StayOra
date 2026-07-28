@@ -78,22 +78,30 @@ export function SiteHeader() {
               <UserMenu user={user} />
             ) : (
               <>
-                <button
+                {/* <button
                   type="button"
                   onClick={() => openAuth("signin")}
                   className="hidden items-center gap-2 rounded-pill px-4 py-2 text-sm font-medium text-ink transition-colors hover:text-primary sm:inline-flex"
                 >
                   <LogIn className="size-4" aria-hidden="true" />
                   {t("Sign In")}
-                </button>
+                </button> */}
 
-                <button
+                {/* <button
                   type="button"
                   onClick={() => openAuth("signup")}
                   className="hidden items-center gap-2 rounded-pill bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 sm:inline-flex"
                 >
                   <UserPlus className="size-4" aria-hidden="true" />
                   {t("Sign Up")}
+                </button> */}
+                <button
+                  type="button"
+                  onClick={() => openAuth("signin")}
+                  className="hidden items-center gap-2 rounded-pill bg-primary px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600 sm:inline-flex"
+                >
+                  <UserPlus className="size-4" aria-hidden="true" />
+                  {t("Sign In")}
                 </button>
               </>
             )}
