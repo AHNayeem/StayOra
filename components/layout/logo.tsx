@@ -1,37 +1,44 @@
+import Image from "next/image";
 import Link from "next/link";
-import { Compass } from "lucide-react";
 import { siteConfig } from "@/constants/site";
 import { cn } from "@/lib/utils";
 
+/** Intrinsic size of `/images/logo.png`, used to reserve space and keep ratio. */
+const LOGO_WIDTH = 1694;
+const LOGO_HEIGHT = 324;
+
 /**
- * Logo — brand wordmark with an icon lockup, linking home. Text-based so it
- * stays crisp at any size; swap the mark for an <Image> when brand art exists.
- * `tone` adapts the wordmark for light vs. dark backgrounds.
+ * Logo — brand mark image, linking home. Rendered at a fixed height with an
+ * auto width so the wordmark keeps its aspect ratio; pass `className` to
+ * change the height. `tone="light"` flattens the mark to white for dark
+ * backgrounds, where the near-black tagline would otherwise disappear.
  */
 export function Logo({
   className,
   tone = "dark",
+  preload = false,
 }: {
   className?: string;
   tone?: "dark" | "light";
+  preload?: boolean;
 }) {
   return (
     <Link
       href="/"
       aria-label={`${siteConfig.name} home`}
-      className={cn("inline-flex items-center gap-2", className)}
+      className={cn("inline-flex items-center", className)}
     >
-      <span className="grid size-9 place-items-center rounded-card bg-primary text-white">
-        <Compass className="size-5" aria-hidden="true" />
-      </span>
-      <span
+      <Image
+        src="/images/logo.png"
+        alt=""
+        width={LOGO_WIDTH}
+        height={LOGO_HEIGHT}
+        preload={preload}
         className={cn(
-          "text-2xl font-bold tracking-tight",
-          tone === "dark" ? "text-ink" : "text-white",
+          "h-7 w-auto sm:h-9",
+          tone === "light" && "brightness-0 invert",
         )}
-      >
-        {siteConfig.name}
-      </span>
+      />
     </Link>
   );
 }

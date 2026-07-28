@@ -58,7 +58,7 @@ export function SiteHeader() {
         )}
       >
         <Container className="flex h-16 items-center justify-between gap-4">
-          <Logo />
+          <Logo preload />
 
           <DesktopNav />
 
