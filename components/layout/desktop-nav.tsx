@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { type NavItem, PRIMARY_NAV } from "@/constants/navigation";
+import { useT } from "@/features/i18n";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ function useIsActive() {
  */
 export function DesktopNav({ className }: { className?: string }) {
   const isActive = useIsActive();
+  const t = useT();
 
   return (
     <nav aria-label="Primary" className={cn("hidden lg:block", className)}>
@@ -42,7 +44,7 @@ export function DesktopNav({ className }: { className?: string }) {
                   isActive(item.href) && "text-primary",
                 )}
               >
-                {item.label}
+                {t(item.label)}
               </Link>
             </li>
           ),
@@ -56,6 +58,7 @@ function MegaMenuItem({ item }: { item: NavItem }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const isActive = useIsActive();
+  const t = useT();
   const containsActive = item.megaMenu?.some((col) =>
     col.links.some((l) => isActive(l.href)),
   );
@@ -80,7 +83,7 @@ function MegaMenuItem({ item }: { item: NavItem }) {
           (open || containsActive) && "text-primary",
         )}
       >
-        {item.label}
+        {t(item.label)}
         <ChevronDown
           className={cn("size-4 transition-transform", open && "rotate-180")}
           aria-hidden="true"
@@ -92,7 +95,7 @@ function MegaMenuItem({ item }: { item: NavItem }) {
           <div className="grid w-[44rem] grid-cols-3 gap-6 rounded-panel border border-line bg-surface p-6 shadow-menu">
             {item.megaMenu.map((col) => (
               <div key={col.heading}>
-                <p className="text-overline mb-3 text-primary">{col.heading}</p>
+                <p className="text-overline mb-3 text-primary">{t(col.heading)}</p>
                 <ul className="space-y-1">
                   {col.links.map((link) => (
                     <li key={link.label}>
@@ -104,7 +107,7 @@ function MegaMenuItem({ item }: { item: NavItem }) {
                             "bg-primary-50 font-medium text-primary",
                         )}
                       >
-                        {link.label}
+                        {t(link.label)}
                       </Link>
                     </li>
                   ))}

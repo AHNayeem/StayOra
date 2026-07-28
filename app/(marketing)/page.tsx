@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Hero } from "@/components/sections/hero";
+import { Hero2 } from "@/components/sections/hero2";
+
 import { Partners } from "@/components/sections/partners";
 import { DestinationSlider } from "@/components/sections/destination-slider";
 import { ListingCarousel } from "@/components/sections/listing-carousel";
@@ -97,7 +99,9 @@ export default async function HomePage() {
   return (
     <main className="flex-1">
       {/* Hero + animated multi-vertical search */}
-      <Hero />
+      {/* <Hero /> */}
+      <Hero2 defaultVertical="hotels" />
+
 
       {/* Trust strip */}
       {/* <Partners partners={partners} /> */}

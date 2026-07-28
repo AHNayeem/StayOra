@@ -160,7 +160,7 @@ function DateTrigger({
   );
 }
 
-function MonthGrid({
+export function MonthGrid({
   date,
   from,
   to,

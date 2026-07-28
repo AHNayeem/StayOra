@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { Mail, MapPin, Phone, Send } from "lucide-react";
 import {
@@ -6,6 +8,7 @@ import {
 } from "@/constants/navigation";
 import { siteConfig } from "@/constants/site";
 import { VERTICALS } from "@/constants/verticals";
+import { useT } from "@/features/i18n";
 import { Container } from "@/components/ui/container";
 import { SocialIcon } from "@/components/shared/social-icons";
 import { Logo } from "./logo";
@@ -26,6 +29,7 @@ const EXPLORE_LINKS: NavLink[] = [
  */
 export function SiteFooter() {
   const year = new Date().getFullYear();
+  const t = useT();
 
   return (
     <footer className="mt-auto bg-ink text-white/70">
@@ -61,7 +65,7 @@ export function SiteFooter() {
 
         {/* Contact + newsletter */}
         <div>
-          <h3 className="text-overline mb-4 text-white">Get in touch</h3>
+          <h3 className="text-overline mb-4 text-white">{t("Get in touch")}</h3>
           <ul className="space-y-3 text-sm">
             <li className="flex items-start gap-3">
               <MapPin className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
@@ -89,18 +93,18 @@ export function SiteFooter() {
 
           <form className="mt-6" aria-label="Newsletter sign-up">
             <label htmlFor="newsletter" className="mb-2 block text-sm text-white">
-              Subscribe to our newsletter
+              {t("Subscribe to our newsletter")}
             </label>
             <div className="flex items-center gap-2 rounded-pill border border-white/15 bg-white/5 py-1.5 pl-4 pr-1.5 focus-within:border-primary">
               <input
                 id="newsletter"
                 type="email"
-                placeholder="Your email"
+                placeholder={t("Your email")}
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/40"
               />
               <button
                 type="submit"
-                aria-label="Subscribe"
+                aria-label={t("Subscribe")}
                 className="grid size-9 shrink-0 place-items-center rounded-full bg-primary text-white transition-colors hover:bg-primary-600"
               >
                 <Send className="size-4" aria-hidden="true" />
@@ -113,17 +117,17 @@ export function SiteFooter() {
       <div className="border-t border-white/10">
         <Container className="flex flex-col items-center justify-between gap-3 py-6 text-sm sm:flex-row">
           <p>
-            © {year} {siteConfig.name}. All rights reserved.
+            © {year} {siteConfig.name}. {t("All rights reserved.")}
           </p>
           <div className="flex items-center gap-5">
             <Link href="/terms-and-conditions" className="transition-colors hover:text-white">
-              Terms &amp; Conditions
+              {t("Terms & Conditions")}
             </Link>
             <Link href="/faqs" className="transition-colors hover:text-white">
-              FAQs
+              {t("FAQs")}
             </Link>
             <Link href="/contact-us" className="transition-colors hover:text-white">
-              Contact
+              {t("Contact")}
             </Link>
           </div>
         </Container>
@@ -139,9 +143,10 @@ function FooterColumn({
   heading: string;
   links: NavLink[];
 }) {
+  const t = useT();
   return (
     <div>
-      <h3 className="text-overline mb-4 text-white">{heading}</h3>
+      <h3 className="text-overline mb-4 text-white">{t(heading)}</h3>
       <ul className="space-y-2.5 text-sm">
         {links.map((link) => (
           <li key={link.label}>
@@ -149,7 +154,7 @@ function FooterColumn({
               href={link.href}
               className="transition-colors hover:text-primary"
             >
-              {link.label}
+              {t(link.label)}
             </Link>
           </li>
         ))}

@@ -16,6 +16,7 @@ import {
 import { PRIMARY_NAV } from "@/constants/navigation";
 import { siteConfig } from "@/constants/site";
 import { useAuth } from "@/features/auth";
+import { useT } from "@/features/i18n";
 import { SearchDialog } from "@/features/search/global";
 import { Avatar } from "@/components/ui/avatar";
 import { SocialIcon } from "@/components/shared/social-icons";
@@ -40,6 +41,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
   const router = useRouter();
   const { status, user, canAccessDashboard, logout } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
+  const t = useT();
   useLockBodyScroll(open);
 
   const handleLogout = async () => {
@@ -131,7 +133,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
                     href={item.href}
                     className="block rounded-field px-4 py-3 font-medium text-ink transition-colors hover:bg-primary-50 hover:text-primary"
                   >
-                    {item.label}
+                    {t(item.label)}
                   </Link>
                 </li>
               ),
@@ -189,7 +191,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill border border-line px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-primary hover:text-primary"
               >
                 <LogIn className="size-4" aria-hidden="true" />
-                Sign In
+                {t("Sign In")}
               </button>
               <button
                 type="button"
@@ -197,7 +199,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-pill bg-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-primary-600"
               >
                 <UserPlus className="size-4" aria-hidden="true" />
-                Sign Up
+                {t("Sign Up")}
               </button>
             </div>
           )}
@@ -232,6 +234,7 @@ function DrawerAccordion({
   item: (typeof PRIMARY_NAV)[number];
 }) {
   const [expanded, setExpanded] = useState(false);
+  const t = useT();
 
   return (
     <li>
@@ -241,7 +244,7 @@ function DrawerAccordion({
         onClick={() => setExpanded((v) => !v)}
         className="flex w-full items-center justify-between rounded-field px-4 py-3 font-medium text-ink transition-colors hover:bg-primary-50 hover:text-primary"
       >
-        {item.label}
+        {t(item.label)}
         <ChevronDown
           className={cn(
             "size-4 transition-transform",
@@ -255,7 +258,7 @@ function DrawerAccordion({
           {item.megaMenu.map((col) => (
             <div key={col.heading}>
               <p className="text-overline px-4 py-1 text-primary">
-                {col.heading}
+                {t(col.heading)}
               </p>
               <ul>
                 {col.links.map((link) => (
@@ -264,7 +267,7 @@ function DrawerAccordion({
                       href={link.href}
                       className="block rounded-field px-4 py-2 text-sm text-body transition-colors hover:bg-primary-50 hover:text-primary"
                     >
-                      {link.label}
+                      {t(link.label)}
                     </Link>
                   </li>
                 ))}

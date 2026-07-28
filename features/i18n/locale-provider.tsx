@@ -26,6 +26,7 @@ import {
   formatMoney,
   formatNumber,
 } from "./format";
+import { DICTIONARIES } from "./dictionaries";
 
 interface LocaleContextValue {
   language: Language;
@@ -37,6 +38,9 @@ interface LocaleContextValue {
   setLanguage: (code: string) => void;
   setCurrency: (code: string) => void;
   setCountry: (code: string) => void;
+  /** Translate an English source string into the active language (falls back
+   * to the source when the language or key is untranslated). */
+  t: (source: string) => string;
   /** Format a base-USD amount in the active currency. */
   money: (amountUsd: number, options?: Intl.NumberFormatOptions) => string;
   /** Format a plain number in the active language. */
@@ -84,6 +88,7 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       setLanguage,
       setCurrency,
       setCountry,
+      t: (source) => DICTIONARIES[language.code]?.[source] ?? source,
       money: (amount, options) => formatMoney(amount, currency, options),
       number: (val, options) => formatNumber(val, language.code, options),
       date: (iso, options) => formatDate(iso, language.code, options),
@@ -105,3 +110,16 @@ export function useLocale(): LocaleContextValue {
   }
   return ctx;
 }
+
+/**
+ * Translation helper — returns `t(source)` for the active language. Unlike
+ * {@link useLocale} this is safe to call outside a {@link LocaleProvider}
+ * (e.g. in shared chrome also used by the dashboard): with no provider it
+ * returns an identity function, so copy simply renders in English.
+ */
+export function useT(): (source: string) => string {
+  const ctx = useContext(LocaleContext);
+  return ctx ? ctx.t : identity;
+}
+
+const identity = (source: string) => source;

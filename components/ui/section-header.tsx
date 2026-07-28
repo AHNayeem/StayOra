@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useT } from "@/features/i18n";
 import { cn } from "@/lib/utils";
 
 export type SectionHeaderAlign = "left" | "center";
@@ -32,6 +35,10 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   const Heading = as;
   const centered = align === "center";
+  const t = useT();
+  // Translate copy passed as plain strings; leave rich ReactNode content as-is.
+  const tr = (value: ReactNode): ReactNode =>
+    typeof value === "string" ? t(value) : value;
 
   return (
     <div
@@ -44,12 +51,12 @@ export function SectionHeader({
       )}
     >
       <div className={cn("max-w-2xl", centered && "mx-auto")}>
-        {eyebrow && <p className="text-overline">{eyebrow}</p>}
+        {eyebrow && <p className="text-overline">{tr(eyebrow)}</p>}
         <Heading className={cn(as === "h2" ? "text-h2" : "text-h3", "mt-3")}>
-          {title}
+          {tr(title)}
         </Heading>
         {description && (
-          <p className="mt-4 text-body">{description}</p>
+          <p className="mt-4 text-body">{tr(description)}</p>
         )}
       </div>
       {action && <div className={cn("shrink-0", centered && "mx-auto")}>{action}</div>}

@@ -3,7 +3,7 @@
  * public site consumes. Reference data (countries/currencies/languages) lives
  * in {@link "@/constants/geo"}.
  */
-export { LocaleProvider, useLocale } from "./locale-provider";
+export { LocaleProvider, useLocale, useT } from "./locale-provider";
 export {
   useLocalePreferences,
   useSetLocale,

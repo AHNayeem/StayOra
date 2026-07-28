@@ -6,7 +6,7 @@ export const siteConfig = {
     "StayOra is a complete booking platform for hotels, apartments, resorts, shared rooms, convention halls, transport, and tours — plan and book your next journey with ease.",
   url: "https://stayora.example.com",
   contact: {
-    phone: "+347-274-8816",
+    phone: "+88018388161",
     email: "info@stayora.com",
     address: "Block A, House 82, Rd No 2, Banani, Dhaka",
   },
