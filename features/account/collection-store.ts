@@ -28,7 +28,7 @@ export interface CollectionStore<T> {
 }
 
 interface StoreConfig<T> {
-  /** localStorage key (namespaced), e.g. "stayora:wishlist". */
+  /** localStorage key (namespaced), e.g. "otithee:wishlist". */
   key: string;
   /** Stable id accessor for update/remove/has. */
   getId: (item: T) => string;

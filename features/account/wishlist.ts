@@ -39,7 +39,7 @@ const LISTING_INDEX: Map<string, Listing> = new Map(
 );
 
 const store = createCollectionStore<string>({
-  key: "stayora:wishlist",
+  key: "otithee:wishlist",
   getId: (id) => id,
   seed: () => ACCOUNT_DATA.wishlistSeedIds,
 });
@@ -71,7 +71,7 @@ export function clearWishlist(): void {
 export function useIsWishlisted(id: string): boolean {
   return useSyncExternalStore(
     (cb) => {
-      const evt = "stayora:wishlist:change";
+      const evt = "otithee:wishlist:change";
       window.addEventListener(evt, cb);
       window.addEventListener("storage", cb);
       return () => {

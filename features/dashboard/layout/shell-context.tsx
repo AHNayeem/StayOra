@@ -28,7 +28,7 @@ interface ShellContextValue {
 
 const ShellContext = createContext<ShellContextValue | null>(null);
 
-const COLLAPSED_KEY = "stayora.dashboard.sidebar-collapsed";
+const COLLAPSED_KEY = "otithee.dashboard.sidebar-collapsed";
 
 interface ShellProviderProps {
   children: ReactNode;

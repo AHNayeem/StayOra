@@ -10,7 +10,7 @@ import { createCollectionStore } from "./collection-store";
  * Seeded from the mock service's authored reviews.
  */
 const store = createCollectionStore<TravelerReview>({
-  key: "stayora:reviews",
+  key: "otithee:reviews",
   getId: (r) => r.id,
   seed: () => ACCOUNT_DATA.reviews,
 });

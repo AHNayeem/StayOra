@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AccountShell } from "@/components/account";
 
 export const metadata: Metadata = {
-  title: { default: "My account", template: "%s · My account · StayOra" },
+  title: { default: "My account", template: "%s · My account · Otithee" },
   description: "Manage your trips, bookings, wishlist and account settings.",
   robots: { index: false, follow: false },
 };

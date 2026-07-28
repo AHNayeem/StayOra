@@ -122,7 +122,7 @@ const COMPANIONS = [
 // ---------------------------------------------------------------------------
 
 function buildBookings(): TravelerBooking[] {
-  const rng = new SeededRandom("stayora:bookings:v1");
+  const rng = new SeededRandom("otithee:bookings:v1");
   const pool = rng.shuffle(ALL_LISTINGS).slice(0, STATUS_PLAN.length);
 
   return pool.map((listing, i) => {
@@ -403,11 +403,11 @@ function buildThreads(): MessageThread[] {
   });
 
   // A support thread.
-  const supportBase = new SeededRandom("stayora:support").isoDate(MOCK_EPOCH_MS, 40, 120);
+  const supportBase = new SeededRandom("otithee:support").isoDate(MOCK_EPOCH_MS, 40, 120);
   threads.push({
     id: "thr_support",
     subject: "Refund status for cancelled booking",
-    counterpart: { name: "StayOra Support", role: "Support", avatar: undefined },
+    counterpart: { name: "Otithee Support", role: "Support", avatar: undefined },
     lastMessageAt: addDays(supportBase, 1),
     unread: 1,
     messages: [
@@ -421,7 +421,7 @@ function buildThreads(): MessageThread[] {
       {
         id: "sup-m2",
         from: "them",
-        authorName: "StayOra Support",
+        authorName: "Otithee Support",
         body: "Thanks for reaching out! Your refund has been processed and should land within 5–7 business days. Let us know if there's anything else.",
         sentAt: addDays(supportBase, 1),
       },
@@ -438,7 +438,7 @@ const THREADS = buildThreads();
 // ---------------------------------------------------------------------------
 
 function buildNotifications(): AccountNotification[] {
-  const rng = new SeededRandom("stayora:notifs:v1");
+  const rng = new SeededRandom("otithee:notifs:v1");
   const items: AccountNotification[] = [];
 
   BOOKINGS.filter((b) => b.status === "upcoming")
@@ -599,7 +599,7 @@ function buildRewards(): RewardEntry[] {
       bookingRef: b.reference,
     });
   });
-  const rng = new SeededRandom("stayora:rewards:v1");
+  const rng = new SeededRandom("otithee:rewards:v1");
   entries.push({
     id: "rwd_bonus_0",
     date: rng.isoDate(MOCK_EPOCH_MS, -200, -120),
@@ -684,7 +684,7 @@ const SEED_SAVED_TRAVELERS: SavedTraveler[] = [
 ];
 
 /** Default wishlist — a handful of listings, by id (persisted store seeds from this). */
-const WISHLIST_SEED_IDS: string[] = new SeededRandom("stayora:wishlist:v1")
+const WISHLIST_SEED_IDS: string[] = new SeededRandom("otithee:wishlist:v1")
   .shuffle(ALL_LISTINGS)
   .slice(0, 6)
   .map((l) => l.id);

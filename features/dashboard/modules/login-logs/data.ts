@@ -8,13 +8,13 @@ function iso(minuteOffset: number): string {
 }
 
 const USERS: [string, string][] = [
-  ["AH Nayeem", "ava@stayora.app"],
-  ["Marcus Bell", "marcus@stayora.app"],
+  ["AH Nayeem", "ava@otithee.app"],
+  ["Marcus Bell", "marcus@otithee.app"],
   ["Elena Petrova", "elena@partner.io"],
   ["Sam Okafor", "sam.okafor@gmail.com"],
-  ["Nina Kowalski", "nina@stayora.app"],
+  ["Nina Kowalski", "nina@otithee.app"],
   ["Theo Martin", "theo@merchants.co"],
-  ["Priya Nair", "priya@stayora.app"],
+  ["Priya Nair", "priya@otithee.app"],
   ["Unknown", "attacker@spoof.ru"],
 ];
 const METHODS: LoginMethod[] = ["password", "google", "otp", "sso"];

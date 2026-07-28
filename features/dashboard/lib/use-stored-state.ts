@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 
 /** Custom event so same-tab writes notify subscribers (the native `storage`
  * event only fires in *other* tabs). */
-const STORAGE_EVENT = "stayora:storage";
+const STORAGE_EVENT = "otithee:storage";
 
 /**
  * localStorage-backed state with SSR-safe hydration and no `setState`-in-effect.

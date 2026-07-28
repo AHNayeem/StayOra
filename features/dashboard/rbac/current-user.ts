@@ -16,7 +16,7 @@ export function resolveCurrentUser(
   return {
     id: "usr_demo",
     name: "AH Nayeem",
-    email: "ava@stayora.app",
+    email: "ava@otithee.app",
     roleId: role.id,
     permissions: expandPermissions(role.permissions),
     // Feature flags are fetched per tenant/user; seed from the shared default

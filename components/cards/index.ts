@@ -1,6 +1,7 @@
 /** Card system barrel — one import site for every card variant. */
 
 export { ListingCard, type ListingCardProps } from "./listing-card";
+export { ListingCard2, type ListingCard2Props } from "./listing-card-2";
 export { AutoListingCard } from "./auto-listing-card";
 export { WishlistButton } from "./wishlist-button";
 

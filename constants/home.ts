@@ -137,7 +137,7 @@ export const HOME_CTA = {
 
 /** "About" intro band content. */
 export const HOME_ABOUT = {
-  eyebrow: "About StayOra",
+  eyebrow: "About Otithee",
   title: "One platform for every kind of stay and journey",
   description:
     "Hotels, resorts, apartments, shared rooms, convention halls and transport — searched the same way and booked in minutes. We bring every part of your trip together so you can plan less and travel more.",

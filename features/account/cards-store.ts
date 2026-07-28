@@ -9,7 +9,7 @@ import { createCollectionStore } from "./collection-store";
  * client-side. Adding, deleting and setting a default all survive reload.
  */
 const store = createCollectionStore<SavedCard>({
-  key: "stayora:saved-cards",
+  key: "otithee:saved-cards",
   getId: (c) => c.id,
   seed: () => ACCOUNT_DATA.savedCards,
 });

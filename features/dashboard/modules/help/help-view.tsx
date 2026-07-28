@@ -28,21 +28,21 @@ const RESOURCES: {
     icon: BookOpen,
     title: "Admin guide",
     description: "How catalog, bookings, finance and CMS fit together end to end.",
-    href: "https://docs.stayora.example/admin",
+    href: "https://docs.otithee.example/admin",
     external: true,
   },
   {
     icon: Code2,
     title: "API reference",
     description: "REST endpoints, webhooks and authentication for integrations.",
-    href: "https://docs.stayora.example/api",
+    href: "https://docs.otithee.example/api",
     external: true,
   },
   {
     icon: Sparkles,
     title: "What's new",
-    description: "Release notes and product updates from the StayOra team.",
-    href: "https://docs.stayora.example/changelog",
+    description: "Release notes and product updates from the Otithee team.",
+    href: "https://docs.otithee.example/changelog",
     external: true,
   },
 ];
@@ -57,7 +57,7 @@ const SHORTCUTS: [string, string[]][] = [
 ];
 
 const PLATFORM_INFO: [string, string][] = [
-  ["Version", "StayOra 1.0.0"],
+  ["Version", "Otithee 1.0.0"],
   ["Environment", "Production"],
   ["Region", "eu-west-1"],
   ["Support plan", "Priority"],
@@ -145,11 +145,11 @@ export function HelpView() {
                 Contact support
               </Link>
               <a
-                href="mailto:support@stayora.example"
+                href="mailto:support@otithee.example"
                 className="inline-flex items-center gap-1.5 rounded-field border border-line px-3 py-1.5 text-sm font-medium text-body transition-colors hover:bg-surface-muted"
               >
                 <Mail className="size-4" aria-hidden="true" />
-                support@stayora.example
+                support@otithee.example
               </a>
             </div>
           </section>

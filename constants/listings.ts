@@ -34,7 +34,7 @@ const img = (id: string) =>
 /**
  * Curated "hero" seeds — hand-authored, featured anchors shown first. The
  * exported arrays below concatenate these with a deterministic long tail from
- * the listing factory to reach StayOra's production volumes.
+ * the listing factory to reach Otithee's production volumes.
  */
 const HOTELS_SEED: Hotel[] = [
   {
@@ -461,7 +461,7 @@ const VISAS_SEED: Visa[] = [
 
 /* -------------------------------------------------------------------------
  * Exported catalogs — curated seeds first (featured anchors), then a seeded
- * deterministic long tail sized to StayOra's production volumes. Counts are
+ * deterministic long tail sized to Otithee's production volumes. Counts are
  * stable across renders because the factory never reads the clock or Math.random.
  * ---------------------------------------------------------------------- */
 

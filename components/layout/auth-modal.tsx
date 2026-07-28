@@ -75,7 +75,7 @@ export function AuthModal({ onClose, initialMode = "signin" }: AuthModalProps) {
           email: values.email,
           password: values.password,
         });
-        toast.success("Account created — welcome to StayOra!");
+        toast.success("Account created — welcome to Otithee!");
         onClose();
         router.push("/complete-profile");
       } else {

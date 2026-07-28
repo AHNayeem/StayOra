@@ -12,7 +12,7 @@ import { readSession } from "@/services/auth";
  * `setState`-in-effect.
  */
 
-const EVENT = "stayora:session-change";
+const EVENT = "otithee:session-change";
 
 let snapshot: AuthSession | null = null;
 let hydrated = false;

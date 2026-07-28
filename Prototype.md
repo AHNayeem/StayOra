@@ -17,7 +17,7 @@ Quality is far more important than speed.
 # PROJECT
 
 Project Name:
-StayOra
+Otithee
 
 Technology
 

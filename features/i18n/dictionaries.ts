@@ -136,7 +136,7 @@ const bn: Dictionary = {
   "Trusted by leading travel brands worldwide": "বিশ্বের শীর্ষ ভ্রমণ ব্র্যান্ডের আস্থা",
   "Your next trip starts here": "আপনার পরবর্তী ট্রিপ এখান থেকেই শুরু",
   "Ready to plan your next journey?": "আপনার পরবর্তী যাত্রার পরিকল্পনা করতে প্রস্তুত?",
-  "About StayOra": "স্টেঅরা সম্পর্কে",
+  "About Otithee": "স্টেঅরা সম্পর্কে",
   "One platform for every kind of stay and journey":
     "সব ধরনের থাকা ও যাত্রার জন্য এক প্ল্যাটফর্ম",
   "Members save more": "সদস্যরা বেশি সাশ্রয় করেন",

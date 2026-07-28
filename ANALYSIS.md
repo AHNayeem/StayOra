@@ -1,6 +1,6 @@
-# StayOra → Booking Platform — UI Analysis & Implementation Roadmap
+# Otithee → Booking Platform — UI Analysis & Implementation Roadmap
 
-> Reference: https://triprex-app.egenslab.com/ (Egens Lab "StayOra" travel/booking theme)
+> Reference: https://triprex-app.egenslab.com/ (Egens Lab "Otithee" travel/booking theme)
 > Target build: **Next.js (App Router) · TypeScript (strict) · Tailwind CSS · Framer Motion · Lucide React · React Hook Form · clsx · tailwind-merge**. Package manager: **bun**.
 > Goal: recreate the design *language* (layout, spacing, motion, component system) — not clone HTML — and generalize it into a reusable booking platform for **Hotels, Apartments, Resorts, Shared Rooms, Convention Hall, Transport** (plus the reference's Tours / Activities / Visa).
 
@@ -271,7 +271,7 @@ Built strictly phase-by-phase; each phase stops for review and ships production-
 
 ## Open questions for confirmation before Phase 1
 1. **Scope of first pass:** full 10-phase build, or Home + one listing + one details end-to-end first as a vertical slice?
-2. **Design fidelity vs. generalization:** prioritize pixel-closeness to StayOra, or lean into the generalized booking platform (Apartments/Resorts/Shared Rooms/Convention Hall) from the start?
+2. **Design fidelity vs. generalization:** prioritize pixel-closeness to Otithee, or lean into the generalized booking platform (Apartments/Resorts/Shared Rooms/Convention Hall) from the start?
 3. **Tailwind version:** v4 (CSS-first `@theme`) or v3 (`tailwind.config.ts`)? (Affects theme token wiring.)
 4. **Data:** static mock/JSON constants for now (recommended), or scaffold a services layer expecting a real API?
 5. **i18n & dark mode:** build the structure now (language switcher + dark tokens are in the reference), or defer wiring to Phase 10?

@@ -5,7 +5,7 @@ import { VerifyEmailForm } from "./verify-form";
 
 export const metadata: Metadata = {
   title: "Verify email",
-  description: "Confirm your StayOra email address.",
+  description: "Confirm your Otithee email address.",
 };
 
 export default function VerifyEmailPage() {

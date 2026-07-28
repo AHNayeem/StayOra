@@ -60,7 +60,7 @@ export function RegisterForm() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       await registerUser({ name: values.name, email: values.email, password: values.password });
-      toast.success("Account created — welcome to StayOra!");
+      toast.success("Account created — welcome to Otithee!");
       const dest = `/complete-profile${next !== "/" ? `?next=${encodeURIComponent(next)}` : ""}`;
       router.replace(dest);
     } catch (err) {
@@ -71,7 +71,7 @@ export function RegisterForm() {
   return (
     <AuthCard
       title="Create your account"
-      subtitle="Join StayOra to book faster and keep every trip in one place."
+      subtitle="Join Otithee to book faster and keep every trip in one place."
       footer={
         <>
           Already have an account?{" "}

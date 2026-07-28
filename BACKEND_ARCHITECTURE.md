@@ -1,4 +1,4 @@
-# StayOra — Backend Architecture & System Design
+# Otithee — Backend Architecture & System Design
 
 **Multi-Vendor Travel & Booking SaaS Platform**
 
@@ -11,7 +11,7 @@
 | **Audience** | Senior backend engineers, DBAs, DevOps, QA |
 | **Companion docs** | `ANALYSIS.md` (frontend audit), `DESIGN.md` (design tokens), `APIDesign.md` (brief) |
 
-> **Purpose.** This document is the single source of truth for the StayOra backend. It defines the business analysis, data model, booking engine, CMS, localization, authentication, authorization, and the complete REST API contract. It contains **no code, no migrations, and no component files** — only architecture. It is intended to be detailed enough that a senior backend engineer can implement the platform without further clarification.
+> **Purpose.** This document is the single source of truth for the Otithee backend. It defines the business analysis, data model, booking engine, CMS, localization, authentication, authorization, and the complete REST API contract. It contains **no code, no migrations, and no component files** — only architecture. It is intended to be detailed enough that a senior backend engineer can implement the platform without further clarification.
 
 ---
 
@@ -43,7 +43,7 @@
 
 ### 1.1 Business Overview
 
-StayOra is a **multi-vendor travel commerce SaaS**. Independent merchants (vendors) list inventory across nine verticals — **Hotels, Apartments, Resorts, Shared Rooms, Convention Halls, Transport, Tours, Activities, Visa Services** — and customers discover, book, pay for, and review them. The platform earns via **commission**, **service fees**, and (future) **subscription plans**. Conceptually it combines **Booking.com + Agoda + Airbnb + a travel agency + a headless CMS**.
+Otithee is a **multi-vendor travel commerce SaaS**. Independent merchants (vendors) list inventory across nine verticals — **Hotels, Apartments, Resorts, Shared Rooms, Convention Halls, Transport, Tours, Activities, Visa Services** — and customers discover, book, pay for, and review them. The platform earns via **commission**, **service fees**, and (future) **subscription plans**. Conceptually it combines **Booking.com + Agoda + Airbnb + a travel agency + a headless CMS**.
 
 The system has three principal actor domains, each with its own authentication realm:
 
@@ -133,7 +133,7 @@ Cancellation/Dispute ─► Compute refundable (policy) ─► Refund request
    ─► Reverse commission/payable entries ─► Notify customer & merchant
 ```
 
-Refund destinations: **original payment method** or **StayOra Wallet** (configurable, often faster for the customer).
+Refund destinations: **original payment method** or **Otithee Wallet** (configurable, often faster for the customer).
 
 ### 1.10 Review Workflow
 
@@ -325,7 +325,7 @@ A production PostgreSQL schema. Normalized to **3NF** except where denormalizati
 
 ### 4.3 Polymorphic bookable model (design decision)
 
-Rather than nine parallel booking tables, StayOra uses **one `bookings` header + typed `booking_items`**. Each `booking_item` carries a `bookable_type` discriminant (`hotel_room | apartment | resort_room | shared_bed | convention_hall | transport | tour | activity | visa`) plus a `bookable_id` and a denormalized snapshot (title, unit price, currency, dates) so the booking is immutable against later catalog edits. Vertical-specific attributes for the item are stored in a typed `item_meta JSONB` validated per discriminant.
+Rather than nine parallel booking tables, Otithee uses **one `bookings` header + typed `booking_items`**. Each `booking_item` carries a `bookable_type` discriminant (`hotel_room | apartment | resort_room | shared_bed | convention_hall | transport | tour | activity | visa`) plus a `bookable_id` and a denormalized snapshot (title, unit price, currency, dates) so the booking is immutable against later catalog edits. Vertical-specific attributes for the item are stored in a typed `item_meta JSONB` validated per discriminant.
 
 **Rationale:** aligns with the frontend's discriminated-union `Listing` type; keeps the booking ledger uniform for finance/reporting; avoids 9× duplication of booking/payment logic (DRY); allows mixed-cart bookings.
 
@@ -1420,4 +1420,4 @@ See §14.5. Business conflicts (`INVENTORY_UNAVAILABLE`, `PRICE_CHANGED`) use `4
 
 ---
 
-*End of document — StayOra Backend Architecture v1.0. This blueprint is implementation-ready and modular; new sections/modules can be appended without restructuring.*
+*End of document — Otithee Backend Architecture v1.0. This blueprint is implementation-ready and modular; new sections/modules can be appended without restructuring.*

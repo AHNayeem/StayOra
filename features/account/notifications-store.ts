@@ -10,7 +10,7 @@ import { createCollectionStore } from "./collection-store";
  * badges update live. Seeded from the mock service.
  */
 const store = createCollectionStore<AccountNotification>({
-  key: "stayora:notifications",
+  key: "otithee:notifications",
   getId: (n) => n.id,
   seed: () => ACCOUNT_DATA.notifications,
 });

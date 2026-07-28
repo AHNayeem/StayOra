@@ -12,7 +12,7 @@ import { createCollectionStore } from "./collection-store";
  * PATCH the booking and drop this store.
  */
 const store = createCollectionStore<{ id: string }>({
-  key: "stayora:cancelled-bookings",
+  key: "otithee:cancelled-bookings",
   getId: (x) => x.id,
   seed: () => [],
 });
@@ -37,7 +37,7 @@ export function isCancelledLocally(id: string): boolean {
 export function useIsCancelled(id: string): boolean {
   return useSyncExternalStore(
     (cb) => {
-      const evt = "stayora:cancelled-bookings:change";
+      const evt = "otithee:cancelled-bookings:change";
       window.addEventListener(evt, cb);
       window.addEventListener("storage", cb);
       return () => {

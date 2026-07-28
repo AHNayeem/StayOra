@@ -1,10 +1,10 @@
-# Claude Code Implementation Prompt — StayOra Dashboard (Admin + Merchant)
+# Claude Code Implementation Prompt — Otithee Dashboard (Admin + Merchant)
 
 ## Objective
 
 You are a Senior Staff Frontend Architect, UI/UX System Designer, and Full Stack SaaS Engineer.
 
-Your task is to design and implement the complete **Dashboard Architecture** for **StayOra**, following enterprise-grade SaaS standards.
+Your task is to design and implement the complete **Dashboard Architecture** for **Otithee**, following enterprise-grade SaaS standards.
 
 **Important Goal**
 
@@ -18,7 +18,7 @@ Each phase must complete successfully before moving to the next.
 
 # Primary Mission
 
-Create a fully dynamic Dashboard architecture for StayOra.
+Create a fully dynamic Dashboard architecture for Otithee.
 
 The dashboard must support:
 
@@ -73,7 +73,7 @@ Only use it for:
 * interaction ideas
 * dashboard density
 
-StayOra must have its own design language.
+Otithee must have its own design language.
 
 ---
 

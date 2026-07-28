@@ -1,13 +1,13 @@
 /** Global site configuration — brand, contact, and social links. */
 export const siteConfig = {
-  name: "StayOra",
+  name: "Otithee",
   tagline: "Book Your Next Journey",
   description:
-    "StayOra is a complete booking platform for hotels, apartments, resorts, shared rooms, convention halls, transport, and tours — plan and book your next journey with ease.",
-  url: "https://stayora.example.com",
+    "Otithee is a complete booking platform for hotels, apartments, resorts, shared rooms, convention halls, transport, and tours — plan and book your next journey with ease.",
+  url: "https://otithee.example.com",
   contact: {
-    phone: "+88018388161",
-    email: "info@stayora.com",
+    phone: "+880 1784-998432",
+    email: "info@otithee.com",
     address: "Block A, House 82, Rd No 2, Banani, Dhaka",
   },
   locales: [

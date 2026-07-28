@@ -13,7 +13,7 @@ import { createCollectionStore } from "./collection-store";
  * pattern; a real API would return the booking from the server and drop this.
  */
 const store = createCollectionStore<CreatedBooking>({
-  key: "stayora:created-bookings",
+  key: "otithee:created-bookings",
   getId: (c) => c.booking.id,
   seed: () => [],
 });

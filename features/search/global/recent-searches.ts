@@ -9,8 +9,8 @@ import { useSyncExternalStore } from "react";
  * a `setState`-in-effect.
  */
 
-const KEY = "stayora:recent-searches";
-const EVENT = "stayora:recent-searches-change";
+const KEY = "otithee:recent-searches";
+const EVENT = "otithee:recent-searches-change";
 const MAX = 6;
 
 let snapshot: string[] = [];

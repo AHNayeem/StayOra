@@ -24,7 +24,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-const STORAGE_KEY = "stayora.dashboard.theme";
+const STORAGE_KEY = "otithee.dashboard.theme";
 const CYCLE: ThemePreference[] = ["light", "dark", "system"];
 
 function normalize(value: string): ThemePreference {

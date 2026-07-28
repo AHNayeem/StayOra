@@ -55,8 +55,8 @@ function GeneralPanel() {
     <div className="rounded-card border border-line bg-surface px-6 py-2">
       <FormSection title="Platform" description="Branding and defaults for the whole tenant.">
         <FormGrid cols={2}>
-          <Input label="Platform name" defaultValue="StayOra" />
-          <Input label="Support email" type="email" defaultValue="support@stayora.app" />
+          <Input label="Platform name" defaultValue="Otithee" />
+          <Input label="Support email" type="email" defaultValue="support@otithee.app" />
           <Select label="Default currency" options={CURRENCIES} defaultValue="USD" />
           <Select label="Default language" options={LANGUAGES} defaultValue="en" />
           <Select label="Timezone" options={TIMEZONES} defaultValue="UTC" />
@@ -116,7 +116,7 @@ function IntegrationsPanel() {
             label="Webhook URL"
             type="url"
             className="font-mono"
-            defaultValue="https://api.stayora.app/webhooks/events"
+            defaultValue="https://api.otithee.app/webhooks/events"
           />
         </FormGrid>
       </FormSection>

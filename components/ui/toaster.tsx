@@ -5,7 +5,7 @@ import { Toaster as SonnerToaster } from "sonner";
 /**
  * Toaster — the single global toast host, mounted once in the root layout so
  * every surface (marketing + dashboard) shares one queue. Styled through
- * Sonner's CSS-variable API so toasts inherit the StayOra design tokens and
+ * Sonner's CSS-variable API so toasts inherit the Otithee design tokens and
  * automatically pick up the dashboard's dark theme (`.dark` re-points the
  * variables). All feedback is emitted through {@link "@/lib/toast"}.
  */

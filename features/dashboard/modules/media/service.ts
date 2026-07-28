@@ -14,7 +14,7 @@ export const mediaService = createStubService<MediaAsset, MediaFormValues>({
     name: input.name,
     type: input.type,
     folder: input.folder,
-    url: `https://cdn.stayora.example/${input.folder}/${input.name}`,
+    url: `https://cdn.otithee.example/${input.folder}/${input.name}`,
     size: Math.round(input.sizeKb * 1024),
     dimensions: input.dimensions ?? "",
     uploadedBy: "You",

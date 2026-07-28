@@ -9,7 +9,7 @@ import { createCollectionStore } from "./collection-store";
  * checkout, persisted client-side with full add/edit/delete.
  */
 const store = createCollectionStore<SavedTraveler>({
-  key: "stayora:saved-travelers",
+  key: "otithee:saved-travelers",
   getId: (t) => t.id,
   seed: () => ACCOUNT_DATA.savedTravelers,
 });

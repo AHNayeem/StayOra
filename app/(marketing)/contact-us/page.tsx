@@ -11,7 +11,7 @@ import { siteConfig } from "@/constants/site";
 export const metadata: Metadata = {
   title: "Contact Us",
   description:
-    "Get in touch with the StayOra team. Reach us by phone, email or the contact form — we're available 24/7 to help with your booking.",
+    "Get in touch with the Otithee team. Reach us by phone, email or the contact form — we're available 24/7 to help with your booking.",
   alternates: { canonical: "/contact-us" },
 };
 

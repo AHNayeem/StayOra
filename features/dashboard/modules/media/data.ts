@@ -39,7 +39,7 @@ export const MEDIA_SEED: MediaAsset[] = ASSETS.map(
     name,
     type,
     folder,
-    url: `https://cdn.stayora.example/${folder}/${name}`,
+    url: `https://cdn.otithee.example/${folder}/${name}`,
     size: sizeKB * 1024,
     dimensions,
     uploadedBy: UPLOADERS[i % UPLOADERS.length],

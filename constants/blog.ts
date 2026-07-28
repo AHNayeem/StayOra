@@ -63,7 +63,7 @@ export const BODY_SECTIONS: {
 export const QUOTE_POOL: { text: string; cite?: string }[] = [
   {
     text: "The best trips leave room for the plans you didn't make.",
-    cite: "StayOra travel desk",
+    cite: "Otithee travel desk",
   },
   {
     text: "Travel isn't about seeing everything — it's about being somewhere completely.",

@@ -21,7 +21,7 @@ export const USERS_SEED: User[] = NAMES.map((name, i) => {
   return {
     id: `usr_${400 + i}`,
     name,
-    email: `${handle}@stayora.app`,
+    email: `${handle}@otithee.app`,
     roleId: i === 0 ? "super_admin" : ROLES[i % ROLES.length],
     status: STATUSES[i % STATUSES.length],
     lastActiveAt: iso((i * 3) % 120),

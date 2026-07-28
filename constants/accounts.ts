@@ -19,7 +19,7 @@ export const SEED_ACCOUNTS: MockAccount[] = [
   {
     id: "usr_traveler_demo",
     name: "Ava Thompson",
-    email: "traveler@stayora.com",
+    email: "traveler@otithee.com",
     password: DEMO_PASSWORD,
     role: "traveler",
     avatar: "https://i.pravatar.cc/160?img=47",
@@ -34,7 +34,7 @@ export const SEED_ACCOUNTS: MockAccount[] = [
   {
     id: "usr_merchant_demo",
     name: "Marco Silva",
-    email: "merchant@stayora.com",
+    email: "merchant@otithee.com",
     password: DEMO_PASSWORD,
     role: "merchant",
     avatar: "https://i.pravatar.cc/160?img=12",
@@ -49,7 +49,7 @@ export const SEED_ACCOUNTS: MockAccount[] = [
   {
     id: "usr_admin_demo",
     name: "Sana Rahman",
-    email: "admin@stayora.com",
+    email: "admin@otithee.com",
     password: DEMO_PASSWORD,
     role: "admin",
     avatar: "https://i.pravatar.cc/160?img=32",

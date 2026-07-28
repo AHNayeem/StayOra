@@ -17,8 +17,8 @@ import type {
 import { DEMO_PASSWORD, SEED_ACCOUNTS, type MockAccount } from "@/constants/accounts";
 import { mockDelay } from "./http";
 
-const ACCOUNTS_KEY = "stayora:accounts";
-const SESSION_KEY = "stayora:session";
+const ACCOUNTS_KEY = "otithee:accounts";
+const SESSION_KEY = "otithee:session";
 /** The one OTP the mock accepts, surfaced in the UI as a hint. */
 export const MOCK_OTP = "123456";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days

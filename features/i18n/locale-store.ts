@@ -27,8 +27,8 @@ export const DEFAULT_PREFERENCES: LocalePreferences = {
   country: "US",
 };
 
-const STORAGE_KEY = "stayora:locale";
-const EVENT = "stayora:locale-change";
+const STORAGE_KEY = "otithee:locale";
+const EVENT = "otithee:locale-change";
 
 /** Reference-stable snapshot; only replaced when a value actually changes. */
 let snapshot: LocalePreferences = DEFAULT_PREFERENCES;

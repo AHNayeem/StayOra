@@ -1,6 +1,6 @@
-# StayOra — Data Flow Diagram (DFD) Suite
+# Otithee — Data Flow Diagram (DFD) Suite
 
-A complete, multi-level Data Flow Diagram for the StayOra all-in-one travel booking
+A complete, multi-level Data Flow Diagram for the Otithee all-in-one travel booking
 platform (Stays, Experiences & Services, Promotions & Loyalty, and User/Provider
 Management).
 
@@ -15,7 +15,7 @@ Management).
 ## 1. Context Diagram — DFD Level 0
 
 The entire platform is modeled as a single process (`0`). Only the boundary flows
-between StayOra and the outside world are shown.
+between Otithee and the outside world are shown.
 
 ```mermaid
 flowchart TD
@@ -28,7 +28,7 @@ flowchart TD
     ADMIN[System Admin]
 
     %% Central System
-    SYS(("0<br/>StayOra<br/>Booking Platform"))
+    SYS(("0<br/>Otithee<br/>Booking Platform"))
 
     %% Customer flows
     CUST -->|Registration, Login, Search Criteria,<br/>Booking Request, Payment Details,<br/>Reviews, Promo Codes, Visa Docs| SYS

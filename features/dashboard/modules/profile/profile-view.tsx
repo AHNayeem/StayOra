@@ -71,7 +71,7 @@ export function ProfileView() {
             <Textarea
               label="Bio"
               rows={3}
-              defaultValue="Platform administrator at StayOra."
+              defaultValue="Platform administrator at Otithee."
             />
           </FormGrid>
         </FormSection>

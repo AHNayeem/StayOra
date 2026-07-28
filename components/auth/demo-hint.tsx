@@ -10,9 +10,9 @@ export interface DemoAccount {
 }
 
 const DEMO_ACCOUNTS: DemoAccount[] = [
-  { role: "Traveler", email: "traveler@stayora.com" },
-  { role: "Merchant", email: "merchant@stayora.com" },
-  { role: "Admin", email: "admin@stayora.com" },
+  { role: "Traveler", email: "traveler@otithee.com" },
+  { role: "Merchant", email: "merchant@otithee.com" },
+  { role: "Admin", email: "admin@otithee.com" },
 ];
 
 /**

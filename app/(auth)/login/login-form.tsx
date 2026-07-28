@@ -57,7 +57,7 @@ export function LoginForm() {
       subtitle="Sign in to manage your bookings, wishlists and trips."
       footer={
         <>
-          New to StayOra?{" "}
+          New to Otithee?{" "}
           <Link
             href={next !== "/" ? `/register?next=${encodeURIComponent(next)}` : "/register"}
             className="font-semibold text-primary hover:underline"

@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "stayora-booking",
+      "name": "otithee-booking",
       "dependencies": {
         "@hookform/resolvers": "^5.4.0",
         "@tanstack/react-table": "^8.21.3",

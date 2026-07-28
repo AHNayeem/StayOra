@@ -7,7 +7,7 @@ import { TERMS_INTRO, TERMS_SECTIONS, TERMS_UPDATED } from "@/constants/legal";
 export const metadata: Metadata = {
   title: "Terms & Conditions",
   description:
-    "The terms governing your use of the StayOra platform, including bookings, payments, cancellations and liability.",
+    "The terms governing your use of the Otithee platform, including bookings, payments, cancellations and liability.",
   alternates: { canonical: "/terms-and-conditions" },
 };
 

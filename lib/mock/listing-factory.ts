@@ -1,6 +1,6 @@
 /**
  * Deterministic listing factory — expands the curated seed listings up to the
- * volumes StayOra ships with (50+ hotels, 80+ activities, …). Everything is
+ * volumes Otithee ships with (50+ hotels, 80+ activities, …). Everything is
  * seeded ({@link SeededRandom}) so the server and client build byte-identical
  * catalogs; nothing here reads the wall clock or `Math.random`.
  *

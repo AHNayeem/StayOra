@@ -5,7 +5,7 @@ import { ResetForm } from "./reset-form";
 
 export const metadata: Metadata = {
   title: "Reset password",
-  description: "Set a new password for your StayOra account.",
+  description: "Set a new password for your Otithee account.",
 };
 
 export default function ResetPasswordPage() {

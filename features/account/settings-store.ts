@@ -27,8 +27,8 @@ export const DEFAULT_SETTINGS: AccountSettings = {
   currencyAutoDetect: true,
 };
 
-const KEY = "stayora:settings";
-const EVENT = "stayora:settings:change";
+const KEY = "otithee:settings";
+const EVENT = "otithee:settings:change";
 
 let snapshot: AccountSettings = DEFAULT_SETTINGS;
 let hydrated = false;

@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 export const metadata: Metadata = {
   title: "FAQs",
   description:
-    "Answers to common questions about booking, payments, accounts and support on StayOra.",
+    "Answers to common questions about booking, payments, accounts and support on Otithee.",
   alternates: { canonical: "/faqs" },
 };
 
@@ -28,7 +28,7 @@ export default function FaqPage() {
       <JsonLd data={faqSchema(FAQ_GROUPS)} />
       <PageBanner
         title="Frequently asked questions"
-        description="Everything you need to know about booking with StayOra. Can't find an answer? Our team is a message away."
+        description="Everything you need to know about booking with Otithee. Can't find an answer? Our team is a message away."
         breadcrumb={[{ label: "Home", href: "/" }, { label: "FAQs" }]}
       />
 

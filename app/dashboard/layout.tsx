@@ -6,7 +6,7 @@ import { DashboardShell } from "@/features/dashboard/layout/dashboard-shell";
 export const metadata: Metadata = {
   title: {
     default: "Dashboard",
-    template: "%s | StayOra Dashboard",
+    template: "%s | Otithee Dashboard",
   },
   robots: { index: false, follow: false },
 };

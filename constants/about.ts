@@ -21,7 +21,7 @@ export const ABOUT_STORY = {
   eyebrow: "Our story",
   title: "Booking travel shouldn't be the hard part",
   paragraphs: [
-    "StayOra began with a simple frustration: planning a single trip meant juggling a dozen tabs, five logins and prices that never quite matched. We thought booking the world should feel as good as being in it.",
+    "Otithee began with a simple frustration: planning a single trip meant juggling a dozen tabs, five logins and prices that never quite matched. We thought booking the world should feel as good as being in it.",
     "So we built one place for hotels, apartments, resorts, shared rooms, convention halls, transport and tours — with honest pricing, real reviews and support that actually answers. Today millions of travellers start their journeys with us.",
   ],
   image: img("photo-1522199755839-a2bacb67c546"),

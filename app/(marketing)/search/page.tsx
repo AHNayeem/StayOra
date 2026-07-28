@@ -16,7 +16,7 @@ export async function generateMetadata({
     title,
     description: q
       ? `Search results for “${q}” across stays, tours, transport and more.`
-      : "Search stays, tours, transport and destinations on StayOra.",
+      : "Search stays, tours, transport and destinations on Otithee.",
     robots: { index: false, follow: true },
   };
 }

@@ -1,12 +1,12 @@
-# Task: Design and Implement a Professional Brand Identity for StayOra
+# Task: Design and Implement a Professional Brand Identity for Otithee
 
 You are an expert Brand Designer, UI Designer, and Frontend Engineer.
 
-Your mission is to create a premium, modern, memorable, and scalable brand identity for the travel booking platform "StayOra", then integrate it throughout the project.
+Your mission is to create a premium, modern, memorable, and scalable brand identity for the travel booking platform "Otithee", then integrate it throughout the project.
 
-## About StayOra
+## About Otithee
 
-StayOra is an all-in-one travel and booking platform.
+Otithee is an all-in-one travel and booking platform.
 
 Users can book:
 
@@ -114,7 +114,7 @@ Create:
 
 ## 1. Primary Logo
 
-Icon + StayOra text
+Icon + Otithee text
 
 SVG
 

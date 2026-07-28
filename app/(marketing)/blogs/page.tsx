@@ -11,7 +11,7 @@ const BANNER_IMAGE =
 export const metadata: Metadata = {
   title: "Blog",
   description:
-    "Travel guides, tips and inspiration from the StayOra team — plan smarter and travel better.",
+    "Travel guides, tips and inspiration from the Otithee team — plan smarter and travel better.",
   alternates: { canonical: "/blogs" },
 };
 
@@ -30,7 +30,7 @@ export default async function BlogsPage() {
   return (
     <main className="flex-1">
       <PageBanner
-        title="The StayOra blog"
+        title="The Otithee blog"
         description="Guides, tips and inspiration to help you plan smarter and travel better."
         image={BANNER_IMAGE}
         imageAlt="Traveller reading in a sunlit window"

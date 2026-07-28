@@ -15,8 +15,8 @@ export interface SwitcherOption {
 }
 
 export const ORGANIZATIONS: SwitcherOption[] = [
-  { id: "org_stayora", label: "StayOra HQ", meta: "Platform" },
-  { id: "org_east", label: "StayOra East", meta: "Region" },
+  { id: "org_stayora", label: "Otithee HQ", meta: "Platform" },
+  { id: "org_east", label: "Otithee East", meta: "Region" },
 ];
 
 export const MERCHANTS: SwitcherOption[] = [

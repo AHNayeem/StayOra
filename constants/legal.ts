@@ -13,7 +13,7 @@ export interface LegalSection {
 export const TERMS_UPDATED = "2026-06-01";
 
 export const TERMS_INTRO =
-  "These terms govern your use of the StayOra platform. By accessing the site or making a booking you agree to the terms below. Please read them carefully — they explain your rights and responsibilities as well as ours.";
+  "These terms govern your use of the Otithee platform. By accessing the site or making a booking you agree to the terms below. Please read them carefully — they explain your rights and responsibilities as well as ours.";
 
 export const TERMS_SECTIONS: LegalSection[] = [
   {

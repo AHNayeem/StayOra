@@ -9,9 +9,9 @@ PROJECT
 =====================================================
 
 Project Name:
-StayOra
+Otithee
 
-StayOra is a modern Multi Vendor Travel & Booking SaaS Platform.
+Otithee is a modern Multi Vendor Travel & Booking SaaS Platform.
 
 It supports booking for:
 

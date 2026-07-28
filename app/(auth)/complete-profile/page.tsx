@@ -5,7 +5,7 @@ import { CompleteProfileForm } from "./complete-form";
 
 export const metadata: Metadata = {
   title: "Complete profile",
-  description: "Finish setting up your StayOra account.",
+  description: "Finish setting up your Otithee account.",
 };
 
 export default function CompleteProfilePage() {

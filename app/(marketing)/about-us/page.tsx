@@ -16,7 +16,7 @@ import { ABOUT_HERO, ABOUT_MISSION, ABOUT_STORY, ABOUT_VALUES } from "@/constant
 export const metadata: Metadata = {
   title: "About Us",
   description:
-    "StayOra is one platform for stays, experiences and transport — built by travellers, for travellers. Learn about our story and the values behind every booking.",
+    "Otithee is one platform for stays, experiences and transport — built by travellers, for travellers. Learn about our story and the values behind every booking.",
   alternates: { canonical: "/about-us" },
 };
 

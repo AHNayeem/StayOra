@@ -3,7 +3,7 @@ import { ForgotForm } from "./forgot-form";
 
 export const metadata: Metadata = {
   title: "Forgot password",
-  description: "Reset your StayOra password.",
+  description: "Reset your Otithee password.",
 };
 
 export default function ForgotPasswordPage() {
