@@ -9,6 +9,7 @@ import {
   History,
   LayoutDashboard,
   MessageSquare,
+  Plane,
   Settings,
   Shield,
   Star,
@@ -45,6 +46,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
     items: [
       { label: "Overview", href: "/account", icon: LayoutDashboard },
       { label: "Bookings", href: "/account/bookings", icon: CalendarCheck },
+      { label: "My flights", href: "/account/flights", icon: Plane },
       { label: "Travel history", href: "/account/history", icon: History },
       { label: "Wishlist", href: "/account/wishlist", icon: Heart, badge: "wishlist" },
       { label: "Reviews", href: "/account/reviews", icon: Star, badge: "reviews" },

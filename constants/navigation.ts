@@ -22,6 +22,7 @@ export interface NavItem extends NavLink {
  */
 export const PRIMARY_NAV: NavItem[] = [
   { label: "Home", href: "/" },
+  { label: VERTICALS.flights.labelPlural, href: VERTICALS.flights.href },
   { label: "Tours", href: VERTICALS.tours.href },
   { label: "Destinations", href: "/destinations" },
   { label: "About Us", href: "/about-us" },
@@ -39,11 +40,20 @@ export const PRIMARY_NAV: NavItem[] = [
         ],
       },
       {
+        heading: "Travel",
+        links: [
+          { label: "Search Flights", href: VERTICALS.flights.href },
+          { label: "Flight Deals", href: `${VERTICALS.flights.href}#deals` },
+          { label: "Popular Routes", href: `${VERTICALS.flights.href}#routes` },
+          { label: VERTICALS.transport.labelPlural, href: VERTICALS.transport.href },
+        ],
+      },
+      {
         heading: "Book & Go",
         links: [
           { label: VERTICALS["convention-hall"].labelPlural, href: VERTICALS["convention-hall"].href },
-          { label: VERTICALS.transport.labelPlural, href: VERTICALS.transport.href },
           { label: VERTICALS.activities.labelPlural, href: VERTICALS.activities.href },
+          { label: VERTICALS.tours.labelPlural, href: VERTICALS.tours.href },
           { label: VERTICALS.visa.labelPlural, href: VERTICALS.visa.href },
         ],
       },
@@ -64,6 +74,7 @@ export const PRIMARY_NAV: NavItem[] = [
 /** Footer quick links. */
 export const FOOTER_QUICK_LINKS: NavLink[] = [
   { label: "About Us", href: "/about-us" },
+  { label: "Flights", href: VERTICALS.flights.href },
   { label: "Tours", href: VERTICALS.tours.href },
   { label: "All Visa", href: VERTICALS.visa.href },
   { label: "Terms & Conditions", href: "/terms-and-conditions" },

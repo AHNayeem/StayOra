@@ -43,8 +43,11 @@ import {
   Pause,
   Percent,
   PiggyBank,
+  Plane,
+  PlaneTakeoff,
   Receipt,
   RefreshCw,
+  Route,
   Scale,
   Search,
   Server,
@@ -54,6 +57,8 @@ import {
   Sparkles,
   Star,
   Store,
+  TicketCheck,
+  Timer,
   TrendingUp,
   TriangleAlert,
   UserCog,
@@ -128,6 +133,11 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Server,
   ShieldAlert,
   Wrench,
+  Plane,
+  PlaneTakeoff,
+  Route,
+  TicketCheck,
+  Timer,
 };
 
 interface DashboardIconProps extends LucideProps {

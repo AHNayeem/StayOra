@@ -32,13 +32,22 @@ import {
 } from "@/constants/listings";
 import { mockDelay, paginate, type Paginated } from "./http";
 
-/** All listings keyed by vertical — the single registry the getters read from. */
+/**
+ * All listings keyed by vertical — the single registry the getters read from.
+ *
+ * `flights` is intentionally empty: a flight is a fare quoted against a search,
+ * not a catalog entity with a slug, so it has no {@link Listing} rows. It is
+ * served by {@link "@/services/flight.service"} instead. The key is present so
+ * the record stays exhaustive and every getter here degrades to an empty result
+ * rather than throwing on an undefined lookup.
+ */
 const BY_VERTICAL: Record<BookingVertical, Listing[]> = {
   hotels: HOTELS,
   apartments: APARTMENTS,
   resorts: RESORTS,
   "shared-rooms": SHARED_ROOMS,
   "convention-hall": CONVENTION_HALLS,
+  flights: [],
   transport: TRANSPORT,
   tours: TOURS,
   activities: ACTIVITIES,

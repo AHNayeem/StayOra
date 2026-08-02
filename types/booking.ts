@@ -4,17 +4,34 @@
  * details templates, differing only by its facets and card data slots.
  */
 
-/** All bookable verticals supported by the platform. */
+/**
+ * All bookable verticals supported by the platform.
+ *
+ * `flights` is a first-class vertical for navigation, bookings, invoices and
+ * admin, but it is *not* a catalog listing: a flight is a fare quoted against a
+ * search, not a static entity with a slug. It therefore has its own search,
+ * results and detail routes under `/flights` (see
+ * {@link "@/services/flight.service"}) and contributes no {@link BookableBase}
+ * entities to the catalog.
+ */
 export type BookingVertical =
   | "hotels"
   | "apartments"
   | "resorts"
   | "shared-rooms"
   | "convention-hall"
+  | "flights"
   | "transport"
   | "tours"
   | "activities"
   | "visa";
+
+/**
+ * Verticals backed by catalog listings — everything except flights. Use this
+ * where a `Listing` is genuinely required (catalog getters, listing templates,
+ * wishlist) so those surfaces stay precisely typed.
+ */
+export type ListingVertical = Exclude<BookingVertical, "flights">;
 
 /** A discounted price with an optional original price and unit note. */
 export interface Price {

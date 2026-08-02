@@ -6,7 +6,6 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
-  CreditCard,
   Loader2,
   Lock,
   Plus,
@@ -17,7 +16,6 @@ import {
   X,
 } from "lucide-react";
 import type { Listing } from "@/types/catalog";
-import type { CardBrand } from "@/types/traveler";
 import { BOOKING_CONFIG } from "@/constants/detail";
 import { VERTICALS, listingHref } from "@/constants/verticals";
 import {
@@ -28,7 +26,6 @@ import {
 } from "@/lib/booking-pricing";
 import { useAuth } from "@/features/auth";
 import { useRequireAuth } from "@/features/auth/guards";
-import { useSavedCards, addCard } from "@/features/account/cards-store";
 import { useSavedTravelers } from "@/features/account/travelers-store";
 import { addCreatedBooking } from "@/features/account/created-bookings";
 import {
@@ -44,25 +41,16 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Stepper } from "@/components/ui/stepper";
 import { controlClasses } from "@/components/ui/field";
 import { OrderSummary } from "./order-summary";
+import {
+  PaymentMethodPicker,
+  usePaymentSelection,
+  type PaymentSelection,
+} from "./payment-methods";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_GUEST_NAMES = 8;
-
-const BRAND_LABEL: Record<CardBrand, string> = {
-  visa: "Visa",
-  mastercard: "Mastercard",
-  amex: "Amex",
-  paypal: "PayPal",
-};
-
-function brandFromNumber(digits: string): CardBrand {
-  if (digits.startsWith("4")) return "visa";
-  if (/^3[47]/.test(digits)) return "amex";
-  if (digits.startsWith("5") || digits.startsWith("2")) return "mastercard";
-  return "visa";
-}
 
 interface CheckoutFlowProps {
   listing: Listing;
@@ -105,7 +93,6 @@ function CheckoutInner({
   const config = BOOKING_CONFIG[listing.vertical];
   const vertical = VERTICALS[listing.vertical];
   const isRequest = isRequestVertical(listing.vertical);
-  const savedCards = useSavedCards();
   const savedTravelers = useSavedTravelers();
 
   // --- Editable selection (dates + quantities) -----------------------------
@@ -120,13 +107,8 @@ function CheckoutInner({
   const [contactCountry, setContactCountry] = useState(user.country ?? "");
   const [requests, setRequests] = useState("");
 
-  // --- Payment --------------------------------------------------------------
-  const defaultCard = savedCards.find((c) => c.isDefault) ?? savedCards[0];
-  const [methodId, setMethodId] = useState<string>(defaultCard ? defaultCard.id : "new");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardHolder, setCardHolder] = useState(user.name);
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [saveCard, setSaveCard] = useState(true);
+  // --- Payment (shared with the flight flow — see ./payment-methods) --------
+  const payment = usePaymentSelection(user.name);
 
   // --- Promo ----------------------------------------------------------------
   const [promoInput, setPromoInput] = useState("");
@@ -143,18 +125,13 @@ function CheckoutInner({
   const discountUsd = promo?.discountUsd ?? 0;
   const finalTotal = Math.max(0, pricing.totalUsd - discountUsd);
 
-  const newCardDigits = cardNumber.replace(/\D/g, "");
-  const newCardValid =
-    newCardDigits.length >= 12 && cardHolder.trim().length > 1 && /^\d{1,2}\s*\/\s*\d{2,4}$/.test(cardExpiry);
-
   const detailsValid =
     contactName.trim().length > 1 &&
     EMAIL_RE.test(contactEmail) &&
     pricing.priceable &&
     (config.dateMode !== "single" || Boolean(selection.singleDate));
 
-  const paymentValid =
-    isRequest || methodId !== "new" || newCardValid;
+  const paymentValid = isRequest || payment.isValid;
 
   const setQuantity = (key: string, value: number) =>
     setSelection((prev) => ({ ...prev, quantities: { ...prev.quantities, [key]: value } }));
@@ -183,39 +160,17 @@ function CheckoutInner({
     }
   };
 
-  const resolvePaymentMethod = (): { method: string; brand: CardBrand } => {
-    if (isRequest) return { method: "Pay on confirmation", brand: "visa" };
-    if (methodId === "paypal") return { method: "PayPal", brand: "paypal" };
-    if (methodId === "new") {
-      const brand = brandFromNumber(newCardDigits);
-      return { method: `${BRAND_LABEL[brand]} •••• ${newCardDigits.slice(-4)}`, brand };
-    }
-    const card = savedCards.find((c) => c.id === methodId);
-    if (card) return { method: `${BRAND_LABEL[card.brand]} •••• ${card.last4}`, brand: card.brand };
-    return { method: "Card", brand: "visa" };
-  };
-
   const onSubmit = async () => {
     if (submitting) return;
     setSubmitting(true);
     const nowMs = Date.now();
 
     // Persist a freshly-typed card so it's there next time.
-    if (!isRequest && methodId === "new" && saveCard && newCardValid) {
-      const [mm, yy] = cardExpiry.split("/");
-      addCard({
-        id: `card_${nowMs.toString(36)}`,
-        brand: brandFromNumber(newCardDigits),
-        last4: newCardDigits.slice(-4),
-        expMonth: Number(mm),
-        expYear: Number(yy.length === 2 ? `20${yy}` : yy),
-        holder: cardHolder.trim(),
-        isDefault: savedCards.length === 0,
-        billingCountry: contactCountry || undefined,
-      });
-    }
+    if (!isRequest) payment.persist(nowMs, contactCountry);
 
-    const { method, brand } = resolvePaymentMethod();
+    const { method, brand } = isRequest
+      ? ({ method: "Pay on confirmation", brand: "visa" } as const)
+      : payment.resolve();
     const dates =
       config.dateMode === "range"
         ? { checkIn: selection.checkIn, checkOut: selection.checkOut }
@@ -382,17 +337,7 @@ function CheckoutInner({
             />
           ) : (
             <PaymentStep
-              savedCards={savedCards}
-              methodId={methodId}
-              onMethod={setMethodId}
-              cardNumber={cardNumber}
-              onCardNumber={setCardNumber}
-              cardHolder={cardHolder}
-              onCardHolder={setCardHolder}
-              cardExpiry={cardExpiry}
-              onCardExpiry={setCardExpiry}
-              saveCard={saveCard}
-              onSaveCard={setSaveCard}
+              payment={payment}
               promoInput={promoInput}
               onPromoInput={setPromoInput}
               onApplyPromo={onApplyPromo}
@@ -702,17 +647,7 @@ function DetailsStep(props: DetailsStepProps) {
 // --------------------------------------------------------------------------
 
 interface PaymentStepProps {
-  savedCards: ReturnType<typeof useSavedCards>;
-  methodId: string;
-  onMethod: (id: string) => void;
-  cardNumber: string;
-  onCardNumber: (v: string) => void;
-  cardHolder: string;
-  onCardHolder: (v: string) => void;
-  cardExpiry: string;
-  onCardExpiry: (v: string) => void;
-  saveCard: boolean;
-  onSaveCard: (v: boolean) => void;
+  payment: PaymentSelection;
   promoInput: string;
   onPromoInput: (v: string) => void;
   onApplyPromo: () => void;
@@ -724,17 +659,7 @@ interface PaymentStepProps {
 
 function PaymentStep(props: PaymentStepProps) {
   const {
-    savedCards,
-    methodId,
-    onMethod,
-    cardNumber,
-    onCardNumber,
-    cardHolder,
-    onCardHolder,
-    cardExpiry,
-    onCardExpiry,
-    saveCard,
-    onSaveCard,
+    payment,
     promoInput,
     onPromoInput,
     onApplyPromo,
@@ -747,79 +672,7 @@ function PaymentStep(props: PaymentStepProps) {
   return (
     <div className="space-y-6">
       <Section title="Payment method">
-        <div className="space-y-2">
-          {savedCards.map((card) => (
-            <MethodRow
-              key={card.id}
-              id={card.id}
-              selected={methodId === card.id}
-              onSelect={onMethod}
-              icon={<CreditCard className="size-5 text-primary" aria-hidden="true" />}
-              title={`${BRAND_LABEL[card.brand]} •••• ${card.last4}`}
-              subtitle={`Expires ${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}`}
-            />
-          ))}
-
-          <MethodRow
-            id="new"
-            selected={methodId === "new"}
-            onSelect={onMethod}
-            icon={<Plus className="size-5 text-primary" aria-hidden="true" />}
-            title="Pay with a new card"
-          />
-
-          {methodId === "new" && (
-            <div className="grid gap-3 rounded-card border border-line bg-surface-muted/40 p-4 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <FieldLabel label="Card number">
-                  <input
-                    inputMode="numeric"
-                    value={cardNumber}
-                    onChange={(e) => onCardNumber(e.target.value)}
-                    placeholder="4242 4242 4242 4242"
-                    maxLength={23}
-                    className={cn(controlClasses(false), "h-11")}
-                  />
-                </FieldLabel>
-              </div>
-              <FieldLabel label="Cardholder name">
-                <input
-                  type="text"
-                  value={cardHolder}
-                  onChange={(e) => onCardHolder(e.target.value)}
-                  className={cn(controlClasses(false), "h-11")}
-                />
-              </FieldLabel>
-              <FieldLabel label="Expiry (MM/YY)">
-                <input
-                  value={cardExpiry}
-                  onChange={(e) => onCardExpiry(e.target.value)}
-                  placeholder="11/28"
-                  maxLength={5}
-                  className={cn(controlClasses(false), "h-11")}
-                />
-              </FieldLabel>
-              <label className="flex items-center gap-2 text-sm text-body sm:col-span-2">
-                <input
-                  type="checkbox"
-                  checked={saveCard}
-                  onChange={(e) => onSaveCard(e.target.checked)}
-                  className="size-4 rounded border-line text-primary focus:ring-primary"
-                />
-                Save this card for next time
-              </label>
-            </div>
-          )}
-
-          <MethodRow
-            id="paypal"
-            selected={methodId === "paypal"}
-            onSelect={onMethod}
-            icon={<span className="text-sm font-bold text-indigo-600">Pay</span>}
-            title="PayPal"
-            subtitle="You'll confirm in a mock PayPal window"
-          />
-        </div>
+        <PaymentMethodPicker selection={payment} />
       </Section>
 
       <Section title="Promo code">
@@ -855,50 +708,6 @@ function PaymentStep(props: PaymentStepProps) {
         {promoError && <p className="mt-2 text-sm text-danger">{promoError}</p>}
       </Section>
     </div>
-  );
-}
-
-function MethodRow({
-  id,
-  selected,
-  onSelect,
-  icon,
-  title,
-  subtitle,
-}: {
-  id: string;
-  selected: boolean;
-  onSelect: (id: string) => void;
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(id)}
-      aria-pressed={selected}
-      className={cn(
-        "flex w-full items-center gap-3 rounded-card border px-4 py-3 text-left transition-colors",
-        selected ? "border-primary bg-primary-50" : "border-line bg-surface hover:border-primary/40",
-      )}
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-field bg-surface-muted">
-        {icon}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-ink">{title}</span>
-        {subtitle && <span className="block truncate text-xs text-muted">{subtitle}</span>}
-      </span>
-      <span
-        className={cn(
-          "grid size-5 shrink-0 place-items-center rounded-full border-2",
-          selected ? "border-primary bg-primary text-white" : "border-line",
-        )}
-      >
-        {selected && <Check className="size-3" aria-hidden="true" />}
-      </span>
-    </button>
   );
 }
 

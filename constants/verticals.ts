@@ -21,6 +21,17 @@ export interface VerticalConfig {
   hasDateRange: boolean;
   /** Whether this vertical shows a guest selector. */
   hasGuests: boolean;
+  /**
+   * When set, the hero renders this vertical's own search panel instead of the
+   * generic location/date/guest fields. Flights need origin *and* destination,
+   * trip types and cabin classes, which the shared widget can't express.
+   */
+  customSearch?: "flights";
+  /**
+   * Verticals without a catalog listing route — their detail pages aren't
+   * `/{vertical}/{slug}`. Used by helpers that would otherwise build a dead link.
+   */
+  noListingRoute?: boolean;
 }
 
 export const VERTICALS: Record<BookingVertical, VerticalConfig> = {
@@ -33,6 +44,18 @@ export const VERTICALS: Record<BookingVertical, VerticalConfig> = {
     priceUnit: "per night",
     hasDateRange: true,
     hasGuests: true,
+  },
+  flights: {
+    key: "flights",
+    label: "Flight",
+    labelPlural: "Flights",
+    href: "/flights",
+    icon: "Plane",
+    priceUnit: "per person",
+    hasDateRange: true,
+    hasGuests: true,
+    customSearch: "flights",
+    noListingRoute: true,
   },
   apartments: {
     key: "apartments",
@@ -119,14 +142,24 @@ export const VERTICALS: Record<BookingVertical, VerticalConfig> = {
 /** Ordered list for iteration (nav, search tabs). */
 export const VERTICAL_LIST: VerticalConfig[] = Object.values(VERTICALS);
 
+/** Verticals backed by catalog listings — everything with a `/{vertical}/{slug}` route. */
+export const LISTING_VERTICALS: VerticalConfig[] = VERTICAL_LIST.filter(
+  (v) => !v.noListingRoute,
+);
+
 /**
  * Detail-page route for a listing, derived from its vertical's base route —
  * e.g. `/hotels/grand-plaza`, `/all-visa/schengen-visa`. The single place this
  * convention lives, so cards, search and links all agree.
+ *
+ * Verticals without a listing route (flights) resolve to their index instead of
+ * a `/{vertical}/{slug}` link that would 404.
  */
 export function listingHref(listing: {
   vertical: BookingVertical;
   slug: string;
 }): string {
-  return `${VERTICALS[listing.vertical].href}/${listing.slug}`;
+  const config = VERTICALS[listing.vertical];
+  if (config.noListingRoute) return config.href;
+  return `${config.href}/${listing.slug}`;
 }

@@ -142,6 +142,9 @@ export const LISTING_FACETS: Record<BookingVertical, ListingFacet[]> = {
   resorts: [starsFacet, boardFacet, amenitiesFacet, countryFacet],
   "shared-rooms": [roomTypeFacet, amenitiesFacet, countryFacet],
   "convention-hall": [layoutsFacet, countryFacet],
+  // Flights aren't catalog listings, so the generic facet sidebar never runs for
+  // them — the results page has its own fare-aware filter rail.
+  flights: [],
   transport: [transportTypeFacet, countryFacet],
   tours: [tourTypeFacet, countryFacet, highlightsFacet],
   activities: [activityCategoryFacet, countryFacet, highlightsFacet],
@@ -185,6 +188,11 @@ export const LISTING_PAGE: Record<BookingVertical, ListingPageMeta> = {
     title: "Convention halls & venues",
     description: "Ballrooms, conference centres and event pavilions for gatherings of any size.",
     bannerImage: img("photo-1519167758481-83f550bb49b3"),
+  },
+  flights: {
+    title: "Flights",
+    description: "Compare fares across 20+ airlines and book with baggage, seats and extras priced up front.",
+    bannerImage: img("photo-1436491865332-7a61a109cc05"),
   },
   transport: {
     title: "Transport & transfers",

@@ -9,7 +9,8 @@
 
 import type { BookingVertical } from "@/types/booking";
 import type { Listing } from "@/types/catalog";
-import type { SearchSuggestions, VerticalHit } from "@/types/search";
+import type { AirportHit, SearchSuggestions, VerticalHit } from "@/types/search";
+import { AIRPORTS } from "@/lib/mock/airports";
 import {
   ACTIVITIES,
   APARTMENTS,
@@ -128,6 +129,51 @@ function tokenize(query: string): string[] {
   return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
+/**
+ * Airports matching a query, as flight-search shortcuts.
+ *
+ * Flights have no catalog listings, so a search for "DXB" would otherwise return
+ * nothing at all. Exact IATA matches rank first — people who type three capital
+ * letters know exactly what they mean.
+ *
+ * The link intentionally omits a date: the flight search fills in a sensible
+ * default on the client, and guessing one here would need a wall-clock read in
+ * a module that must stay deterministic.
+ */
+function matchAirports(query: string, limit = 3): AirportHit[] {
+  const q = query.trim().toLowerCase();
+  if (q.length < 2) return [];
+
+  const scored: Array<{ hit: AirportHit; score: number }> = [];
+  for (const airport of AIRPORTS) {
+    const code = airport.code.toLowerCase();
+    const city = airport.city.toLowerCase();
+    const name = airport.name.toLowerCase();
+
+    let score = 0;
+    if (code === q) score = 100;
+    else if (city.startsWith(q)) score = 60;
+    else if (city.includes(q)) score = 35;
+    else if (name.includes(q)) score = 20;
+    if (score === 0) continue;
+    if (airport.popular) score += 5;
+
+    scored.push({
+      hit: {
+        code: airport.code,
+        city: airport.city,
+        country: airport.country,
+        name: airport.name,
+        href: `/flights?to=${airport.code}`,
+      },
+      score,
+    });
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => s.hit);
+}
+
 export interface SearchOptions {
   /** Restrict to a single vertical. */
   vertical?: BookingVertical;
@@ -169,7 +215,14 @@ export function getSearchSuggestions(
   const tokens = tokenize(query);
   if (tokens.length === 0) {
     return mockDelay(
-      { query, listings: [], destinations: [], verticals: [], totalListings: 0 },
+      {
+        query,
+        listings: [],
+        destinations: [],
+        verticals: [],
+        airports: [],
+        totalListings: 0,
+      },
       150,
     );
   }
@@ -198,6 +251,7 @@ export function getSearchSuggestions(
       listings: scored.slice(0, limit).map((s) => s.listing),
       destinations,
       verticals,
+      airports: matchAirports(query),
       totalListings: scored.length,
     },
     250,

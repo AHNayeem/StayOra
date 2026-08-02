@@ -13,6 +13,10 @@ export const RESOURCES = [
   "bookings",
   "merchants",
   "catalog",
+  // Flight inventory (airlines, airports, routes, schedules) is governed
+  // separately from the stay/experience catalog: the teams and the approval
+  // paths differ, so a catalog editor shouldn't implicitly gain schedule rights.
+  "flights",
   "customers",
   "finance",
   "promotions",

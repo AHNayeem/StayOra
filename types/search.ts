@@ -32,6 +32,22 @@ export interface VerticalHit {
 }
 
 /**
+ * An airport matched by the global search, linking into a pre-filled flight
+ * search. Flights aren't catalog listings, so they can't ride the `listings`
+ * group — but "DXB" or "Dubai airport" is a search people genuinely run, and it
+ * should reach fares rather than a dead end.
+ */
+export interface AirportHit {
+  /** IATA code. */
+  code: string;
+  city: string;
+  country: string;
+  name: string;
+  /** Pre-filled flight-search URL. */
+  href: string;
+}
+
+/**
  * Grouped autocomplete payload for the global search dialog. The service ranks
  * everything mock-side so the dialog just renders groups.
  */
@@ -43,6 +59,8 @@ export interface SearchSuggestions {
   destinations: string[];
   /** Matching vertical shortcuts. */
   verticals: VerticalHit[];
+  /** Matching airports, linking into a flight search. */
+  airports: AirportHit[];
   /** Total number of listing matches across all verticals. */
   totalListings: number;
 }

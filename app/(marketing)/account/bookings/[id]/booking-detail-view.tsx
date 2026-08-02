@@ -15,6 +15,7 @@ import {
   Receipt,
   ShieldCheck,
   Star,
+  Ticket,
   Users,
 } from "lucide-react";
 import type { Invoice, TravelerBooking } from "@/types/traveler";
@@ -199,12 +200,28 @@ export function BookingDetailView({ id, booking: serverBooking, invoice: serverI
           </div>
 
           <div className="grid gap-2">
-            <Link
-              href={listingHref({ vertical: booking.vertical, slug: booking.listingSlug })}
-              className={buttonVariants({ variant: "outline", size: "md", fullWidth: true })}
-            >
-              View listing
-            </Link>
+            {/*
+              A flight has no catalog listing to return to — its equivalent is
+              the ticket, which is where the boarding passes and post-booking
+              actions live. Sending someone to a generic `/flights` page from
+              their own booking would be a dead end.
+            */}
+            {booking.vertical === "flights" ? (
+              <Link
+                href={`/account/flights/${booking.id}`}
+                className={buttonVariants({ variant: "outline", size: "md", fullWidth: true })}
+              >
+                <Ticket className="size-4" aria-hidden="true" />
+                View flight ticket
+              </Link>
+            ) : (
+              <Link
+                href={listingHref({ vertical: booking.vertical, slug: booking.listingSlug })}
+                className={buttonVariants({ variant: "outline", size: "md", fullWidth: true })}
+              >
+                View listing
+              </Link>
+            )}
             {invoice && (
               <Link
                 href="/account/invoices"

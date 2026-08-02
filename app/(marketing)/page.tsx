@@ -21,8 +21,16 @@ import { TestimonialsSection } from "@/components/sections/testimonials-section"
 import { HomeFaqs } from "@/components/sections/home-faqs";
 import { CtaSection } from "@/components/sections/cta-section";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { FlightDeals } from "@/features/flights/sections/flight-deals";
+import { PopularRoutes } from "@/features/flights/sections/popular-routes";
+import { AirlinePartners } from "@/features/flights/sections/airline-partners";
 import { HOME_SECTIONS } from "@/constants/home";
 import { getFeatured } from "@/services/catalog";
+import {
+  getFlightDeals,
+  getPartnerAirlines,
+  getPopularRoutes,
+} from "@/services/flight.service";
 import {
   getAwards,
   getBlogPosts,
@@ -74,6 +82,9 @@ export default async function HomePage() {
     stats,
     testimonials,
     posts,
+    flightDeals,
+    popularRoutes,
+    airlinePartners,
   ] = await Promise.all([
     getPartners(),
     getDestinations(10),
@@ -94,6 +105,9 @@ export default async function HomePage() {
     getStats(),
     getTestimonials(),
     getBlogPosts(3),
+    getFlightDeals(8),
+    getPopularRoutes(6),
+    getPartnerAirlines(),
   ]);
 
   return (
@@ -113,6 +127,10 @@ export default async function HomePage() {
         vertical="hotels"
         background="muted"
       />
+
+      {/* Featured flight deals — the highest-intent rail on the page, so it
+          sits directly under the first stays band rather than at the bottom. */}
+      <FlightDeals deals={flightDeals} background="surface" />
 
       {/* Trending destinations slider */}
       <DestinationSlider destinations={destinations} />
@@ -164,12 +182,20 @@ export default async function HomePage() {
       {/* Browse by country */}
       <CountryCards countries={countries} />
 
+      {/* Popular flight routes */}
+      <PopularRoutes
+        routes={popularRoutes}
+        title="Popular flight routes"
+        subtitle="The city pairs our travellers fly most — tap through to live fares."
+        background="muted"
+      />
+
       {/* Transport */}
       <ListingCarousel
         items={transport}
         {...HOME_SECTIONS.transport}
         vertical="transport"
-        background="muted"
+        background="surface"
       />
 
       {/* Visa services */}
@@ -177,8 +203,11 @@ export default async function HomePage() {
         items={visas}
         {...HOME_SECTIONS.visa}
         vertical="visa"
-        background="surface"
+        background="muted"
       />
+
+      {/* Airline partners */}
+      <AirlinePartners airlines={airlinePartners.slice(0, 8)} background="surface" />
 
       {/* Special offers */}
       <DealsSection offers={offers} />

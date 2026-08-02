@@ -47,6 +47,12 @@ export const GALLERY_POOL: Record<BookingVertical, string[]> = {
     img("photo-1587825140708-dfaf72ae4b04"),
     img("photo-1540575467063-178a50c2df87"),
   ],
+  flights: [
+    img("photo-1436491865332-7a61a109cc05"),
+    img("photo-1521727857535-28d2047619b5"),
+    img("photo-1569154941061-e231b4725ef1"),
+    img("photo-1540339832862-474599807836"),
+  ],
   transport: [
     img("photo-1502877338535-766e1452684a"),
     img("photo-1449965408869-eaa3f722e40d"),
@@ -85,6 +91,8 @@ export const OVERVIEW_BLURB: Record<BookingVertical, string> = {
     "A sociable, budget-friendly base with a lively common area — perfect for meeting fellow travellers without stretching your budget.",
   "convention-hall":
     "A versatile, professionally-managed venue with the space, technology and support to make conferences, galas and product launches run flawlessly.",
+  flights:
+    "Fares from the carriers that actually fly the route, with baggage, seats and extras priced up front — so the number you see is the number you pay.",
   transport:
     "Comfortable, reliable door-to-door travel with a professional driver, so you can relax and enjoy the journey from the moment you set off.",
   tours:
@@ -119,6 +127,10 @@ export const INCLUSIONS: Record<
   "convention-hall": {
     included: ["Venue hire for the booked day", "In-house AV & lighting", "On-site event coordinator", "High-speed Wi-Fi"],
     excluded: ["Catering & beverages", "Overtime hours", "External décor", "Security staff"],
+  },
+  flights: {
+    included: ["Cabin baggage", "Airport taxes & surcharges", "E-ticket & itinerary", "24/7 booking support"],
+    excluded: ["Extra checked baggage", "Seat selection", "In-flight meals on low-cost fares", "Travel insurance"],
   },
   transport: {
     included: ["Professional driver", "Fuel & tolls", "Meet & greet", "Bottled water"],
@@ -168,6 +180,10 @@ export const FAQ_BY_VERTICAL: Record<BookingVertical, FaqItem[]> = {
   ],
   "convention-hall": [
     { question: "Can you arrange catering and AV?", answer: "Absolutely. In-house AV is included, and our event coordinator can arrange catering, décor and additional staffing as an add-on." },
+  ],
+  flights: [
+    { question: "When are my e-tickets issued?", answer: "Immediately after payment clears. Your e-ticket numbers and full itinerary land in your inbox within a few minutes, and are always available under My Flights." },
+    { question: "Can I change or cancel my flight?", answer: "That depends on the fare family you booked. Saver fares are fixed; Value fares allow date changes for a fee; Flex and Business Flex fares can be changed or refunded up to 24 hours before departure." },
   ],
   transport: [
     { question: "What happens if my flight is delayed?", answer: "Your driver tracks your flight and adjusts the pick-up time automatically at no extra cost, so someone is always waiting when you land." },
@@ -380,6 +396,24 @@ export const BOOKING_CONFIG: Record<BookingVertical, BookingWidgetConfig> = {
     summaryNoun: "Venue",
     ctaLabel: "Request Quote",
     note: "No payment taken — we'll confirm availability",
+  },
+  // Flights never render the generic booking widget — pricing comes from a live
+  // fare quote, not `unit × duration × multipliers`, and the flow lives at
+  // `/flights/book`. This entry exists so the record stays exhaustive and any
+  // generic consumer (summaries, labels) has sensible copy to fall back on.
+  flights: {
+    title: "Book Your Flight",
+    subtitle: "Compare fares across airlines and book in a few steps.",
+    dateMode: "range",
+    checkInLabel: "Departure",
+    checkOutLabel: "Return",
+    perDuration: false,
+    fields: [
+      { key: "travellers", label: "Travellers", hint: "Adults, children & infants", min: 1, max: 9, default: 1, multiplier: false },
+    ],
+    summaryNoun: "Traveller",
+    ctaLabel: "Search Flights",
+    note: "Fares are confirmed before payment",
   },
   transport: {
     title: "Book Your Transfer",

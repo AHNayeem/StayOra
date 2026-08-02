@@ -31,6 +31,7 @@ import {
 } from "@/lib/date";
 import { useClickOutside } from "@/hooks/use-click-outside";
 import { useT } from "@/features/i18n";
+import { FlightSearchPanel } from "@/features/flights/search/flight-search-panel";
 import { VerticalIcon } from "@/components/shared/vertical-icon";
 import { cn } from "@/lib/utils";
 import { MonthGrid } from "./date-range-picker";
@@ -102,6 +103,15 @@ export function HeroSearch2({
 
       {/* Search panel */}
       <div className="relative z-10 -mt-6 w-full rounded-lg bg-surface p-4 pt-12 shadow-card sm:p-6 sm:pt-14">
+        {/*
+          Flights need origin *and* destination, trip types and cabin classes,
+          which the shared location/date/guest widget can't express — so the
+          registry flags them (`VerticalConfig.customSearch`) and the tab swaps
+          in the dedicated panel rather than bending this one out of shape.
+        */}
+        {vertical.customSearch === "flights" ? (
+          <FlightSearchPanel variant="embedded" />
+        ) : (
         <form onSubmit={onSubmit}>
           <div className="flex flex-col gap-4 md:flex-row md:items-start">
             <div className="md:flex-[1.3]">
@@ -150,6 +160,7 @@ export function HeroSearch2({
             </button>
           </div>
         </form>
+        )}
       </div>
     </div>
   );

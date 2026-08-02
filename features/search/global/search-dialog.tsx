@@ -8,12 +8,13 @@ import {
   CornerDownLeft,
   Loader2,
   MapPin,
+  Plane,
   Search,
   TrendingUp,
   X,
 } from "lucide-react";
 import type { Listing } from "@/types/catalog";
-import type { VerticalHit } from "@/types/search";
+import type { AirportHit, VerticalHit } from "@/types/search";
 import { getPopularSearches, listingHref } from "@/services/search";
 import { VerticalIcon } from "@/components/shared/vertical-icon";
 import { PriceTag } from "@/components/ui/price-tag";
@@ -27,7 +28,8 @@ type Item =
   | { kind: "query"; id: string; term: string }
   | { kind: "listing"; id: string; listing: Listing }
   | { kind: "destination"; id: string; term: string }
-  | { kind: "vertical"; id: string; hit: VerticalHit };
+  | { kind: "vertical"; id: string; hit: VerticalHit }
+  | { kind: "airport"; id: string; hit: AirportHit };
 
 /**
  * SearchDialog — the global search command palette. A single input drives live,
@@ -63,6 +65,9 @@ export function SearchDialog({ onClose }: { onClose: () => void }) {
       suggestions?.listings.forEach((l) =>
         list.push({ kind: "listing", id: `l-${l.id}`, listing: l }),
       );
+      suggestions?.airports.forEach((a) =>
+        list.push({ kind: "airport", id: `a-${a.code}`, hit: a }),
+      );
       suggestions?.destinations.forEach((d) =>
         list.push({ kind: "destination", id: `d-${d}`, term: d }),
       );
@@ -82,7 +87,7 @@ export function SearchDialog({ onClose }: { onClose: () => void }) {
     if (item.kind === "listing") {
       remember(query.trim());
       router.push(listingHref(item.listing));
-    } else if (item.kind === "vertical") {
+    } else if (item.kind === "vertical" || item.kind === "airport") {
       router.push(item.hit.href);
     } else {
       const term = item.term.trim();
@@ -229,6 +234,7 @@ function ActiveResults({
   const hasResults =
     suggestions &&
     (suggestions.listings.length > 0 ||
+      suggestions.airports.length > 0 ||
       suggestions.destinations.length > 0 ||
       suggestions.verticals.length > 0);
 
@@ -278,6 +284,31 @@ function ActiveResults({
                   </span>
                 </span>
                 <PriceTag price={l.price} size="sm" className="shrink-0" />
+              </Row>
+            );
+          })}
+        </>
+      )}
+
+      {suggestions && suggestions.airports.length > 0 && (
+        <>
+          <GroupLabel>Flights</GroupLabel>
+          {suggestions.airports.map((a) => {
+            const i = indexOf(`a-${a.code}`);
+            return (
+              <Row
+                key={a.code}
+                selected={i === activeIndex}
+                onHover={() => onHover(i)}
+                onClick={() => onActivate({ kind: "airport", id: `a-${a.code}`, hit: a })}
+                icon={<Plane className="size-4" aria-hidden="true" />}
+              >
+                <span className="min-w-0 flex-1 truncate">
+                  Flights to {a.city}{" "}
+                  <span className="text-muted">
+                    ({a.code}) · {a.country}
+                  </span>
+                </span>
               </Row>
             );
           })}

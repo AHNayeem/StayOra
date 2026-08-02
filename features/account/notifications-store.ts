@@ -33,3 +33,15 @@ export function markAllRead(): void {
 export function removeNotification(id: string): void {
   store.remove(id);
 }
+
+/**
+ * Push a new notification to the top of the feed.
+ *
+ * Used when a client-side action produces something the traveller should see
+ * later — a completed booking, an issued ticket — so the feed reflects what
+ * actually happened in this session rather than only the seeded history. A real
+ * backend pushes these instead and this becomes a no-op.
+ */
+export function addNotification(notification: AccountNotification): void {
+  store.add(notification, true);
+}

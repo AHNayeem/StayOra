@@ -55,6 +55,21 @@ const STAY_CONFIG: VerticalSearchConfig = {
  */
 export const SEARCH_CONFIG: Record<BookingVertical, VerticalSearchConfig> = {
   hotels: STAY_CONFIG,
+  // Flights render their own search panel (`VerticalConfig.customSearch`), so
+  // this entry only supplies copy for the few shared surfaces that read labels
+  // generically — the widget itself never uses it.
+  flights: {
+    locationLabel: "From / To",
+    locationPlaceholder: "City or airport",
+    startDateLabel: "Departure",
+    endDateLabel: "Return",
+    guestsLabel: "Travellers",
+    guestUnits: [
+      { key: "adults", label: "Adults", hint: "12 years and over", min: 1, max: 9 },
+      { key: "children", label: "Children", hint: "2–11 years", min: 0, max: 8 },
+      { key: "infants", label: "Infants", hint: "Under 2, on a lap", min: 0, max: 4 },
+    ],
+  },
   apartments: {
     ...STAY_CONFIG,
     locationPlaceholder: "City, area or apartment",

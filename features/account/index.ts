@@ -25,6 +25,7 @@ export {
   markRead,
   markAllRead,
   removeNotification,
+  addNotification,
 } from "./notifications-store";
 export { useSavedCards, addCard, removeCard, setDefaultCard } from "./cards-store";
 export {

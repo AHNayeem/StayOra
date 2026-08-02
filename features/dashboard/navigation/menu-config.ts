@@ -64,6 +64,29 @@ export const DASHBOARD_MENU: MenuNode[] = [
     ],
   },
   {
+    id: "flights",
+    label: "Flights",
+    icon: "Plane",
+    anyPermission: ["flights:read"],
+    badge: { countKey: "flights.pendingRefunds", variant: "accent" },
+    children: [
+      { id: "flights-overview", label: "Overview", href: "/dashboard/flights" },
+      { id: "flights-bookings", label: "Bookings", href: "/dashboard/flights/bookings" },
+      { id: "flights-passengers", label: "Passengers", href: "/dashboard/flights/passengers" },
+      { id: "flights-refunds", label: "Refund Requests", href: "/dashboard/flights/refunds" },
+      {
+        id: "flights-inventory",
+        label: "Inventory",
+        children: [
+          { id: "flights-airlines", label: "Airlines", href: "/dashboard/flights/airlines" },
+          { id: "flights-airports", label: "Airports", href: "/dashboard/flights/airports" },
+          { id: "flights-routes", label: "Routes", href: "/dashboard/flights/routes" },
+          { id: "flights-schedules", label: "Schedules", href: "/dashboard/flights/schedules" },
+        ],
+      },
+    ],
+  },
+  {
     id: "merchants",
     label: "Merchants",
     icon: "Store",
