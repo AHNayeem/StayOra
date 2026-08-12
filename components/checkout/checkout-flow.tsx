@@ -24,6 +24,8 @@ import {
   roomsFromSelection,
   type BookingSelection,
 } from "@/lib/booking-pricing";
+import { AskAiButton } from "@/features/ai";
+import { RecommendationRail } from "@/features/trip";
 import { useAuth } from "@/features/auth";
 import { useRequireAuth } from "@/features/auth/guards";
 import { useSavedTravelers } from "@/features/account/travelers-store";
@@ -279,6 +281,34 @@ function CheckoutInner({
             </Link>
           </div>
         </div>
+
+        {/* Smart follow-up — what usually goes with what was just booked. */}
+        <RecommendationRail
+          context={{
+            destination: {
+              city: listing.location.city ?? listing.location.label,
+              country: listing.location.country ?? "",
+              countryCode: listing.location.countryCode,
+              label: listing.location.label,
+            },
+            departureDate: selection.checkIn || selection.singleDate || undefined,
+            returnDate: selection.checkOut || undefined,
+            travelers: { adults: guests, children: 0, infants: 0 },
+            tripType: "one-way",
+            currency: "USD",
+            seededBy: listing.vertical,
+            updatedAt: "",
+          }}
+          className="mx-auto mt-10 max-w-4xl"
+          title={
+            isRequest
+              ? `While you wait — more in ${listing.location.city ?? listing.location.label}`
+              : `Your stay is confirmed. What else for ${listing.location.city ?? listing.location.label}?`
+          }
+          subtitle="Add these to a trip and book them together next time"
+          maxGroups={3}
+          variant="compact"
+        />
       </Container>
     );
   }
@@ -402,6 +432,29 @@ function CheckoutInner({
             <ShieldCheck className="size-3.5" aria-hidden="true" />
             {isRequest ? "No payment taken today" : "Secure checkout · you can cancel for free"}
           </p>
+
+          {/* Contextual AI entry — answers questions about what's being booked
+              without leaving checkout. The assistant never touches payment. */}
+          <AskAiButton
+            label="Ask AI about this booking"
+            prompt={`What is the cancellation policy for ${listing.title}?`}
+            page={{
+              label: listing.title,
+              listing: {
+                vertical: listing.vertical as Exclude<typeof listing.vertical, "flights">,
+                slug: listing.slug,
+                title: listing.title,
+                destination: listing.location.label,
+              },
+              destination: listing.location.city ?? listing.location.label,
+              suggestions: [
+                `Summarize reviews for ${listing.title}`,
+                `Compare ${listing.title} with something cheaper`,
+                `Things to do in ${listing.location.city ?? listing.location.label}`,
+              ],
+            }}
+            className="mt-3 w-full justify-center"
+          />
         </aside>
       </div>
     </Container>

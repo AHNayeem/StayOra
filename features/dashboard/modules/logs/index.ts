@@ -1,4 +1,4 @@
-/** Logs module — audit/activity trail (types, service, columns, hooks, UI). */
+/** Audit-log module — the domain activity trail. */
 export * from "./types";
 export { logsService, logKeys } from "./service";
 export { logColumns } from "./columns";

@@ -37,13 +37,13 @@ export function SearchTrigger({ className }: { className?: string }) {
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          "hidden items-center gap-2 rounded-pill border border-line bg-surface-muted/60 py-2 pl-3 pr-2.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-ink xl:inline-flex",
+          "hidden h-10 shrink-0 items-center gap-2 whitespace-nowrap rounded-pill border border-line bg-surface-muted/60 pl-3 pr-2.5 text-sm text-muted transition-colors hover:border-primary/40 hover:text-ink xl:inline-flex",
           className,
         )}
       >
-        <Search className="size-4" aria-hidden="true" />
-        <span className="pr-6">Search…</span>
-        <kbd className="rounded border border-line bg-surface px-1.5 py-0.5 text-[0.6875rem] font-medium">
+        <Search className="size-4 shrink-0" aria-hidden="true" />
+        <span className="pr-3 2xl:pr-6">Search…</span>
+        <kbd className="shrink-0 rounded border border-line bg-surface px-1.5 py-0.5 text-[0.6875rem] font-medium">
           ⌘K
         </kbd>
       </button>
@@ -54,7 +54,7 @@ export function SearchTrigger({ className }: { className?: string }) {
         onClick={() => setOpen(true)}
         aria-label="Search"
         className={cn(
-          "grid size-10 place-items-center rounded-field text-ink transition-colors hover:bg-primary-50 hover:text-primary xl:hidden",
+          "grid size-10 shrink-0 place-items-center rounded-field text-ink transition-colors hover:bg-primary-50 hover:text-primary xl:hidden",
           className,
         )}
       >

@@ -5,6 +5,7 @@
  */
 export { useAuth, type AuthStatus, type UseAuthResult } from "./use-auth";
 export { useSessionSnapshot, syncSession } from "./session-store";
+export { resolvePostAuthRedirect, isInternalPath } from "./redirect";
 export {
   useRedirectIfAuthenticated,
   useRequireAuth,

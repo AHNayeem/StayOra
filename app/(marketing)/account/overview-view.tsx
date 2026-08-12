@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import type { AccountOverview, TravelerBooking } from "@/types/traveler";
+import { AskAiButton } from "@/features/ai";
 import { useAuth } from "@/features/auth";
 import { useLocale } from "@/features/i18n";
 import { useWishlistCount } from "@/features/account/wishlist";
@@ -48,9 +49,26 @@ export function OverviewView({ data }: { data: AccountOverview }) {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-h3 text-ink">Welcome back, {firstName} 👋</h1>
-        <p className="mt-1 text-body">Here&apos;s what&apos;s happening with your travels.</p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-h3 text-ink">Welcome back, {firstName} 👋</h1>
+          <p className="mt-1 text-body">Here&apos;s what&apos;s happening with your travels.</p>
+        </div>
+        {/* Contextual AI entry — the dashboard's most useful next action. */}
+        <AskAiButton
+          label="Plan my next trip"
+          prompt="Plan my next trip"
+          page={{
+            label: "Your account",
+            suggestions: [
+              "What's my next trip?",
+              "Show my bookings",
+              "Plan my next trip",
+              "Help me plan within my budget",
+            ],
+          }}
+          variant="subtle"
+        />
       </div>
 
       {/* Travel stats */}

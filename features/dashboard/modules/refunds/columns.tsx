@@ -1,8 +1,11 @@
+import Link from "next/link";
 import type { ColumnDef } from "../../crud";
-import { StatusBadge } from "../../ui";
+import { Badge, StatusBadge } from "../../ui";
 import { formatCurrency, formatDate } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
-import { REFUND_STATUSES, type Refund } from "./types";
+import { REFUND_STATUSES } from "../../domain/lifecycle";
+import type { Refund } from "../../domain/types";
+import { REFUND_KIND_LABELS, REFUND_REASON_LABELS } from "./types";
 
 const statusTone = toneMap(REFUND_STATUSES);
 const statusLabel = labelMap(REFUND_STATUSES);
@@ -10,11 +13,20 @@ const statusLabel = labelMap(REFUND_STATUSES);
 export const refundColumns: ColumnDef<Refund>[] = [
   {
     accessorKey: "reference",
-    header: "Reference",
+    header: "Refund",
     enableHiding: false,
-    meta: { label: "Reference" },
+    meta: { label: "Refund" },
     cell: ({ row }) => (
-      <span className="font-medium text-ink">{row.original.reference}</span>
+      <div className="min-w-0">
+        <p className="font-medium text-ink">{row.original.reference}</p>
+        <Link
+          href={`/dashboard/bookings/${row.original.bookingId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-xs text-primary hover:underline"
+        >
+          {row.original.bookingRef}
+        </Link>
+      </div>
     ),
   },
   {
@@ -23,8 +35,10 @@ export const refundColumns: ColumnDef<Refund>[] = [
     meta: { label: "Customer" },
     cell: ({ row }) => (
       <div className="min-w-0">
-        <p className="truncate text-ink">{row.original.customer}</p>
-        <p className="truncate text-xs text-muted">{row.original.bookingRef}</p>
+        <p className="truncate text-ink">{row.original.customer.name}</p>
+        <p className="truncate text-xs text-muted">
+          {row.original.customer.organizationName ?? row.original.merchant.name}
+        </p>
       </div>
     ),
   },
@@ -33,16 +47,52 @@ export const refundColumns: ColumnDef<Refund>[] = [
     header: "Reason",
     meta: { label: "Reason" },
     cell: ({ row }) => (
-      <span className="text-body">{row.original.reason}</span>
+      <div className="min-w-0">
+        <p className="truncate text-body">{REFUND_REASON_LABELS[row.original.reason]}</p>
+        <Badge
+          size="sm"
+          variant={
+            row.original.kind === "full"
+              ? "primary"
+              : row.original.kind === "partial"
+                ? "accent"
+                : "neutral"
+          }
+        >
+          {REFUND_KIND_LABELS[row.original.kind]}
+        </Badge>
+      </div>
     ),
   },
   {
-    accessorKey: "amount",
-    header: "Amount",
-    meta: { label: "Amount", align: "right" },
+    accessorKey: "originalAmount",
+    header: "Booking total",
+    meta: { label: "Booking total", align: "right" },
+    cell: ({ row }) => (
+      <span className="tabular-nums text-body">
+        {formatCurrency(row.original.originalAmount, row.original.currency)}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "cancellationFee",
+    header: "Fee",
+    meta: { label: "Fee", align: "right" },
+    cell: ({ row }) => (
+      <span className="tabular-nums text-body">
+        {row.original.cancellationFee > 0
+          ? formatCurrency(row.original.cancellationFee, row.original.currency)
+          : "—"}
+      </span>
+    ),
+  },
+  {
+    accessorKey: "refundAmount",
+    header: "Refund",
+    meta: { label: "Refund", align: "right" },
     cell: ({ row }) => (
       <span className="font-medium tabular-nums text-ink">
-        {formatCurrency(row.original.amount, row.original.currency)}
+        {formatCurrency(row.original.refundAmount, row.original.currency)}
       </span>
     ),
   },
@@ -57,12 +107,12 @@ export const refundColumns: ColumnDef<Refund>[] = [
     ),
   },
   {
-    accessorKey: "createdAt",
-    header: "Date",
-    meta: { label: "Date" },
+    accessorKey: "requestedAt",
+    header: "Requested",
+    meta: { label: "Requested" },
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-body">
-        {formatDate(row.original.createdAt)}
+        {formatDate(row.original.requestedAt)}
       </span>
     ),
   },

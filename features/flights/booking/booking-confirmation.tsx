@@ -8,6 +8,7 @@ import { AIRLINES_BY_CODE } from "@/lib/mock/airlines";
 import { CABIN_LABEL } from "@/lib/mock/fares";
 import { formatTime } from "@/lib/flight-time";
 import { useLocale } from "@/features/i18n";
+import { RecommendationRail, contextFromOffer } from "@/features/trip";
 import { Container } from "@/components/ui/container";
 import { buttonVariants } from "@/components/ui/button";
 import { AirlineLogo } from "../airline-logo";
@@ -152,6 +153,18 @@ export function BookingConfirmation({
             </Next>
           </ol>
         </div>
+
+        {/* Smart follow-up: the flight is confirmed, so the next useful thing
+            is what completes the trip at the other end. Contextual, one block,
+            and skippable — never a nag. */}
+        <RecommendationRail
+          context={contextFromOffer(offer)}
+          className="mt-6"
+          title={`Your flight to ${airportLabel(last.toCode)} is confirmed`}
+          subtitle="Would you like to add an airport transfer or somewhere to stay?"
+          maxGroups={3}
+          variant="compact"
+        />
 
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
           <Link

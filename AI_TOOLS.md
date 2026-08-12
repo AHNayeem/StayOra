@@ -1,0 +1,73 @@
+# AI Tools
+
+`features/ai/tools` is the assistant's entire access to data. The engine imports
+`AI_TOOLS` and nothing else from the data side.
+
+`TOOL_DESCRIPTORS` (in `tools/registry.ts`) mirrors this list as data — a real LLM
+provider serialises it into function/tool definitions without touching the tools.
+
+## Search
+
+| Tool | Delegates to | Notes |
+| --- | --- | --- |
+| `searchHotels` | `services/catalog` | Stays across hotels/resorts/apartments/shared-rooms. Filters destination, nightly ceiling, rating, amenities, style. |
+| `searchFlights` | `services/flight.service` | Builds the same `FlightSearchQuery` the search panel builds; reuses the service's `sortOffers`. |
+| `searchTours` / `searchActivities` / `searchTransport` / `searchVisaServices` | `services/catalog` | Experience verticals. |
+| `getVisaStatus` | `services/flight.service` | Indicative entry requirements. Advisory only. |
+| `getRecommendations` | composed | Strongest stay + experiences for a place. |
+
+### Relaxation order
+
+Constraints are dropped weakest-first and every drop is reported in `relaxed`, which the
+answer surfaces. For stays the order is deliberate:
+
+1. **Property type** — "a hotel in Dubai" where the catalog has only resorts and hostels
+   there returns a Dubai resort.
+2. **Geography, one step** — if the city has nothing at all, widen to its country and
+   set `widenedTo`. The answer says "nothing in Dubai itself, so here's what the UAE has".
+3. **Destination** — only now is the place abandoned, and the answer leads with that
+   fact rather than presenting another city's results as if they were the ask.
+
+Price and rating ceilings are relaxed after the pool is chosen, and the answer drops the
+claim it couldn't honour ("Nothing there matched under $150 a night").
+
+## Detail & comparison
+
+| Tool | Notes |
+| --- | --- |
+| `getListingDetails` | Full details payload for one listing. |
+| `getFlightDetails` | Rebuilds an offer from its self-describing id. |
+| `compareListings` | 2–4 stays on price, stay total, rating, class, location, amenities, breakfast, cancellation, value. The verdict is computed from the same numbers the table prints. |
+| `compareFlights` | 2–4 fares on total, per-adult, duration, stops, times, baggage, refundability, changeability, CO₂, seats left. |
+| `summarizeReviews` | Themes counted from the listing's actual review text; a theme only appears if the words occur, and `mentions` is the real count. |
+| `resolveListings` | Ids → listings, across every catalog vertical. |
+
+## Trips
+
+| Tool | Notes |
+| --- | --- |
+| `createTripPlan` | Runs flight/stay/transfer/activity searches in parallel and lays them across the days. Drops a component rather than substituting one from another city. |
+| `calculateTripBudget` | Costs the plan line by line. Fares already include their taxes and service fee, so only catalog components attract `SERVICE_FEE_RATE`. When over budget it finds *real* cheaper listings in the same destination; `savesUsd` is the exact difference. |
+| `createBookingDraft` | Prices with `computeBookingPricing` and returns the same `/checkout` query string the booking widget produces. Never charges. |
+
+`BUDGET_SPLIT` in `trip-tools.ts` (flight 40% / stay 35% / activities 15% / transport
+10%) is a **search ceiling**, not a quoted figure — it only decides which real listings
+are considered. The plan total is always the sum of the prices actually found.
+
+## Account
+
+| Tool | Notes |
+| --- | --- |
+| `getUserBookings` | Stays + flights, capped at 4 each; `total` lets the answer disclose what was left out. |
+| `getTripDetails` | Next upcoming trip, or trips matching a destination / reference keyword. |
+
+Read-only by design. Cancellations and refunds stay behind the existing confirmation
+flows because they are financially consequential.
+
+## Adding a tool
+
+1. Write the function in the matching `*-tools.ts`, delegating to a service.
+2. Export it from `tools/index.ts` in `AI_TOOLS`.
+3. Add an entry to `TOOL_DESCRIPTORS`.
+4. If it needs new UI, add an `AIBlock` variant in `types/ai.ts` and one renderer in
+   `features/ai/ui/blocks/` — the chat, panel and page don't change.

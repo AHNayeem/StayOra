@@ -1,6 +1,7 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { DEMO_ACCOUNT_HINTS } from "@/constants/accounts";
 import { DEMO_PASSWORD } from "@/services/auth";
 import { cn } from "@/lib/utils";
 
@@ -9,16 +10,11 @@ export interface DemoAccount {
   email: string;
 }
 
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  { role: "Traveler", email: "traveler@otithee.com" },
-  { role: "Merchant", email: "merchant@otithee.com" },
-  { role: "Admin", email: "admin@otithee.com" },
-];
-
 /**
- * DemoHint — a discreet panel surfacing the seeded demo credentials so the
- * prototype is actually usable without a real backend. On the login screen the
- * rows are clickable (via `onPick`) to autofill the form.
+ * DemoHint — surfaces the seeded demo credentials so the prototype is usable
+ * without a real backend. Every role the platform models is listed with where it
+ * lands after sign-in, which is how a reviewer walks the admin / merchant /
+ * agency / customer boundaries. On the login screen the rows autofill the form.
  */
 export function DemoHint({
   onPick,
@@ -34,12 +30,18 @@ export function DemoHint({
       <p className="mt-1 text-xs text-muted">
         Password for all: <span className="font-mono text-body">{DEMO_PASSWORD}</span>
       </p>
-      <ul className="mt-3 space-y-1.5">
-        {DEMO_ACCOUNTS.map((acc) => {
+      <ul className="mt-3 space-y-1">
+        {DEMO_ACCOUNT_HINTS.map((acc) => {
           const content = (
             <>
-              <span className="font-medium text-ink">{acc.role}</span>
-              <span className="font-mono text-xs text-body">{acc.email}</span>
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-ink">{acc.label}</span>
+                <span className="block truncate text-xs text-muted">{acc.note}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block font-mono text-xs text-body">{acc.email}</span>
+                <span className="block text-[0.6875rem] text-muted">→ {acc.lands}</span>
+              </span>
             </>
           );
           return (
@@ -50,7 +52,7 @@ export function DemoHint({
                   onClick={() => onPick({ email: acc.email, password: DEMO_PASSWORD })}
                   className={cn(
                     "flex w-full items-center justify-between gap-3 rounded-field px-2.5 py-1.5 text-left transition-colors",
-                    "hover:bg-primary-50",
+                    "hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
                   )}
                 >
                   {content}

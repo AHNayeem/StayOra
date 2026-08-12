@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import { Select } from "@/components/ui/select";
 import { SORT_OPTIONS, type SortKey } from "@/constants/listing";
@@ -13,6 +14,8 @@ interface ListingResultsBarProps {
   onOpenFilters: () => void;
   /** Count of active filters, shown on the mobile trigger. */
   activeCount: number;
+  /** Optional control rendered before the filter/sort group (e.g. "Help me choose"). */
+  action?: ReactNode;
 }
 
 /**
@@ -26,6 +29,7 @@ export function ListingResultsBar({
   onSortChange,
   onOpenFilters,
   activeCount,
+  action,
 }: ListingResultsBarProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
@@ -34,7 +38,9 @@ export function ListingResultsBar({
         {total === 1 ? "result" : "results"}
       </p>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        {action}
+
         <button
           type="button"
           onClick={onOpenFilters}

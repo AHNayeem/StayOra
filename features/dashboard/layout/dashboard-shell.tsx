@@ -9,6 +9,7 @@ import { QueryProvider } from "../data/query";
 import { FeatureFlagsProvider } from "../feature-flags/feature-flags-provider";
 import type { FeatureFlagKey } from "../feature-flags/flags";
 import { RbacProvider } from "../rbac/rbac-provider";
+import { RouteGuard } from "../rbac/route-guard";
 import { ThemeProvider, useTheme } from "../theme/theme-provider";
 import { ShellProvider, useShell } from "./shell-context";
 import { MobileSidebar } from "./sidebar/mobile-sidebar";
@@ -53,7 +54,10 @@ function ShellFrame({ children }: { children: ReactNode }) {
             id="dashboard-content"
             className="flex-1 px-4 py-6 sm:px-6 lg:px-8"
           >
-            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
+            <div className="mx-auto w-full max-w-[1600px]">
+              {/* Route-level RBAC: typing a URL is not a way around access. */}
+              <RouteGuard>{children}</RouteGuard>
+            </div>
           </main>
         </div>
       </div>

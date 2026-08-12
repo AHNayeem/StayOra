@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useQuery } from "../../data";
-import type { ListParams, Paginated } from "../../data";
 import {
   ChartCard,
   DataTable,
@@ -20,8 +19,9 @@ import {
 import { DashboardIcon } from "../../navigation/dashboard-icons";
 import { formatCurrency, formatNumber, formatPercent } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
-import { bookingsService } from "../bookings/service";
-import { BOOKING_STATUSES, type Booking } from "../bookings/types";
+import { BOOKING_STATUSES } from "../../domain/lifecycle";
+import type { Booking } from "../../domain/types";
+import { useDomainScope, useRoleView } from "../../domain/use-domain";
 import { overviewKeys, overviewService } from "./service";
 
 const bookingTone = toneMap(BOOKING_STATUSES);
@@ -52,13 +52,32 @@ const recentColumns: ColumnDef<Booking>[] = [
     header: "Reference",
     cell: (b) => <span className="font-medium text-ink">{b.reference}</span>,
   },
-  { id: "guest", header: "Guest", cell: (b) => b.guestName },
+  { id: "customer", header: "Customer", cell: (b) => b.customer.name },
+  {
+    id: "segment",
+    header: "Segment",
+    cell: (b) => (
+      <span className="text-xs font-semibold uppercase text-muted">{b.segment}</span>
+    ),
+  },
   {
     id: "amount",
     header: "Amount",
     align: "right",
     cell: (b) => (
-      <span className="tabular-nums">{formatCurrency(b.amount, b.currency)}</span>
+      <span className="tabular-nums">
+        {formatCurrency(b.money.total, b.money.currency)}
+      </span>
+    ),
+  },
+  {
+    id: "commission",
+    header: "Commission",
+    align: "right",
+    cell: (b) => (
+      <span className="tabular-nums text-body">
+        {formatCurrency(b.money.commission, b.money.currency)}
+      </span>
     ),
   },
   {
@@ -70,46 +89,71 @@ const recentColumns: ColumnDef<Booking>[] = [
   },
 ];
 
-const RECENT_PARAMS: ListParams = {
-  page: 1,
-  pageSize: 5,
-  sort: { field: "createdAt", direction: "desc" },
-};
-
 /** Dashboard overview — KPI grid, performance chart, recent bookings + activity. */
 export function DashboardOverview() {
+  const scope = useDomainScope();
+  const { isMerchant, isAgency } = useRoleView();
+  const scopeKey = scope.merchantId ?? scope.organizationId ?? "platform";
+
   const summary = useQuery({
-    queryKey: overviewKeys.summary,
-    queryFn: () => overviewService.getSummary(),
-    staleTime: 60_000,
+    queryKey: [...overviewKeys.summary, scopeKey],
+    queryFn: () => overviewService.getSummary(scope),
+    staleTime: 15_000,
   });
   const activity = useQuery({
-    queryKey: overviewKeys.activity,
-    queryFn: () => overviewService.getActivity(),
-    staleTime: 60_000,
+    queryKey: [...overviewKeys.activity, scopeKey],
+    queryFn: () => overviewService.getActivity(scope),
+    staleTime: 15_000,
   });
   const performance = useQuery({
-    queryKey: overviewKeys.performance,
-    queryFn: () => overviewService.getPerformance(),
-    staleTime: 60_000,
+    queryKey: [...overviewKeys.performance, scopeKey],
+    queryFn: () => overviewService.getPerformance(scope),
+    staleTime: 15_000,
   });
-  const recent = useQuery<Paginated<Booking>>({
-    queryKey: overviewKeys.recentBookings,
-    queryFn: (signal) => bookingsService.list(RECENT_PARAMS, signal),
-    staleTime: 60_000,
+  const detail = useQuery({
+    queryKey: [...overviewKeys.detail, scopeKey],
+    queryFn: () => overviewService.overview(scope),
+    staleTime: 15_000,
   });
 
   const s = summary.data;
-  const kpis = s
-    ? [
-        { label: "Revenue", value: formatCurrency(s.revenueTotal, s.revenueCurrency), icon: "Wallet" },
-        { label: "Bookings", value: formatNumber(s.bookingsCount), icon: "CalendarCheck" },
-        { label: "New users", value: formatNumber(s.newUsers), icon: "Users" },
-        { label: "Active merchants", value: formatNumber(s.activeMerchants), icon: "Store" },
-        { label: "Occupancy", value: formatPercent(s.occupancy), icon: "LineChart" },
-        { label: "Conversion", value: formatPercent(s.conversion), icon: "BadgePercent" },
-      ]
-    : [];
+  const f = detail.data?.financials;
+  const recentRows: Booking[] = detail.data?.recentBookings.slice(0, 5) ?? [];
+
+  /**
+   * KPIs differ by role because the businesses differ: a merchant cares about
+   * what they earn, the platform about what it takes, an agency about what it
+   * owes. All three read from the same financial roll-up.
+   */
+  const kpis =
+    s && f
+      ? isMerchant
+        ? [
+            { label: "Gross sales", value: formatCurrency(f.netSales, f.currency), icon: "Wallet" },
+            { label: "Bookings", value: formatNumber(f.bookingCount), icon: "CalendarCheck" },
+            { label: "Commission paid", value: formatCurrency(f.commission, f.currency), icon: "Percent" },
+            { label: "Net earnings", value: formatCurrency(f.merchantEarnings, f.currency), icon: "PiggyBank" },
+            { label: "Refunds", value: formatCurrency(f.refunds, f.currency), icon: "BanknoteArrowDown" },
+            { label: "Delivery rate", value: formatPercent(s.occupancy), icon: "LineChart" },
+          ]
+        : isAgency
+          ? [
+            { label: "Booked value", value: formatCurrency(f.gmv, f.currency), icon: "Wallet" },
+            { label: "Bookings", value: formatNumber(f.bookingCount), icon: "CalendarCheck" },
+            { label: "Net rate value", value: formatCurrency(f.netSales, f.currency), icon: "Handshake" },
+            { label: "Failed bookings", value: formatNumber(f.failedCount), icon: "CircleAlert" },
+            { label: "Refunded", value: formatCurrency(f.refunds, f.currency), icon: "BanknoteArrowDown" },
+            { label: "Delivery rate", value: formatPercent(s.occupancy), icon: "LineChart" },
+          ]
+          : [
+            { label: "GMV", value: formatCurrency(f.gmv, f.currency), icon: "Wallet" },
+            { label: "Bookings", value: formatNumber(f.bookingCount), icon: "CalendarCheck" },
+            { label: "Platform revenue", value: formatCurrency(f.platformRevenue, f.currency), icon: "CircleDollarSign" },
+            { label: "Take rate", value: `${f.takeRate}%`, icon: "Percent" },
+            { label: "Merchant earnings", value: formatCurrency(f.merchantEarnings, f.currency), icon: "Store" },
+            { label: "Needs attention", value: formatNumber(detail.data?.needsAttention ?? 0), icon: "TriangleAlert" },
+          ]
+      : [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -194,11 +238,11 @@ export function DashboardOverview() {
         <div className="p-4">
           <DataTable<Booking>
             columns={recentColumns}
-            rows={recent.data?.items ?? []}
+            rows={recentRows}
             getRowId={(b) => b.id}
-            loading={recent.isLoading}
-            error={recent.isError ? "Couldn't load recent bookings." : null}
-            onRetry={recent.refetch}
+            loading={detail.isLoading}
+            error={detail.isError ? "Couldn't load recent bookings." : null}
+            onRetry={detail.refetch}
             caption="Recent bookings"
             density="compact"
           />

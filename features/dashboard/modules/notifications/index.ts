@@ -1,11 +1,10 @@
-/** Notifications module — notification centre feed. */
+/** Notifications module — the platform event feed, scoped by audience. */
 export * from "./types";
-export { NOTIFICATIONS_SEED } from "./data";
 export { notificationsService, notificationKeys } from "./service";
 export {
   useNotifications,
+  useUnreadNotificationCount,
   useMarkNotificationRead,
   useMarkAllNotificationsRead,
-  useArchiveNotification,
 } from "./hooks";
 export { NotificationsView } from "./notifications-view";

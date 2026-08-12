@@ -1,6 +1,10 @@
-/** Commission module — commission ledger (types, service, columns, hooks, UI). */
+/** Commission module — commission dashboard + ledger. */
 export * from "./types";
-export { commissionsService, commissionKeys } from "./service";
+export { commissionService, commissionKeys } from "./service";
 export { commissionColumns } from "./columns";
-export { useCommissions } from "./hooks";
+export {
+  useCommissions,
+  usePlatformFinancials,
+  useCommissionBreakdown,
+} from "./hooks";
 export { CommissionList } from "./list";

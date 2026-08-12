@@ -29,8 +29,8 @@ export function DesktopNav({ className }: { className?: string }) {
   const t = useT();
 
   return (
-    <nav aria-label="Primary" className={cn("hidden lg:block", className)}>
-      <ul className="flex items-center gap-1">
+    <nav aria-label="Primary" className={cn("hidden shrink-0 xl:block", className)}>
+      <ul className="flex items-center">
         {PRIMARY_NAV.map((item) =>
           item.megaMenu ? (
             <MegaMenuItem key={item.label} item={item} />
@@ -40,7 +40,7 @@ export function DesktopNav({ className }: { className?: string }) {
                 href={item.href}
                 aria-current={isActive(item.href) ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-16 items-center px-3.5 text-[15px] font-medium text-ink transition-colors hover:text-primary",
+                  "inline-flex h-16 items-center whitespace-nowrap px-3 text-[15px] font-medium text-ink transition-colors hover:text-primary 2xl:px-3.5",
                   isActive(item.href) && "text-primary",
                 )}
               >
@@ -79,7 +79,7 @@ function MegaMenuItem({ item }: { item: NavItem }) {
         onClick={() => setOpen((v) => !v)}
         onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
         className={cn(
-          "inline-flex h-16 items-center gap-1 px-3.5 text-[15px] font-medium text-ink transition-colors hover:text-primary",
+          "inline-flex h-16 items-center gap-1 whitespace-nowrap px-3 text-[15px] font-medium text-ink transition-colors hover:text-primary 2xl:px-3.5",
           (open || containsActive) && "text-primary",
         )}
       >

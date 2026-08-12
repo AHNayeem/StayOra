@@ -7,6 +7,7 @@ import { Search, SearchX } from "lucide-react";
 import type { BookingVertical } from "@/types/booking";
 import type { Listing } from "@/types/catalog";
 import { getPopularSearches } from "@/services/search";
+import { AskAiButton } from "@/features/ai";
 import { VERTICAL_LIST } from "@/constants/verticals";
 import { AutoListingCard } from "@/components/cards/auto-listing-card";
 import { Button } from "@/components/ui/button";
@@ -100,6 +101,26 @@ export function SearchResults({ query, results, initialType }: SearchResultsProp
               Search
             </Button>
           </form>
+
+          {/* Contextual AI entry — hands the current query to the assistant so
+              it can narrow by budget, rating or amenities in plain language. */}
+          {query && (
+            <AskAiButton
+              label="Help me choose"
+              prompt={`Help me choose the best option for “${query}”`}
+              page={{
+                label: query,
+                destination: query,
+                suggestions: [
+                  `Best value for “${query}”`,
+                  `${query} under $150`,
+                  "Compare the top three",
+                  "Plan a trip around this",
+                ],
+              }}
+              className="mt-4"
+            />
+          )}
         </Container>
       </section>
 

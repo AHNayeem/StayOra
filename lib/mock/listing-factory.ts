@@ -243,15 +243,19 @@ export function generateTransport(count: number, seed = 606): Transport[] {
   const rng = new SeededRandom(seed);
   const types = ["Private car", "Luxury coach", "Ferry", "Shared van", "Limousine", "Minibus"];
   return Array.from({ length: count }, (_, i) => {
-    const dest = rng.pick(DESTINATIONS);
     const type = rng.pick(types);
+    // The title, route and location must name the *same* city. `makeBase` picks
+    // the destination, so read it back from the base rather than drawing a
+    // second one — otherwise a "Dubai Transfer" ends up located in Paris.
+    const base = makeBase(rng, "transport", "trn", i + 100, (d) =>
+      `${type} — ${d[0]} Transfer`,
+      [15, 120], "per trip");
+    const city = base.location.city;
     return {
-      ...makeBase(rng, "transport", "trn", i + 100, () =>
-        `${type} — ${dest[0]} Transfer`,
-        [15, 120], "per trip"),
+      ...base,
       transportType: type,
       seats: rng.pick([3, 4, 8, 16, 48, 120]),
-      route: { from: `${dest[0]} Airport`, to: `${dest[0]} City center` },
+      route: { from: `${city} Airport`, to: `${city} City center` },
       durationHours: rng.int(1, 5),
     };
   });

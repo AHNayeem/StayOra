@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRbac } from "../rbac/rbac-provider";
 import type { RbacContextValue } from "../rbac/types";
 import { DASHBOARD_MENU } from "./menu-config";
+import { useBadgeCounts } from "./use-badge-counts";
 import type { MenuNode, ResolvedMenuNode } from "./types";
 
 /** Is `href` the active route for the current `pathname`? */
@@ -32,13 +33,14 @@ function resolveNodes(
   rbac: RbacContextValue,
   pathname: string,
   depth: number,
+  counts: Record<string, number>,
 ): ResolvedMenuNode[] {
   const out: ResolvedMenuNode[] = [];
   for (const node of nodes) {
     if (!nodeVisible(node, rbac)) continue;
 
     const children = node.children
-      ? resolveNodes(node.children, rbac, pathname, depth + 1)
+      ? resolveNodes(node.children, rbac, pathname, depth + 1, counts)
       : undefined;
 
     // A group (no href) with no surviving children is meaningless — drop it.
@@ -48,7 +50,15 @@ function resolveNodes(
       isHrefActive(node.href, pathname) ||
       (children?.some((c) => c.active) ?? false);
 
-    out.push({ ...node, children, depth, active });
+    // Resolve a live count into the badge label; a zero count hides the badge
+    // entirely rather than showing a distracting "0".
+    let badge = node.badge;
+    if (badge?.countKey) {
+      const count = counts[badge.countKey] ?? 0;
+      badge = count > 0 ? { ...badge, label: String(count) } : undefined;
+    }
+
+    out.push({ ...node, badge, children, depth, active });
   }
   return out;
 }
@@ -79,9 +89,11 @@ export interface UseDashboardMenuResult {
 export function useDashboardMenu(): UseDashboardMenuResult {
   const rbac = useRbac();
   const pathname = usePathname();
+  const counts = useBadgeCounts();
+  const countsKey = JSON.stringify(counts);
 
   return useMemo(() => {
-    const tree = resolveNodes(DASHBOARD_MENU, rbac, pathname, 0);
+    const tree = resolveNodes(DASHBOARD_MENU, rbac, pathname, 0, counts);
     const links = flattenLinks(tree);
     return {
       tree,
@@ -92,5 +104,6 @@ export function useDashboardMenu(): UseDashboardMenuResult {
         return links.filter((l) => l.label.toLowerCase().includes(q));
       },
     };
-  }, [rbac, pathname]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rbac, pathname, countsKey]);
 }

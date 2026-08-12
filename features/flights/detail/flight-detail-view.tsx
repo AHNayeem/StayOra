@@ -18,6 +18,12 @@ import { airportLabel } from "@/lib/mock/airports";
 import { totalDuration } from "@/lib/mock/flights";
 import { formatDuration } from "@/lib/flight-time";
 import { PASSENGER_TYPE_LABEL } from "@/lib/mock/passengers";
+import { AskAiButton } from "@/features/ai";
+import {
+  AddFlightToTripButton,
+  RecommendationRail,
+  contextFromOffer,
+} from "@/features/trip";
 import { useLocale } from "@/features/i18n";
 import { Container } from "@/components/ui/container";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -79,6 +85,14 @@ export function FlightDetailView({ offer, query }: FlightDetailViewProps) {
     setStarting(true);
     router.push(bookingHref(offer.id, coupon?.code));
   };
+
+  /**
+   * The travel context this offer implies. Derived rather than read from the
+   * trip store so the rail below is relevant on first view — before the
+   * traveller has committed to anything.
+   */
+  const tripContext = useMemo(() => contextFromOffer(offer), [offer]);
+  const destinationCity = tripContext.destination?.city ?? airportLabel(last.toCode);
 
   return (
     <>
@@ -182,6 +196,15 @@ export function FlightDetailView({ offer, query }: FlightDetailViewProps) {
               </div>
             </section>
 
+            {/* Contextual recommendations — this offer already tells us the
+                destination, the dates and the party, so the rest of the trip
+                can be suggested without asking for any of it again. */}
+            <RecommendationRail
+              context={tripContext}
+              title={`Complete your ${destinationCity} trip`}
+              subtitle={`Popular with travellers flying into ${airportLabel(last.toCode)}`}
+            />
+
             <CabinAmenities offer={offer} />
             <SeatMapPreview offer={offer} />
             <FareRules offer={offer} />
@@ -191,7 +214,27 @@ export function FlightDetailView({ offer, query }: FlightDetailViewProps) {
           </div>
 
           {/* ---- Sticky booking rail ---------------------------------------- */}
-          <aside className="lg:sticky lg:top-24">
+          <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+            {/* Contextual AI entry — carries this offer and route into the chat. */}
+            <AskAiButton
+              label="Ask AI to compare this flight"
+              prompt="Compare these flights"
+              page={{
+                label: `${airportLabel(first.fromCode)} → ${airportLabel(last.toCode)}`,
+                offerId: offer.id,
+                destination: airportLabel(last.toCode),
+                originCode: first.fromCode,
+                suggestions: [
+                  "Compare these flights",
+                  "What's the fastest option?",
+                  "Show direct flights only",
+                  `Find a hotel in ${airportLabel(last.toCode)}`,
+                ],
+              }}
+              variant="subtle"
+              className="w-full justify-center"
+            />
+
             <div className="rounded-card border border-line bg-surface p-5 shadow-card">
               <h2 className="mb-4 text-base font-semibold text-ink">Price breakdown</h2>
 
@@ -227,6 +270,10 @@ export function FlightDetailView({ offer, query }: FlightDetailViewProps) {
                   "Continue to booking"
                 )}
               </Button>
+
+              {/* Unified booking, opt-in: keeps this fare and carries its
+                  destination and dates into the rest of the trip. */}
+              <AddFlightToTripButton offer={offer} fullWidth className="mt-2" />
 
               <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted">
                 <ShieldCheck className="size-3.5 shrink-0" aria-hidden="true" />

@@ -98,8 +98,8 @@ const STATUS_PLAN: BookingStatus[] = [
   "completed",
   "completed",
   "cancelled",
-  "cancelled",
-  "completed",
+  "refunded",
+  "failed",
 ];
 
 const CANCELLATION_POLICIES = [
@@ -137,7 +137,11 @@ function buildBookings(): TravelerBooking[] {
         ? local.isoDate(MOCK_EPOCH_MS, 210, 470)
         : status === "pending"
           ? local.isoDate(MOCK_EPOCH_MS, 30, 160)
-          : local.isoDate(MOCK_EPOCH_MS, -430, -25);
+          : // A failed booking is still in the future — the trip never happened,
+            // so it should read as a lost plan, not a past trip.
+            status === "failed"
+            ? local.isoDate(MOCK_EPOCH_MS, 20, 120)
+            : local.isoDate(MOCK_EPOCH_MS, -430, -25);
     const checkOut = addDays(checkIn, nights);
 
     const rooms =
@@ -178,6 +182,10 @@ function buildBookings(): TravelerBooking[] {
       bookedAt,
       reviewed,
       guestNames,
+      failureReason:
+        status === "failed"
+          ? "The provider could not confirm your room after payment was taken."
+          : undefined,
       specialRequests: local.bool(0.35)
         ? local.pick([
             "Late check-in around 11pm.",
@@ -205,14 +213,18 @@ function buildInvoices(): Invoice[] {
     const feesUsd = Math.round((b.totalUsd - subtotalUsd - taxesUsd) * 100) / 100;
     const discountUsd = rng.bool(0.3) ? rng.int(10, 80) : 0;
 
+    // A failed booking keeps a captured payment until the refund lands, so its
+    // invoice is refunded rather than void — the money really did move.
     const status =
       b.status === "cancelled"
         ? rng.bool(0.6)
           ? "refunded"
           : "void"
-        : b.status === "pending"
-          ? "due"
-          : "paid";
+        : b.status === "refunded" || b.status === "failed"
+          ? "refunded"
+          : b.status === "pending"
+            ? "due"
+            : "paid";
 
     return {
       id: b.invoiceId,

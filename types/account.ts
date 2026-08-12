@@ -4,11 +4,21 @@
  * Distinct from the dashboard's server-side RBAC principal
  * ({@link import("@/features/dashboard/rbac/types").CurrentUser}): this is the
  * client-persisted identity of a visitor who signs in on the public site. The
- * two converge once a real backend issues one session for both surfaces.
+ * two converge once a real backend issues one session for both surfaces — which
+ * is why an account can now carry the dashboard role it maps to.
  */
 
-/** Coarse role that drives post-login routing and dashboard access. */
-export type AccountRole = "traveler" | "merchant" | "admin";
+import type { RoleId as DashboardRoleId } from "@/features/dashboard/rbac/types";
+
+export type { DashboardRoleId };
+
+/**
+ * Coarse role that drives post-login routing and dashboard access.
+ * `agency` is the B2B partner (travel agency / corporate travel manager);
+ * `staff` covers internal operators (support, finance, marketing…) whose exact
+ * privileges come from {@link AuthUser.dashboardRole}.
+ */
+export type AccountRole = "traveler" | "merchant" | "admin" | "agency" | "staff";
 
 /** Loyalty tiers surfaced in the traveler rewards area. */
 export type LoyaltyTier = "bronze" | "silver" | "gold" | "platinum";
@@ -20,6 +30,16 @@ export interface AuthUser {
   email: string;
   avatar?: string;
   role: AccountRole;
+  /**
+   * Fine-grained dashboard role (RBAC). Absent for travelers, who have no
+   * dashboard access. Kept as the RBAC `RoleId` so one sign-in drives both the
+   * public site and the dashboard's permission model.
+   */
+  dashboardRole?: DashboardRoleId;
+  /** Merchant this user works for — scopes every merchant-facing query. */
+  merchantId?: string;
+  /** B2B account this user books for — scopes agency queries. */
+  organizationId?: string;
   phone?: string;
   /** ISO 3166-1 alpha-2 country code. */
   country?: string;

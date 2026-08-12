@@ -13,6 +13,8 @@ import {
   Tabs,
   type TabItem,
 } from "../../ui";
+import { platformService } from "../../domain/services";
+import { useDomainActor } from "../../domain/use-domain";
 import { KNOWN_FEATURE_FLAGS } from "../../feature-flags/flags";
 import { useFeatureFlags } from "../../feature-flags/feature-flags-provider";
 
@@ -158,11 +160,69 @@ function FlagsPanel() {
   );
 }
 
+/**
+ * Demo-data panel.
+ *
+ * Every mutation the prototype makes — bookings, refund decisions, offers,
+ * settlements, B2B payments — is persisted to local storage so it survives a
+ * reload. This is how you get back to the seeded state.
+ */
+function DemoDataPanel() {
+  const actor = useDomainActor();
+  const [resetting, setResetting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const reset = () => {
+    setResetting(true);
+    platformService.resetDemoData(actor);
+    toast.success("Demo data reset", {
+      description: "Bookings, refunds, offers, settlements and B2B accounts are back to the seeded state.",
+    });
+    setConfirming(false);
+    setResetting(false);
+    // Full reload so every cached query re-reads the restored dataset.
+    window.location.reload();
+  };
+
+  return (
+    <div className="pt-2">
+      <FormSection
+        title="Prototype data"
+        description="Changes you make are stored in this browser so demos survive a refresh. Nothing leaves the device."
+      >
+        <div className="rounded-card border border-line bg-surface-muted/50 p-4">
+          <p className="text-sm text-body">
+            Resetting restores the seeded dataset: ~96 bookings across every lifecycle
+            state, their refunds, commission entries, settlement batches, offers, combo
+            bundles, B2B accounts and invoices.
+          </p>
+        </div>
+        <FormActions>
+          <Button
+            variant={confirming ? "danger" : "outline"}
+            size="sm"
+            loading={resetting}
+            onClick={() => (confirming ? reset() : setConfirming(true))}
+          >
+            {confirming ? "Yes, reset everything" : "Reset demo data"}
+          </Button>
+          {confirming && (
+            <Button variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          )}
+        </FormActions>
+      </FormSection>
+    </div>
+  );
+}
+
 const TABS: TabItem[] = [
   { key: "general", label: "General", content: <GeneralPanel /> },
   { key: "notifications", label: "Notifications", content: <NotificationsPanel /> },
   { key: "integrations", label: "Integrations", content: <IntegrationsPanel /> },
   { key: "flags", label: "Feature flags", content: <FlagsPanel /> },
+  { key: "demo-data", label: "Demo data", content: <DemoDataPanel /> },
 ];
 
 /** SettingsView — tabbed platform settings (general, notifications, integrations, flags). */

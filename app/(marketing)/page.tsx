@@ -21,6 +21,7 @@ import { TestimonialsSection } from "@/components/sections/testimonials-section"
 import { HomeFaqs } from "@/components/sections/home-faqs";
 import { CtaSection } from "@/components/sections/cta-section";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { AiConciergeSection } from "@/features/ai";
 import { FlightDeals } from "@/features/flights/sections/flight-deals";
 import { PopularRoutes } from "@/features/flights/sections/popular-routes";
 import { AirlinePartners } from "@/features/flights/sections/airline-partners";
@@ -119,6 +120,10 @@ export default async function HomePage() {
 
       {/* Trust strip */}
       {/* <Partners partners={partners} /> */}
+
+      {/* AI concierge — the highest-intent entry point on the page, placed
+          directly under the hero so it reads as part of "how you search here". */}
+      <AiConciergeSection />
 
       {/* Popular hotels */}
       <ListingCarousel

@@ -6,12 +6,14 @@ import type { BookingVertical } from "@/types/booking";
 import type { Listing } from "@/types/catalog";
 import { AutoListingCard } from "@/components/cards/auto-listing-card";
 import { Button } from "@/components/ui/button";
+import { AskAiButton } from "@/features/ai";
 import { Container } from "@/components/ui/container";
 import { Drawer } from "@/components/ui/drawer";
 import { Pagination } from "@/components/ui/pagination";
 import type { RangeValue } from "@/components/ui/price-range-slider";
 import { Reveal } from "@/components/shared/reveal";
 import { LISTING_FACETS, LISTING_PAGE_SIZE, DEFAULT_SORT, type SortKey } from "@/constants/listing";
+import { VERTICALS } from "@/constants/verticals";
 import {
   buildFacetGroups,
   countActiveFilters,
@@ -48,6 +50,8 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  const config = VERTICALS[vertical];
 
   const state: ListingFilterState = { search, price, facets: selected };
   const activeCount = countActiveFilters(state, bounds);
@@ -133,6 +137,23 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
               onSortChange={handleSort}
               onOpenFilters={() => setDrawerOpen(true)}
               activeCount={activeCount}
+              action={
+                /* Contextual AI entry — narrows this vertical in plain language. */
+                <AskAiButton
+                  label="Help me choose"
+                  prompt={`Help me choose ${config.labelPlural.toLowerCase()}`}
+                  page={{
+                    label: config.labelPlural,
+                    suggestions: [
+                      `Best value ${config.labelPlural.toLowerCase()}`,
+                      `${config.labelPlural} under $150`,
+                      "Compare the top three",
+                      "Plan a trip around this",
+                    ],
+                  }}
+                  className="h-9 px-4 text-xs"
+                />
+              }
             />
 
             {pageItems.length > 0 ? (

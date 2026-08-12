@@ -110,6 +110,12 @@ export const DASHBOARD_MENU: MenuNode[] = [
     sectionLabel: "Revenue",
     anyPermission: ["finance:read"],
     children: [
+      {
+        id: "finance-earnings",
+        label: "My earnings",
+        href: "/dashboard/finance/earnings",
+        anyPermission: ["finance:read"],
+      },
       { id: "finance-payments", label: "Payments", href: "/dashboard/finance/payments" },
       { id: "finance-transactions", label: "Transactions", href: "/dashboard/finance/transactions" },
       { id: "finance-wallet", label: "Wallet", href: "/dashboard/finance/wallet" },
@@ -117,6 +123,7 @@ export const DASHBOARD_MENU: MenuNode[] = [
       { id: "finance-payouts", label: "Payouts", href: "/dashboard/finance/payouts" },
       { id: "finance-refunds", label: "Refunds", href: "/dashboard/finance/refunds" },
       { id: "finance-commission", label: "Commission", href: "/dashboard/finance/commission" },
+      { id: "finance-settlements", label: "Settlements", href: "/dashboard/finance/settlements" },
       { id: "finance-tax", label: "Tax", href: "/dashboard/finance/tax" },
       { id: "finance-reconciliation", label: "Reconciliation", href: "/dashboard/finance/reconciliation" },
       { id: "finance-disputes", label: "Disputes", href: "/dashboard/finance/disputes" },
@@ -128,8 +135,22 @@ export const DASHBOARD_MENU: MenuNode[] = [
     icon: "BadgePercent",
     anyPermission: ["promotions:read"],
     children: [
-      { id: "promotions-coupons", label: "Coupons & Offers", href: "/dashboard/promotions" },
+      { id: "promotions-offers", label: "Offers", href: "/dashboard/promotions/offers" },
+      { id: "promotions-combos", label: "Combo Offers", href: "/dashboard/promotions/combos" },
+      { id: "promotions-coupons", label: "Coupons", href: "/dashboard/promotions" },
       { id: "promotions-banners", label: "Banners", href: "/dashboard/promotions/banners" },
+    ],
+  },
+  {
+    id: "b2b",
+    label: "B2B",
+    icon: "Building2",
+    anyPermission: ["b2b:read"],
+    children: [
+      { id: "b2b-overview", label: "Overview", href: "/dashboard/b2b" },
+      { id: "b2b-accounts", label: "Accounts", href: "/dashboard/b2b/accounts" },
+      { id: "b2b-bookings", label: "B2B Bookings", href: "/dashboard/b2b/bookings" },
+      { id: "b2b-invoices", label: "Invoices", href: "/dashboard/b2b/invoices" },
     ],
   },
   {

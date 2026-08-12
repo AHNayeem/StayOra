@@ -1,28 +1,53 @@
 import { cache } from "react";
+import { cookies } from "next/headers";
 import { resolveCurrentUser } from "../rbac/current-user";
 import { assertPermission, assertAnyPermission } from "../rbac/authorize";
 import type { Permission } from "../rbac/types";
+import {
+  DASHBOARD_SESSION_COOKIE,
+  decodeSessionCookie,
+} from "./session-cookie";
 import type { Session } from "./types";
 
 /**
  * Resolve the current session on the server.
  *
- * Phase 3 stub: there's no cookie/JWT yet, so it assembles the session from the
- * demo principal — but it's the single server entry point for "who is signed
- * in", wrapped in `React.cache` so repeated calls within one request are free.
- * Swap the body for a real lookup (e.g. read `cookies()`, verify a JWT, fetch
- * the profile) and every caller — layout, Server Actions, route handlers —
- * keeps working unchanged.
+ * Reads the session cookie the client writes on sign-in (see
+ * {@link import("./session-cookie")}), then derives the RBAC principal from the
+ * *role* — permissions are never taken from the cookie. Returns `null` when
+ * there's no valid session so the layout can redirect instead of rendering
+ * privileged chrome. Wrapped in `React.cache` so repeated calls inside one
+ * request are free.
+ *
+ * Swap the cookie read for a JWT verification / profile fetch and every caller —
+ * layout, Server Actions, route handlers — keeps working unchanged.
  */
-export const getServerSession = cache(async (): Promise<Session> => {
-  const user = resolveCurrentUser();
-  return { user, status: "authenticated", token: null, expiresAt: null };
+export const getServerSession = cache(async (): Promise<Session | null> => {
+  const store = await cookies();
+  const payload = decodeSessionCookie(store.get(DASHBOARD_SESSION_COOKIE)?.value);
+  if (!payload) return null;
+
+  const user = resolveCurrentUser({
+    id: payload.id,
+    name: payload.name,
+    email: payload.email,
+    roleId: payload.role,
+    merchantId: payload.merchantId,
+    organizationId: payload.organizationId,
+  });
+
+  return {
+    user,
+    status: "authenticated",
+    token: null,
+    expiresAt: payload.exp ?? null,
+  };
 });
 
 /** The signed-in principal, or `null` when unauthenticated. */
 export async function getCurrentUser() {
   const session = await getServerSession();
-  return session.status === "authenticated" ? session.user : null;
+  return session?.status === "authenticated" ? session.user : null;
 }
 
 /**

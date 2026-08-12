@@ -57,7 +57,11 @@ export function bookingStatusMeta(status: BookingStatus): { label: string; tone:
     case "pending":
       return { label: "Pending", tone: "warning" };
     case "cancelled":
-      return { label: "Cancelled", tone: "danger" };
+      return { label: "Cancelled", tone: "neutral" };
+    case "failed":
+      return { label: "Booking failed", tone: "danger" };
+    case "refunded":
+      return { label: "Refunded", tone: "success" };
   }
 }
 

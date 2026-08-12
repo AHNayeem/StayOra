@@ -26,7 +26,7 @@ export function Logo({
     <Link
       href="/"
       aria-label={`${siteConfig.name} home`}
-      className={cn("inline-flex items-center", className)}
+      className={cn("inline-flex shrink-0 items-center", className)}
     >
       <Image
         src="/images/logo.png"

@@ -11,8 +11,22 @@
 import type { BookingVertical } from "./booking";
 import type { LoyaltyTier } from "./account";
 
-/** Lifecycle of a traveler's booking. Stored (never derived from wall-clock). */
-export type BookingStatus = "upcoming" | "completed" | "cancelled" | "pending";
+/**
+ * Lifecycle of a traveler's booking. Stored (never derived from wall-clock).
+ *
+ * `failed` and `refunded` are distinct on purpose: a failed booking was never
+ * delivered (and may still owe a refund), while a refunded one was cancelled and
+ * the money has already gone back. Showing either as "cancelled" would hide the
+ * customer's actual position — see the dashboard's `BookingStatus` for the full
+ * platform-side machine.
+ */
+export type BookingStatus =
+  | "upcoming"
+  | "completed"
+  | "cancelled"
+  | "pending"
+  | "failed"
+  | "refunded";
 
 /** A trip the traveler has booked, pointing at a real catalog listing. */
 export interface TravelerBooking {
@@ -39,6 +53,8 @@ export interface TravelerBooking {
   invoiceId: string;
   bookedAt: string;
   reviewed: boolean;
+  /** Why a `failed` booking failed, in customer-facing words. */
+  failureReason?: string;
   guestNames: string[];
   specialRequests?: string;
   cancellationPolicy: string;

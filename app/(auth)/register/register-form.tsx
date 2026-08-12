@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Mail, User } from "lucide-react";
-import { useAuth, useRedirectIfAuthenticated } from "@/features/auth";
+import {
+  resolvePostAuthRedirect,
+  useAuth,
+  useRedirectIfAuthenticated,
+} from "@/features/auth";
 import { AuthCard, AuthGate, PasswordInput, SocialAuth } from "@/components/auth";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,11 +41,12 @@ const TONE_BAR: Record<string, string> = {
  * to profile completion (carrying any `?next=` through).
  */
 export function RegisterForm() {
-  const { register: registerUser } = useAuth();
+  const { register: registerUser, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
-  const status = useRedirectIfAuthenticated(next);
+  // Same rule as sign-in: only honour `?next=` if the account can reach it.
+  const status = useRedirectIfAuthenticated(resolvePostAuthRedirect(next, user));
 
   const {
     register,

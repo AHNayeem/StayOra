@@ -14,6 +14,8 @@ export type RoleId =
   | "staff"
   | "merchant"
   | "vendor"
+  /** B2B: travel agency / corporate travel manager booking on credit. */
+  | "agency"
   | "support"
   | "finance"
   | "marketing"
@@ -52,6 +54,11 @@ export interface CurrentUser {
   featureFlags: FeatureFlag[];
   /** Organization the user belongs to; merchants are scoped to their own. */
   organizationId: string;
+  /**
+   * Merchant this user works for. Present only for merchant/vendor principals;
+   * every merchant-facing query is scoped by it (see `DomainScope`).
+   */
+  merchantId?: string;
 }
 
 /** Shape exposed by the RBAC context. */

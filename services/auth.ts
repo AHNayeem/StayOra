@@ -15,6 +15,10 @@ import type {
   RegisterPayload,
 } from "@/types/account";
 import { DEMO_PASSWORD, SEED_ACCOUNTS, type MockAccount } from "@/constants/accounts";
+import {
+  clearSessionCookie,
+  writeSessionCookie,
+} from "@/features/dashboard/auth/session-cookie";
 import { mockDelay } from "./http";
 
 const ACCOUNTS_KEY = "otithee:accounts";
@@ -116,6 +120,14 @@ export function readSession(): AuthSession | null {
   }
 }
 
+/**
+ * Persist (or clear) the session.
+ *
+ * Two stores, one write: `localStorage` for the client-side public site, and a
+ * cookie mirror so the dashboard's Server Components can resolve the principal
+ * before rendering (see {@link writeSessionCookie}). Keeping both writes in this
+ * one function is what stops the two surfaces from drifting apart.
+ */
 export function persistSession(session: AuthSession | null): void {
   try {
     if (session) {
@@ -126,6 +138,27 @@ export function persistSession(session: AuthSession | null): void {
   } catch {
     /* ignore */
   }
+
+  if (!session) {
+    clearSessionCookie();
+    return;
+  }
+  const { user } = session;
+  if (!user.dashboardRole) {
+    // Travelers have no dashboard access — don't mint a dashboard session.
+    clearSessionCookie();
+    return;
+  }
+  writeSessionCookie({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.dashboardRole,
+    merchantId: user.merchantId,
+    organizationId: user.organizationId,
+    accountRole: user.role,
+    exp: session.expiresAt,
+  });
 }
 
 // ---- public API ------------------------------------------------------------

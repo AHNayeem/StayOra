@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Phone, User } from "lucide-react";
 import { COUNTRIES } from "@/constants/geo";
-import { useAuth, useRequireAuth } from "@/features/auth";
+import { resolvePostAuthRedirect, useAuth, useRequireAuth } from "@/features/auth";
 import { AuthCard, AuthGate } from "@/components/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +34,8 @@ export function CompleteProfileForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
+  /** `?next=` is carried through sign-up, so re-check it against this account. */
+  const destination = resolvePostAuthRedirect(next, user);
 
   const {
     register,
@@ -53,7 +55,7 @@ export function CompleteProfileForm() {
     try {
       await updateProfile({ name: values.name, phone: values.phone, country: values.country });
       toast.success("Profile complete — you're all set!");
-      router.replace(next);
+      router.replace(destination);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Couldn't save your profile.");
     }
@@ -64,7 +66,7 @@ export function CompleteProfileForm() {
       title="Complete your profile"
       subtitle="A few details so checkout is quick and your trips stay organised."
       footer={
-        <Link href={next} className="font-medium text-muted hover:text-primary">
+        <Link href={destination} className="font-medium text-muted hover:text-primary">
           Skip for now
         </Link>
       }

@@ -1,15 +1,20 @@
-import { createStubService } from "../../crud";
-import type { Refund } from "./types";
-import { REFUNDS_SEED } from "./data";
+/** Refunds data source — the domain refund service plus this module's keys. */
 
-/** Refunds data source (in-memory stub; repository-ready). */
-export const refundsService = createStubService<Refund>({
-  seed: REFUNDS_SEED,
-  getId: (row) => row.id,
-  searchFields: ["reference", "bookingRef", "customer"],
-  idPrefix: "rfd",
-});
+export { refundService } from "../../domain/services";
 
 export const refundKeys = {
   all: ["finance", "refunds"] as const,
+  summary: () => ["finance", "refunds", "summary"] as const,
+  detail: (id: string) => ["finance", "refunds", "detail", id] as const,
 };
+
+/** A refund decision moves booking, commission and settlement state too. */
+export const REFUND_SIDE_EFFECT_KEYS = [
+  ["finance", "refunds"],
+  ["bookings"],
+  ["finance", "commission"],
+  ["finance", "settlements"],
+  ["notifications"],
+  ["logs"],
+  ["overview"],
+] as const;

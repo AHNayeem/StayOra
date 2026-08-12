@@ -9,6 +9,11 @@ import { PageBanner } from "@/components/ui/page-banner";
 import { RatingStars } from "@/components/ui/rating-stars";
 import { FeaturedListings } from "@/components/sections/featured-listings";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { AskAiButton } from "@/features/ai";
+import {
+  ListingRecommendations,
+  ListingTripCta,
+} from "@/features/trip/components/listing-trip-section";
 import { VERTICALS } from "@/constants/verticals";
 import { getListingBySlug } from "@/services/catalog";
 import { DetailGallery } from "./detail-gallery";
@@ -125,11 +130,38 @@ export function ListingDetailPage({ detail, related }: ListingDetailPageProps) {
               <DetailItinerary steps={detail.itinerary} />
               <DetailMap location={listing.location} />
               <DetailReviews summary={detail.reviewSummary} reviews={detail.reviews} />
+              {/* Unified booking: what else this trip needs, in this city. */}
+              <ListingRecommendations listing={listing} />
               <DetailFaq faqs={detail.faqs} />
             </div>
 
-            <div className="lg:sticky lg:top-24">
+            <div className="flex flex-col gap-4 lg:sticky lg:top-24">
+              {/* Contextual AI entry — the assistant opens already knowing which
+                  property and city the traveller is looking at. */}
+              <AskAiButton
+                label={`Ask AI about this ${config.label.toLowerCase()}`}
+                prompt={`Summarize reviews for ${listing.title}`}
+                page={{
+                  label: listing.title,
+                  listing: {
+                    vertical: listing.vertical as Exclude<BookingVertical, "flights">,
+                    slug: listing.slug,
+                    title: listing.title,
+                    destination: listing.location.label,
+                  },
+                  destination: listing.location.city ?? listing.location.label,
+                  suggestions: [
+                    `Summarize reviews for ${listing.title}`,
+                    `Book ${listing.title}`,
+                    `Compare ${listing.title} with something cheaper`,
+                    `Things to do in ${listing.location.city ?? listing.location.label}`,
+                  ],
+                }}
+                variant="subtle"
+                className="w-full justify-center"
+              />
               <BookingWidget listing={listing} />
+              <ListingTripCta listing={listing} />
             </div>
           </div>
         </Container>

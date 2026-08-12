@@ -19,6 +19,10 @@ export const RESOURCES = [
   "flights",
   "customers",
   "finance",
+  // B2B (agency/corporate accounts, net rates, credit, consolidated invoices) is
+  // its own resource: an agency user needs it without any platform finance
+  // access, and a finance user needs read-only visibility into it.
+  "b2b",
   "promotions",
   "reviews",
   "cms",

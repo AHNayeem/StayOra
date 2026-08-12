@@ -52,7 +52,9 @@ export function useAuth(): UseAuthResult {
       status,
       isAuthenticated: Boolean(user),
       isHydrated,
-      canAccessDashboard: user?.role === "merchant" || user?.role === "admin",
+      // Dashboard access is decided by the RBAC role the account maps to, not
+      // by the coarse account role — staff and agency partners get in too.
+      canAccessDashboard: Boolean(user?.dashboardRole),
       login: async (payload) => {
         const next = await authService.login(payload);
         syncSession(next);

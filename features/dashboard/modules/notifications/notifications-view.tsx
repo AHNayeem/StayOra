@@ -1,15 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
+  BadgePercent,
+  BanknoteArrowDown,
   Bell,
   CalendarCheck,
   Check,
   CheckCheck,
+  LifeBuoy,
+  Percent,
   Star,
-  Store,
   Wallet,
-  X,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,7 +20,6 @@ import { Button } from "../../ui";
 import { EmptyState } from "../../components/state-views";
 import { formatDateTime } from "../../lib/format";
 import {
-  useArchiveNotification,
   useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useNotifications,
@@ -27,9 +29,21 @@ import type { NotificationType } from "./types";
 const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   booking: CalendarCheck,
   payment: Wallet,
+  refund: BanknoteArrowDown,
+  offer: BadgePercent,
+  settlement: Wallet,
+  commission: Percent,
   review: Star,
-  merchant: Store,
+  support: LifeBuoy,
   system: Bell,
+};
+
+/** Tone → accent classes for the leading icon chip. */
+const TONE_CHIP: Record<string, string> = {
+  success: "bg-primary-50 text-primary-700",
+  warning: "bg-accent-50 text-accent-600",
+  danger: "bg-danger/10 text-danger",
+  neutral: "bg-surface-muted text-body",
 };
 
 type Filter = "all" | "unread";
@@ -42,10 +56,9 @@ type Filter = "all" | "unread";
  */
 export function NotificationsView() {
   const { data, isLoading } = useNotifications();
-  const items = useMemo(() => data ?? [], [data]);
+  const items = useMemo(() => data?.items ?? [], [data]);
   const markRead = useMarkNotificationRead();
   const markAllRead = useMarkAllNotificationsRead();
-  const archive = useArchiveNotification();
   const [filter, setFilter] = useState<Filter>("all");
 
   const unreadCount = items.filter((n) => !n.read).length;
@@ -102,7 +115,7 @@ export function NotificationsView() {
       ) : (
         <ul className="flex flex-col gap-2">
           {visible.map((n) => {
-            const Icon = TYPE_ICON[n.type];
+            const Icon = TYPE_ICON[n.category] ?? Bell;
             return (
               <li
                 key={n.id}
@@ -111,7 +124,12 @@ export function NotificationsView() {
                   n.read ? "bg-surface" : "bg-primary-50/40",
                 )}
               >
-                <span className="grid size-9 shrink-0 place-items-center rounded-field bg-primary-50 text-primary-700">
+                <span
+                  className={cn(
+                    "grid size-9 shrink-0 place-items-center rounded-field",
+                    TONE_CHIP[n.tone] ?? TONE_CHIP.neutral,
+                  )}
+                >
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -125,7 +143,19 @@ export function NotificationsView() {
                     )}
                   </div>
                   <p className="mt-0.5 text-sm text-body">{n.body}</p>
-                  <p className="mt-1 text-xs text-muted">{formatDateTime(n.createdAt)}</p>
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                    <span>{formatDateTime(n.createdAt)}</span>
+                    <span className="capitalize">· {n.category}</span>
+                    {n.href && (
+                      <Link
+                        href={n.href}
+                        onClick={() => markRead.mutate(n.id)}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        Open record →
+                      </Link>
+                    )}
+                  </p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   {!n.read && (
@@ -139,15 +169,6 @@ export function NotificationsView() {
                       <span className="sr-only">Mark as read</span>
                     </button>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => archive.mutate(n.id)}
-                    title="Dismiss"
-                    className="inline-flex size-8 items-center justify-center rounded-field text-muted transition-colors hover:bg-surface-muted hover:text-ink"
-                  >
-                    <X className="size-4" aria-hidden="true" />
-                    <span className="sr-only">Dismiss</span>
-                  </button>
                 </div>
               </li>
             );

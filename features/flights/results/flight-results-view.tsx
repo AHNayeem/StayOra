@@ -25,6 +25,7 @@ import {
 } from "@/services/flight.service";
 import { CABIN_LABEL } from "@/lib/mock/fares";
 import { airportLabel } from "@/lib/mock/airports";
+import { AskAiButton } from "@/features/ai";
 import { useLocale } from "@/features/i18n";
 import { Container } from "@/components/ui/container";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -222,6 +223,24 @@ export function FlightResultsView({ result, suggestions }: FlightResultsViewProp
                 </p>
 
                 <div className="flex items-center gap-2">
+                  {/* Contextual AI entry — the assistant already knows the route,
+                      dates and cabin this results page was built from. */}
+                  <AskAiButton
+                    label="Help me choose"
+                    prompt="Compare these flights"
+                    page={{
+                      label: `${airportLabel(query.legs[0].from)} → ${airportLabel(query.legs[query.legs.length - 1].to)}`,
+                      destination: airportLabel(query.legs[query.legs.length - 1].to),
+                      originCode: query.legs[0].from,
+                      suggestions: [
+                        "What's the fastest option?",
+                        "Show me the cheapest",
+                        "Show direct flights only",
+                        "Find a hotel there",
+                      ],
+                    }}
+                    className="h-9 px-4 text-xs"
+                  />
                   <Button
                     variant="outline"
                     size="sm"

@@ -14,12 +14,20 @@ import { cn } from "@/lib/utils";
 
 type Scope = BookingStatus | "all";
 
+/**
+ * Filter tabs, one per stored status. `failed` and `refunded` are their own tabs
+ * on purpose — a booking that never happened and one that was refunded are
+ * different situations for the traveler, and folding either into "Cancelled"
+ * would hide money that is owed or already returned.
+ */
 const SCOPES: { key: Scope; label: string }[] = [
   { key: "all", label: "All" },
   { key: "upcoming", label: "Upcoming" },
   { key: "completed", label: "Completed" },
   { key: "pending", label: "Pending" },
   { key: "cancelled", label: "Cancelled" },
+  { key: "failed", label: "Failed" },
+  { key: "refunded", label: "Refunded" },
 ];
 
 export function BookingsView({ bookings }: { bookings: TravelerBooking[] }) {

@@ -49,14 +49,17 @@ export function UserMenu({ user }: { user: AuthUser }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-pill py-1 pl-1 pr-2 transition-colors hover:bg-surface-muted"
+        className="flex min-w-0 items-center gap-2 rounded-pill py-1 pl-1 pr-2 transition-colors hover:bg-surface-muted"
       >
         <Avatar src={user.avatar} name={user.name} size="sm" />
         <span className="hidden max-w-28 truncate text-sm font-medium text-ink sm:block">
           {firstName}
         </span>
         <ChevronDown
-          className={cn("size-4 text-muted transition-transform", open && "rotate-180")}
+          className={cn(
+            "size-4 shrink-0 text-muted transition-transform",
+            open && "rotate-180",
+          )}
           aria-hidden="true"
         />
       </button>

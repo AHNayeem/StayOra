@@ -1,49 +1,119 @@
+/**
+ * Overview data source — derived from the domain, not from static numbers.
+ *
+ * Every KPI on the landing dashboard is computed from the same bookings,
+ * refunds, commission and settlement records the rest of the product reads, and
+ * scoped to the caller: an admin sees the platform, a merchant sees only their
+ * own business, an agency only its own bookings. That's what makes the three
+ * dashboards genuinely different rather than differently-labelled.
+ */
+
+import { auditService, platformService } from "../../domain/services";
+import type { DomainScope } from "../../domain/services";
+import { getState } from "../../domain/store";
+import { PLATFORM_NOW, money } from "../../domain/money";
 import type { ActivityItem, DashboardSummary, PerformancePoint } from "./types";
 
-const SUMMARY: DashboardSummary = {
-  revenueTotal: 486_200,
-  revenueCurrency: "USD",
-  bookingsCount: 1_284,
-  newUsers: 342,
-  activeMerchants: 87,
-  occupancy: 0.73,
-  conversion: 0.041,
-};
-
-const ACTIVITY: ActivityItem[] = [
-  { id: "act_1", icon: "CalendarCheck", title: "New booking BK-1058 confirmed", when: "2 min ago", tone: "success" },
-  { id: "act_2", icon: "Store", title: "Merchant “Marina Living” requested approval", when: "18 min ago", tone: "warning" },
-  { id: "act_3", icon: "Wallet", title: "Payout PMT-9042 released", when: "1 hr ago", tone: "info" },
-  { id: "act_4", icon: "Star", title: "Review reported on “Azure Bay Resort”", when: "3 hrs ago", tone: "danger" },
-  { id: "act_5", icon: "Users", title: "27 new customers signed up today", when: "5 hrs ago", tone: "neutral" },
+const MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-// Trailing-12-months revenue & bookings trend. Static (deterministic) so SSR and
-// client render identically; the shape matches what an analytics API would return.
-const PERFORMANCE: PerformancePoint[] = [
-  { month: "Aug", revenue: 28_400, bookings: 812 },
-  { month: "Sep", revenue: 31_900, bookings: 905 },
-  { month: "Oct", revenue: 30_100, bookings: 878 },
-  { month: "Nov", revenue: 35_600, bookings: 1_012 },
-  { month: "Dec", revenue: 44_800, bookings: 1_268 },
-  { month: "Jan", revenue: 39_200, bookings: 1_104 },
-  { month: "Feb", revenue: 37_500, bookings: 1_061 },
-  { month: "Mar", revenue: 42_300, bookings: 1_190 },
-  { month: "Apr", revenue: 45_900, bookings: 1_247 },
-  { month: "May", revenue: 49_700, bookings: 1_336 },
-  { month: "Jun", revenue: 52_400, bookings: 1_402 },
-  { month: "Jul", revenue: 48_200, bookings: 1_284 },
-];
-
-function delay<T>(value: T, ms = 500): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(value), ms));
+/** "3 hrs ago" style relative label, measured from the domain clock. */
+function relativeTime(iso: string): string {
+  const diff = new Date(PLATFORM_NOW).getTime() - new Date(iso).getTime();
+  const minutes = Math.round(diff / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? "" : "s"} ago`;
+  const months = Math.round(days / 30);
+  return `${months} month${months === 1 ? "" : "s"} ago`;
 }
 
-/** Dashboard metrics/activity data source (stub; repository-ready). */
+const ACTION_ICONS: Record<string, string> = {
+  create: "CalendarCheck",
+  update: "SlidersHorizontal",
+  delete: "Ban",
+  approve: "CircleCheck",
+  reject: "CircleAlert",
+  cancel: "Ban",
+  refund: "BanknoteArrowDown",
+  settle: "Wallet",
+  status_change: "ArrowLeftRight",
+  login: "Fingerprint",
+  export: "FileBarChart",
+  suspend: "ShieldAlert",
+  activate: "ShieldCheck",
+};
+
+const ACTION_TONES: Record<string, ActivityItem["tone"]> = {
+  approve: "success",
+  activate: "success",
+  settle: "info",
+  refund: "info",
+  reject: "danger",
+  suspend: "danger",
+  delete: "danger",
+  cancel: "warning",
+  status_change: "warning",
+};
+
 export const overviewService = {
-  getSummary: (): Promise<DashboardSummary> => delay(SUMMARY),
-  getActivity: (): Promise<ActivityItem[]> => delay(ACTIVITY),
-  getPerformance: (): Promise<PerformancePoint[]> => delay(PERFORMANCE),
+  /** Headline KPIs for the signed-in principal's scope. */
+  async getSummary(scope: DomainScope = {}): Promise<DashboardSummary> {
+    const data = await platformService.overview(scope);
+    const state = getState();
+    const merchants = new Set(state.bookings.map((b) => b.merchant.id));
+    const customers = new Set(state.bookings.map((b) => b.customer.id));
+    const delivered = data.financials.bookingCount - data.financials.failedCount;
+
+    return {
+      revenueTotal: data.financials.gmv,
+      revenueCurrency: data.financials.currency,
+      bookingsCount: data.financials.bookingCount,
+      newUsers: customers.size,
+      activeMerchants: scope.merchantId ? 1 : merchants.size,
+      // Delivery rate stands in for occupancy: the share of bookings that
+      // actually completed rather than failing.
+      occupancy: data.financials.bookingCount
+        ? money(delivered / data.financials.bookingCount)
+        : 0,
+      conversion: data.financials.bookingCount
+        ? money(data.financials.refundedCount / data.financials.bookingCount)
+        : 0,
+    };
+  },
+
+  /** Recent activity — the real audit trail, not a canned list. */
+  async getActivity(scope: DomainScope = {}): Promise<ActivityItem[]> {
+    const page = await auditService.list({ page: 1, pageSize: 6 }, scope);
+    return page.items.map((entry) => ({
+      id: entry.id,
+      icon: ACTION_ICONS[entry.action] ?? "Activity",
+      title: entry.summary,
+      when: relativeTime(entry.at),
+      tone: ACTION_TONES[entry.action] ?? "neutral",
+    }));
+  },
+
+  /** Monthly GMV + booking counts, straight off the bookings ledger. */
+  async getPerformance(scope: DomainScope = {}): Promise<PerformancePoint[]> {
+    const data = await platformService.overview(scope);
+    return data.byMonth.slice(-12).map((point) => {
+      const [, monthPart] = point.key.split("-");
+      return {
+        month: MONTH_LABELS[Number(monthPart) - 1] ?? point.key,
+        revenue: point.value,
+        bookings: point.count,
+      };
+    });
+  },
+
+  /** Everything else the overview renders (attention counts, mix charts). */
+  overview: platformService.overview,
 };
 
 export const overviewKeys = {
@@ -51,4 +121,5 @@ export const overviewKeys = {
   activity: ["overview", "activity"] as const,
   performance: ["overview", "performance"] as const,
   recentBookings: ["overview", "recent-bookings"] as const,
+  detail: ["overview", "detail"] as const,
 };

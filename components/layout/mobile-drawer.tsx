@@ -10,11 +10,14 @@ import {
   LogIn,
   LogOut,
   Search,
+  Sparkles,
   UserPlus,
   X,
 } from "lucide-react";
 import { PRIMARY_NAV } from "@/constants/navigation";
+import { TripCartButton } from "@/features/trip";
 import { siteConfig } from "@/constants/site";
+import { useOptionalAssistant } from "@/features/ai";
 import { useAuth } from "@/features/auth";
 import { useT } from "@/features/i18n";
 import { SearchDialog } from "@/features/search/global";
@@ -40,6 +43,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { status, user, canAccessDashboard, logout } = useAuth();
+  const assistant = useOptionalAssistant();
   const [searchOpen, setSearchOpen] = useState(false);
   const t = useT();
   useLockBodyScroll(open);
@@ -117,12 +121,29 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
             <Search className="size-4" aria-hidden="true" />
             Search stays, tours, destinations…
           </button>
+
+          {assistant && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                assistant.openAssistant();
+              }}
+              className="mt-2 flex w-full items-center gap-2.5 rounded-pill bg-primary-50 px-4 py-3 text-sm font-semibold text-primary-700 transition-colors hover:bg-primary-100"
+            >
+              <Sparkles className="size-4" aria-hidden="true" />
+              {t("Ask Otithee AI")}
+            </button>
+          )}
         </div>
 
         <nav
           aria-label="Mobile"
           className="flex-1 overflow-y-auto px-2 py-3"
         >
+          {/* Renders only while a trip is in progress, so the drawer doesn't
+              grow a permanent basket entry for single-product bookers. */}
+          <TripCartButton showLabel className="mx-2 mb-2 flex w-[calc(100%-1rem)] justify-center" />
           <ul className="space-y-0.5">
             {PRIMARY_NAV.map((item) =>
               item.megaMenu ? (

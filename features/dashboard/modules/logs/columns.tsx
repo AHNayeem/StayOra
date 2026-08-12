@@ -1,63 +1,80 @@
 import type { ColumnDef } from "../../crud";
-import { StatusBadge, Tag } from "../../ui";
+import { Badge, Tag } from "../../ui";
 import { formatDateTime } from "../../lib/format";
-import { labelMap, toneMap } from "../../lib/status";
-import { LOG_STATUSES, type AuditLog } from "./types";
+import type { AuditLogEntry } from "../../domain/types";
+import { AUDIT_ACTION_LABELS, HIGH_RISK_ACTIONS } from "./types";
 
-const statusTone = toneMap(LOG_STATUSES);
-const statusLabel = labelMap(LOG_STATUSES);
-
-export const logColumns: ColumnDef<AuditLog>[] = [
+export const logColumns: ColumnDef<AuditLogEntry>[] = [
   {
-    accessorKey: "createdAt",
+    accessorKey: "at",
     header: "When",
     enableHiding: false,
     meta: { label: "When" },
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-body">
-        {formatDateTime(row.original.createdAt)}
+        {formatDateTime(row.original.at)}
       </span>
     ),
   },
   {
-    accessorKey: "actor",
+    accessorKey: "actorName",
     header: "Actor",
     meta: { label: "Actor" },
-    cell: ({ row }) => <span className="font-medium text-ink">{row.original.actor}</span>,
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <p className="truncate font-medium text-ink">{row.original.actorName}</p>
+        <p className="truncate text-xs capitalize text-muted">
+          {row.original.actorRole.replace(/_/g, " ")}
+        </p>
+      </div>
+    ),
   },
   {
     accessorKey: "action",
     header: "Action",
     meta: { label: "Action" },
     cell: ({ row }) => (
+      <Badge
+        size="sm"
+        variant={HIGH_RISK_ACTIONS.includes(row.original.action) ? "danger" : "neutral"}
+      >
+        {AUDIT_ACTION_LABELS[row.original.action] ?? row.original.action}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "summary",
+    header: "Detail",
+    meta: { label: "Detail" },
+    cell: ({ row }) => (
       <div className="min-w-0">
-        <p className="truncate text-ink">{row.original.action}</p>
-        <p className="truncate text-xs text-muted">{row.original.target}</p>
+        <p className="truncate text-ink">{row.original.summary}</p>
+        {(row.original.from || row.original.to) && (
+          <p className="truncate text-xs text-muted">
+            {row.original.from ? `${row.original.from} → ` : ""}
+            {row.original.to}
+          </p>
+        )}
       </div>
     ),
   },
   {
-    accessorKey: "resource",
-    header: "Resource",
-    meta: { label: "Resource" },
-    cell: ({ row }) => <Tag>{row.original.resource}</Tag>,
+    accessorKey: "entity",
+    header: "Entity",
+    meta: { label: "Entity" },
+    cell: ({ row }) => (
+      <div className="min-w-0">
+        <Tag>{row.original.entity.replace(/_/g, " ")}</Tag>
+        <p className="mt-1 truncate text-xs text-muted">{row.original.entityLabel}</p>
+      </div>
+    ),
   },
   {
     accessorKey: "ip",
     header: "IP address",
     meta: { label: "IP address" },
     cell: ({ row }) => (
-      <span className="font-mono text-xs text-body">{row.original.ip}</span>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    meta: { label: "Status" },
-    cell: ({ row }) => (
-      <StatusBadge tone={statusTone[row.original.status]}>
-        {statusLabel[row.original.status]}
-      </StatusBadge>
+      <span className="font-mono text-xs text-body">{row.original.ip ?? "—"}</span>
     ),
   },
 ];

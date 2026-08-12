@@ -1,20 +1,44 @@
-import type { StatusDef } from "../../lib/status";
+/**
+ * Audit-log types.
+ *
+ * The trail is the domain's own record: every mutating service call writes an
+ * entry, so what appears here is exactly what happened — not a parallel log the
+ * UI maintains.
+ */
 
-export const LOG_STATUS_VALUES = ["success", "failure"] as const;
-export type LogStatus = (typeof LOG_STATUS_VALUES)[number];
+export type { AuditAction, AuditLogEntry } from "../../domain/types";
 
-export interface AuditLog {
-  id: string;
-  actor: string;
-  action: string;
-  resource: string;
-  target: string;
-  ip: string;
-  status: LogStatus;
-  createdAt: string;
-}
+import type { SelectOption } from "@/components/ui/select";
+import type { AuditAction, AuditLogEntry } from "../../domain/types";
 
-export const LOG_STATUSES: readonly StatusDef<LogStatus>[] = [
-  { value: "success", label: "Success", tone: "success" },
-  { value: "failure", label: "Failure", tone: "danger" },
+/** Module alias kept for call sites that already say `AuditLog`. */
+export type AuditLog = AuditLogEntry;
+
+export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+  approve: "Approved",
+  reject: "Rejected",
+  cancel: "Cancelled",
+  refund: "Refunded",
+  settle: "Settled",
+  status_change: "Status changed",
+  login: "Signed in",
+  export: "Exported",
+  suspend: "Suspended",
+  activate: "Activated",
+};
+
+export const AUDIT_ACTION_OPTIONS: SelectOption[] = Object.entries(
+  AUDIT_ACTION_LABELS,
+).map(([value, label]) => ({ value, label }));
+
+/** Destructive/high-risk actions are toned differently in the table. */
+export const HIGH_RISK_ACTIONS: AuditAction[] = [
+  "delete",
+  "reject",
+  "suspend",
+  "cancel",
+  "refund",
 ];

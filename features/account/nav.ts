@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BanknoteArrowDown,
   Bell,
   CalendarCheck,
   CreditCard,
@@ -8,6 +9,7 @@ import {
   Heart,
   History,
   LayoutDashboard,
+  Luggage,
   MessageSquare,
   Plane,
   Settings,
@@ -45,6 +47,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
     heading: "Trips",
     items: [
       { label: "Overview", href: "/account", icon: LayoutDashboard },
+      { label: "My trips", href: "/account/trips", icon: Luggage },
       { label: "Bookings", href: "/account/bookings", icon: CalendarCheck },
       { label: "My flights", href: "/account/flights", icon: Plane },
       { label: "Travel history", href: "/account/history", icon: History },
@@ -56,6 +59,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
     heading: "Wallet",
     items: [
       { label: "Invoices", href: "/account/invoices", icon: FileText },
+      { label: "Refunds", href: "/account/refunds", icon: BanknoteArrowDown },
       { label: "Payments", href: "/account/payments", icon: Wallet },
       { label: "Saved cards", href: "/account/cards", icon: CreditCard },
       { label: "Coupons", href: "/account/coupons", icon: Ticket },

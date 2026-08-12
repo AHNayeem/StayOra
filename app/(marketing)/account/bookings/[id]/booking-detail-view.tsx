@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   CalendarRange,
+  CircleAlert,
   CreditCard,
   DoorOpen,
   FileText,
@@ -23,6 +24,12 @@ import { VERTICALS, listingHref } from "@/constants/verticals";
 import { useLocale } from "@/features/i18n";
 import { cancelBookingLocal, useIsCancelled } from "@/features/account/booking-overrides";
 import { useResolvedBooking } from "@/features/account/created-bookings";
+import {
+  policyForBooking,
+  quoteBookingRefund,
+  useRequestBookingRefund,
+} from "@/features/account/refunds";
+import { useAuth } from "@/features/auth";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
 import { StatusBadge, bookingStatusMeta } from "@/components/account/status-badge";
@@ -42,6 +49,11 @@ export function BookingDetailView({ id, booking: serverBooking, invoice: serverI
   const { booking, invoice } = useResolvedBooking(id, serverBooking, serverInvoice);
   const cancelledLocally = useIsCancelled(id);
   const [confirming, setConfirming] = useState(false);
+  const { user } = useAuth();
+  const { request, isPending } = useRequestBookingRefund({
+    name: user?.name ?? "Guest",
+    email: user?.email ?? "guest@otithee.com",
+  });
 
   if (!booking) {
     return (
@@ -73,12 +85,30 @@ export function BookingDetailView({ id, booking: serverBooking, invoice: serverI
   const canCancel = status === "upcoming" || status === "pending";
   const canReview = status === "completed" && !booking.reviewed;
 
-  const onCancel = () => {
+  // Cancellation policy and refund quote come from the platform's own engine, so
+  // what the customer is shown here is exactly what finance will process.
+  const policy = policyForBooking(booking);
+  const quote = quoteBookingRefund(booking);
+
+  const onCancel = async () => {
     cancelBookingLocal(booking.id);
     setConfirming(false);
-    toast.success("Booking cancelled", {
-      description: `Ref ${booking.reference}. Any refund will follow your cancellation policy.`,
-    });
+    try {
+      if (quote.refundAmount > 0) {
+        const { refund } = await request(booking);
+        toast.success("Cancelled — refund requested", {
+          description: `${refund.reference}: ${refund.currency} ${refund.refundAmount.toFixed(2)} will be returned to your original payment method once approved.`,
+        });
+      } else {
+        toast.success("Booking cancelled", {
+          description: `Ref ${booking.reference}. No refund is due under the ${policy.label} policy.`,
+        });
+      }
+    } catch {
+      toast.error("Cancelled, but the refund request could not be filed.", {
+        description: "Please contact support with your booking reference.",
+      });
+    }
   };
 
   return (
@@ -106,6 +136,65 @@ export function BookingDetailView({ id, booking: serverBooking, invoice: serverI
           </p>
         </div>
       </div>
+
+      {/* A failed booking is not a cancellation: say what happened, whether money
+          was taken, and what to do next. */}
+      {status === "failed" && (
+        <div
+          role="alert"
+          className="mt-6 rounded-card border border-danger/30 bg-danger/5 p-4"
+        >
+          <p className="flex items-center gap-2 text-sm font-semibold text-danger">
+            <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
+            Booking failed — this trip was not confirmed
+          </p>
+          <p className="mt-1 text-sm text-body">
+            {booking.failureReason ??
+              "We could not confirm this booking with the provider."}
+          </p>
+          <p className="mt-1 text-sm text-body">
+            Your payment was taken, so a full refund of{" "}
+            <strong className="text-ink">
+              <Money usd={booking.totalUsd} />
+            </strong>{" "}
+            is owed — no cancellation fee applies to a failed booking.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={listingHref({ vertical: booking.vertical, slug: booking.listingSlug })}
+              className={buttonVariants({ variant: "primary", size: "sm" })}
+            >
+              Try booking again
+            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              loading={isPending}
+              onClick={async () => {
+                try {
+                  const { refund } = await request(booking, {
+                    reason: "payment_captured_booking_failed",
+                    note: booking.failureReason,
+                  });
+                  toast.success("Refund requested", {
+                    description: `${refund.reference}: ${refund.currency} ${refund.refundAmount.toFixed(2)} — full refund, no fee.`,
+                  });
+                } catch {
+                  toast.error("Couldn't file the refund request. Please contact support.");
+                }
+              }}
+            >
+              Request the refund
+            </Button>
+            <Link
+              href="/account/messages"
+              className={buttonVariants({ variant: "ghost", size: "sm" })}
+            >
+              Contact support
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
         {/* Details */}
@@ -251,10 +340,51 @@ export function BookingDetailView({ id, booking: serverBooking, invoice: serverI
             {canCancel &&
               (confirming ? (
                 <div className="rounded-field border border-danger/30 bg-danger/5 p-3">
-                  <p className="text-sm text-ink">Cancel this booking?</p>
-                  <div className="mt-2 flex gap-2">
-                    <Button variant="danger" size="sm" onClick={onCancel} className="flex-1">
-                      Yes, cancel
+                  <p className="text-sm font-semibold text-ink">Cancel this booking?</p>
+                  <p className="mt-1 text-xs text-body">
+                    {policy.label} policy · {policy.summary}
+                  </p>
+
+                  {/* The refund the platform will actually process. */}
+                  <dl className="mt-3 space-y-1.5 border-t border-danger/20 pt-2 text-sm">
+                    <Line label="Paid">
+                      <Money usd={quote.originalAmount} />
+                    </Line>
+                    <Line label={`Refundable (${Math.round(quote.refundPercent * 100)}%)`}>
+                      <Money usd={quote.refundAmount} />
+                    </Line>
+                    {quote.cancellationFee > 0 && (
+                      <Line label="Cancellation fee">
+                        −<Money usd={quote.cancellationFee} />
+                      </Line>
+                    )}
+                    <div className="flex items-center justify-between border-t border-danger/20 pt-2">
+                      <span className="font-semibold text-ink">Estimated refund</span>
+                      <span className="font-bold text-ink">
+                        <Money usd={quote.refundAmount} />
+                      </span>
+                    </div>
+                  </dl>
+
+                  {quote.refundAmount <= 0 && (
+                    <p className="mt-2 text-xs font-medium text-danger">
+                      {quote.reason ?? "No refund is due for this booking."}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-muted">
+                    {quote.hoursUntilStart}h until your trip starts. Refunds are reviewed by
+                    our team and returned to your original payment method.
+                  </p>
+
+                  <div className="mt-3 flex gap-2">
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      loading={isPending}
+                      onClick={onCancel}
+                      className="flex-1"
+                    >
+                      {quote.refundAmount > 0 ? "Cancel & request refund" : "Cancel booking"}
                     </Button>
                     <Button
                       variant="ghost"

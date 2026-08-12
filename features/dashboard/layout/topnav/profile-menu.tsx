@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CircleUser, LogOut, Settings, ShieldCheck } from "lucide-react";
+import { CircleUser, LogOut, Settings, ShieldCheck, UserCog } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
+import { DEMO_B2B_ACCOUNT_ID, DEMO_MERCHANT_ID } from "../../domain/seed";
+import { useSession } from "../../auth/session-provider";
 import { useRbac } from "../../rbac/rbac-provider";
 import { getRole } from "../../rbac/roles";
+import type { RoleId } from "../../rbac/types";
 import { MenuPopover } from "./menu-popover";
 
 const LINKS = [
@@ -13,15 +16,30 @@ const LINKS = [
   { id: "roles", label: "Roles & access", href: "/dashboard/roles", icon: ShieldCheck },
 ];
 
-/** Account menu — identity summary plus profile/settings links and sign out. */
+/**
+ * Roles offered by the prototype's "view as" switcher, with the scope each one
+ * needs. This is demo tooling — a real build would gate it behind
+ * `users:impersonate` and exchange a token server-side.
+ */
+const VIEW_AS: { role: RoleId; label: string; merchantId?: string; organizationId?: string }[] = [
+  { role: "super_admin", label: "Super Admin" },
+  { role: "admin", label: "Admin" },
+  { role: "merchant", label: "Merchant", merchantId: DEMO_MERCHANT_ID },
+  { role: "agency", label: "Agency (B2B)", organizationId: DEMO_B2B_ACCOUNT_ID },
+  { role: "finance", label: "Finance" },
+  { role: "support", label: "Support" },
+];
+
+/** Account menu — identity summary, profile links, role switcher and sign out. */
 export function ProfileMenu() {
   const { user } = useRbac();
+  const { signOut, viewAsRole } = useSession();
   const role = getRole(user.roleId);
 
   return (
     <MenuPopover
       label="Account"
-      panelClassName="w-64"
+      panelClassName="w-72"
       trigger={({ props }) => (
         <button
           type="button"
@@ -56,15 +74,47 @@ export function ProfileMenu() {
           </Link>
         ))}
       </div>
+
+      <div className="border-t border-line py-1">
+        <p className="flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
+          <UserCog className="size-3.5" aria-hidden="true" />
+          View as (demo)
+        </p>
+        <div className="grid grid-cols-2 gap-1 px-2 pb-1">
+          {VIEW_AS.map((entry) => (
+            <button
+              key={entry.role}
+              type="button"
+              role="menuitem"
+              aria-current={user.roleId === entry.role ? "true" : undefined}
+              onClick={() =>
+                viewAsRole(entry.role, {
+                  merchantId: entry.merchantId,
+                  organizationId: entry.organizationId,
+                })
+              }
+              className={
+                user.roleId === entry.role
+                  ? "rounded-field bg-primary-50 px-2 py-1.5 text-left text-xs font-semibold text-primary-700"
+                  : "rounded-field px-2 py-1.5 text-left text-xs text-body transition-colors hover:bg-surface-muted hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              }
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="border-t border-line pt-1">
-        <Link
-          href="/"
+        <button
+          type="button"
           role="menuitem"
-          className="flex items-center gap-3 rounded-field px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          onClick={signOut}
+          className="flex w-full items-center gap-3 rounded-field px-3 py-2 text-sm text-danger transition-colors hover:bg-danger/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           <LogOut className="size-4" aria-hidden="true" />
           Sign out
-        </Link>
+        </button>
       </div>
     </MenuPopover>
   );

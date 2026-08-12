@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { Mail } from "lucide-react";
-import { useAuth, useRedirectIfAuthenticated } from "@/features/auth";
+import {
+  resolvePostAuthRedirect,
+  useAuth,
+  useRedirectIfAuthenticated,
+} from "@/features/auth";
 import { AuthCard, AuthGate, DemoHint, PasswordInput, SocialAuth } from "@/components/auth";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,11 +28,16 @@ interface LoginValues {
  * to the home page. Already-authenticated visitors are bounced out.
  */
 export function LoginForm() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
-  const status = useRedirectIfAuthenticated(next);
+  /**
+   * Explicit `?next=` wins — but only if the signed-in user can actually reach
+   * it; otherwise we route by role. Without that check a traveler arriving from
+   * `/login?next=/dashboard` would bounce between the two forever.
+   */
+  const next = params.get("next");
+  const status = useRedirectIfAuthenticated(resolvePostAuthRedirect(next, user));
 
   const {
     register,
@@ -44,8 +53,15 @@ export function LoginForm() {
   const onSubmit = handleSubmit(async (values) => {
     try {
       const session = await login({ email: values.email, password: values.password });
-      toast.success(`Welcome back, ${session.user.name.split(" ")[0]}!`);
-      router.replace(next);
+      const destination = resolvePostAuthRedirect(next, session.user);
+      const honoursNext = Boolean(next) && destination === next;
+      toast.success(`Welcome back, ${session.user.name.split(" ")[0]}!`, {
+        description:
+          session.user.dashboardRole && !honoursNext
+            ? `Signed in as ${session.user.dashboardRole.replace(/_/g, " ")}.`
+            : undefined,
+      });
+      router.replace(destination);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to sign in.");
     }
@@ -59,7 +75,7 @@ export function LoginForm() {
         <>
           New to Otithee?{" "}
           <Link
-            href={next !== "/" ? `/register?next=${encodeURIComponent(next)}` : "/register"}
+            href={next ? `/register?next=${encodeURIComponent(next)}` : "/register"}
             className="font-semibold text-primary hover:underline"
           >
             Create an account

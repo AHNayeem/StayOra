@@ -69,7 +69,7 @@ export function TopNav() {
         </div>
 
         <ThemeToggle />
-        <NotificationsMenu unreadCount={0} />
+        <NotificationsMenu />
         {hasFeature("messages") && <MessagesMenu unreadCount={0} />}
 
         <span className="mx-1 hidden h-6 w-px bg-line lg:block" aria-hidden="true" />
