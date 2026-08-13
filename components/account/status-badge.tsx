@@ -52,14 +52,20 @@ export function bookingStatusMeta(status: BookingStatus): { label: string; tone:
   switch (status) {
     case "upcoming":
       return { label: "Upcoming", tone: "info" };
+    case "checked_in":
+      return { label: "Checked in", tone: "success" };
     case "completed":
       return { label: "Completed", tone: "success" };
     case "pending":
       return { label: "Pending", tone: "warning" };
+    case "cancellation_requested":
+      return { label: "Cancellation requested", tone: "warning" };
     case "cancelled":
       return { label: "Cancelled", tone: "neutral" };
     case "failed":
       return { label: "Booking failed", tone: "danger" };
+    case "refund_pending":
+      return { label: "Refund in progress", tone: "warning" };
     case "refunded":
       return { label: "Refunded", tone: "success" };
   }

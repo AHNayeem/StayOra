@@ -11,11 +11,11 @@ import {
   FormSection,
   Input,
   Select,
+  Textarea,
 } from "../../ui";
-import { statusOptions } from "../../lib/status";
 import { cmsPageSchema } from "./schemas";
 import { useCreateCmsPage, useUpdateCmsPage } from "./hooks";
-import { CMS_STATUSES, type CmsPage } from "./types";
+import type { CmsPage } from "./types";
 
 const TYPE_OPTIONS = ["Page", "Blog Post", "FAQ", "Legal", "Landing"].map((v) => ({
   value: v,
@@ -43,15 +43,17 @@ export function CmsPageForm({ initial, onDone, onCancel }: CmsPageFormProps) {
       slug: initial?.slug ?? "",
       type: initial?.type ?? "Page",
       author: initial?.author ?? "",
-      status: initial?.status ?? "draft",
+      excerpt: initial?.excerpt ?? "",
+      body: initial?.body ?? "",
     },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      if (initial) await update.mutateAsync({ id: initial.id, input: values });
-      else await create.mutateAsync(values);
+      if (initial) {
+        await update.mutateAsync({ id: initial.id, input: values, previous: initial });
+      } else await create.mutateAsync(values);
       onDone();
     } catch (error) {
       if (!applyServerErrors(form.setError, error)) {
@@ -88,11 +90,32 @@ export function CmsPageForm({ initial, onDone, onCancel }: CmsPageFormProps) {
             {...form.register("slug")}
             error={form.formState.errors.slug?.message}
           />
+          <Input
+            label="Summary"
+            hint="One line, shown in previews and search results"
+            {...form.register("excerpt")}
+            error={form.formState.errors.excerpt?.message}
+          />
+          <Textarea
+            label="Body"
+            required
+            rows={8}
+            hint="Separate paragraphs with a blank line"
+            {...form.register("body")}
+            error={form.formState.errors.body?.message}
+          />
         </FormGrid>
       </FormSection>
 
-      <FormSection title="Publishing" description="Type, author and status.">
-        <FormGrid cols={3}>
+      <FormSection
+        title="Publishing"
+        description={
+          isEdit
+            ? "Status is changed from Workflow & history, not here."
+            : "New pages always start as a draft and go through review."
+        }
+      >
+        <FormGrid cols={2}>
           <Select
             label="Type"
             options={TYPE_OPTIONS}
@@ -104,12 +127,6 @@ export function CmsPageForm({ initial, onDone, onCancel }: CmsPageFormProps) {
             required
             {...form.register("author")}
             error={form.formState.errors.author?.message}
-          />
-          <Select
-            label="Status"
-            options={statusOptions(CMS_STATUSES)}
-            {...form.register("status")}
-            error={form.formState.errors.status?.message}
           />
         </FormGrid>
       </FormSection>

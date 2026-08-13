@@ -22,8 +22,16 @@ import {
   sortListings,
   type ListingFilterState,
 } from "@/lib/listing-filter";
+import {
+  DEFAULT_RADIUS_KM,
+  LocationFilter,
+  MapResults,
+  coordsFor,
+  haversineKm,
+  useNearMe,
+} from "@/features/discovery";
 import { ListingFilters } from "./listing-filters";
-import { ListingResultsBar } from "./listing-results-bar";
+import { ListingResultsBar, type ResultsView } from "./listing-results-bar";
 import { PopularListings } from "./popular-listings";
 
 interface ListingTemplateProps {
@@ -50,16 +58,29 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
   const [sort, setSort] = useState<SortKey>(DEFAULT_SORT);
   const [page, setPage] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [view, setView] = useState<ResultsView>("grid");
+  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
+  const nearMe = useNearMe();
 
   const config = VERTICALS[vertical];
 
   const state: ListingFilterState = { search, price, facets: selected };
   const activeCount = countActiveFilters(state, bounds);
 
+  /**
+   * Facet/price/search filtering first, then the approximate location filter.
+   * Kept as two steps so the location radius composes with every existing
+   * filter rather than replacing any of them.
+   */
   const results = useMemo(() => {
     const active: ListingFilterState = { search, price, facets: selected };
-    return sortListings(filterListings(listings, active, facets), sort);
-  }, [listings, facets, search, price, selected, sort]);
+    const matched = filterListings(listings, active, facets);
+    const origin = nearMe.origin;
+    const located = origin
+      ? matched.filter((l) => haversineKm(origin, coordsFor(l)) <= radiusKm)
+      : matched;
+    return sortListings(located, sort);
+  }, [listings, facets, search, price, selected, sort, nearMe.origin, radiusKm]);
 
   const pageCount = Math.max(1, Math.ceil(results.length / LISTING_PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -100,6 +121,15 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
     setPrice(bounds);
     setSelected({});
     setPage(1);
+    nearMe.reset();
+  }
+  function handleRadius(km: number) {
+    setRadiusKm(km);
+    setPage(1);
+  }
+  function handleLocate() {
+    nearMe.locate();
+    setPage(1);
   }
   function handleSort(next: SortKey) {
     setSort(next);
@@ -137,6 +167,8 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
               onSortChange={handleSort}
               onOpenFilters={() => setDrawerOpen(true)}
               activeCount={activeCount}
+              view={view}
+              onViewChange={setView}
               action={
                 /* Contextual AI entry — narrows this vertical in plain language. */
                 <AskAiButton
@@ -156,7 +188,26 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
               }
             />
 
-            {pageItems.length > 0 ? (
+            <LocationFilter
+              status={nearMe.status}
+              origin={nearMe.origin}
+              usingFallback={nearMe.usingFallback}
+              radiusKm={radiusKm}
+              matchCount={results.length}
+              onLocate={handleLocate}
+              onPickOrigin={nearMe.useOrigin}
+              onRadiusChange={handleRadius}
+              onClear={nearMe.reset}
+              className="-mt-4"
+            />
+
+            {view === "map" ? (
+              <MapResults
+                listings={results}
+                origin={nearMe.origin}
+                radiusKm={nearMe.origin ? radiusKm : null}
+              />
+            ) : pageItems.length > 0 ? (
               <>
                 <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3">
                   {pageItems.map((listing, index) => (

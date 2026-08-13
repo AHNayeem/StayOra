@@ -4,8 +4,11 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Luggage } from "lucide-react";
 import type { BookingStatus, TravelerBooking } from "@/types/traveler";
-import { useCancelledIds, withOverride } from "@/features/account/booking-overrides";
 import { useMergedBookings } from "@/features/account/created-bookings";
+import { useCustomerBookings } from "@/features/booking";
+import { useUnifiedCustomerBookings } from "@/features/booking/use-unified";
+import { useLocale } from "@/features/i18n";
+import { UnifiedBookingList } from "@/components/booking/unified-booking-list";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
 import { BookingRow } from "@/components/account/booking-row";
@@ -23,23 +26,40 @@ type Scope = BookingStatus | "all";
 const SCOPES: { key: Scope; label: string }[] = [
   { key: "all", label: "All" },
   { key: "upcoming", label: "Upcoming" },
+  { key: "checked_in", label: "Checked in" },
   { key: "completed", label: "Completed" },
   { key: "pending", label: "Pending" },
+  { key: "cancellation_requested", label: "Cancelling" },
   { key: "cancelled", label: "Cancelled" },
   { key: "failed", label: "Failed" },
+  { key: "refund_pending", label: "Refunding" },
   { key: "refunded", label: "Refunded" },
 ];
 
+/**
+ * `bookings` carries the flight/trip bookings that live in their own client
+ * store; everything sold from the catalogue comes straight off the domain, so
+ * a status an operator changes in the dashboard shows here immediately.
+ */
 export function BookingsView({ bookings }: { bookings: TravelerBooking[] }) {
-  const cancelledIds = useCancelledIds();
+  const domainBookings = useCustomerBookings();
   const merged = useMergedBookings(bookings);
+  const unified = useUnifiedCustomerBookings();
+  const { date, money } = useLocale();
   const [scope, setScope] = useState<Scope>("all");
+  /**
+   * "Stays" is the detailed, per-status view this page has always been. "All
+   * products" is the unified read model — one row per thing booked, whether it
+   * was a stay, a flight or a whole trip, projected rather than merged.
+   */
+  const [mode, setMode] = useState<"stays" | "all">("stays");
 
-  // Merge in checkout-created bookings, then apply any local cancellations.
-  const resolved = useMemo(
-    () => merged.map((b) => withOverride(b, cancelledIds)),
-    [merged, cancelledIds],
-  );
+  const resolved = useMemo(() => {
+    const ids = new Set(domainBookings.map((b) => b.id));
+    return [...domainBookings, ...merged.filter((b) => !ids.has(b.id))].sort((a, z) =>
+      z.bookedAt.localeCompare(a.bookedAt),
+    );
+  }, [domainBookings, merged]);
 
   const counts = useMemo(() => {
     const map = new Map<BookingStatus, number>();
@@ -59,6 +79,41 @@ export function BookingsView({ bookings }: { bookings: TravelerBooking[] }) {
         description="Every trip you've booked, from upcoming stays to past adventures."
       />
 
+      <div
+        role="group"
+        aria-label="Booking view"
+        className="mb-4 inline-flex rounded-pill border border-line p-1"
+      >
+        {(
+          [
+            ["stays", "Stays & experiences"],
+            ["all", `All products (${unified.length})`],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setMode(key)}
+            aria-pressed={mode === key}
+            className={cn(
+              "rounded-pill px-4 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
+              mode === key ? "bg-primary text-white" : "text-body hover:text-primary",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "all" ? (
+        <UnifiedBookingList
+          bookings={unified}
+          money={money}
+          date={date}
+          emptyMessage="Nothing booked yet — stays, flights and trips all land here."
+        />
+      ) : (
+        <>
       <div className="mb-6 flex flex-wrap gap-2">
         {SCOPES.map((s) => {
           const count = s.key === "all" ? resolved.length : (counts.get(s.key as BookingStatus) ?? 0);
@@ -105,6 +160,8 @@ export function BookingsView({ bookings }: { bookings: TravelerBooking[] }) {
             ) : undefined
           }
         />
+      )}
+        </>
       )}
     </div>
   );

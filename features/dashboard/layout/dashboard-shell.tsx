@@ -33,6 +33,15 @@ function ShellFrame({ children }: { children: ReactNode }) {
         resolved === "dark" && "dark",
       )}
     >
+      {/* Past the rail and the top nav — the dashboard's sidebar is long, and
+          tabbing through it on every navigation is the main keyboard cost. */}
+      <a
+        href="#dashboard-content"
+        className="sr-only rounded-field bg-primary px-4 py-2 font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-100"
+      >
+        Skip to content
+      </a>
+
       <div className="flex min-h-screen">
         {/* Desktop rail */}
         <aside
@@ -52,7 +61,8 @@ function ShellFrame({ children }: { children: ReactNode }) {
           <TopNav />
           <main
             id="dashboard-content"
-            className="flex-1 px-4 py-6 sm:px-6 lg:px-8"
+            tabIndex={-1}
+            className="flex-1 px-4 py-6 outline-none sm:px-6 lg:px-8"
           >
             <div className="mx-auto w-full max-w-[1600px]">
               {/* Route-level RBAC: typing a URL is not a way around access. */}

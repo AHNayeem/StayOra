@@ -16,7 +16,7 @@ import type {
   FlightPassenger,
   EmergencyContact,
 } from "@/types/flight";
-import { ancillaryLines } from "@/lib/mock/ancillaries";
+import { ancillaryLines, ancillaryUnitNoun } from "@/lib/mock/ancillaries";
 import { CABIN_LABEL } from "@/lib/mock/fares";
 import { PASSENGER_TYPE_LABEL } from "@/lib/mock/passengers";
 import { airportLabel } from "@/lib/mock/airports";
@@ -214,7 +214,8 @@ export function ReviewStep({
                   <span className="min-w-0 text-body">
                     <span className="block truncate">{line.option.label}</span>
                     <span className="block text-xs text-muted">
-                      {line.units} × {line.option.free ? "included" : money(line.option.priceUsd)}
+                      {line.units} {ancillaryUnitNoun(line.option, line.units)} ×{" "}
+                      {line.option.free ? "included" : money(line.option.priceUsd)}
                     </span>
                   </span>
                   <span className="shrink-0 font-medium tabular-nums text-ink">

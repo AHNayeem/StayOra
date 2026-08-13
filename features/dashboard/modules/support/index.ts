@@ -4,3 +4,4 @@ export { ticketsService, ticketKeys } from "./service";
 export { ticketColumns } from "./columns";
 export { useTickets, useUpdateTicket } from "./hooks";
 export { SupportList } from "./list";
+export { SupportInbox } from "./inbox";

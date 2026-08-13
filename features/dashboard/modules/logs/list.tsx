@@ -60,6 +60,7 @@ export function AuditLogsList() {
     "b2b_account",
     "b2b_invoice",
     "commission_rule",
+    "cms_page",
     "session",
   ].map((value) => ({ value, label: value.replace(/_/g, " ") }));
 

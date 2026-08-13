@@ -1,6 +1,6 @@
 import type { ColumnDef } from "../../crud";
 import { StatusBadge } from "../../ui";
-import { formatDate } from "../../lib/format";
+import { formatDate, formatDateTime } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
 import { CMS_STATUSES, type CmsPage } from "./types";
 
@@ -37,9 +37,24 @@ export const cmsColumns: ColumnDef<CmsPage>[] = [
     header: "Status",
     meta: { label: "Status" },
     cell: ({ row }) => (
-      <StatusBadge tone={statusTone[row.original.status]}>
-        {statusLabel[row.original.status]}
-      </StatusBadge>
+      <div className="flex flex-col items-start gap-0.5">
+        <StatusBadge tone={statusTone[row.original.status]}>
+          {statusLabel[row.original.status]}
+        </StatusBadge>
+        {row.original.status === "scheduled" && row.original.publishAt && (
+          <span className="whitespace-nowrap text-xs text-muted">
+            Goes live {formatDateTime(row.original.publishAt)}
+          </span>
+        )}
+      </div>
+    ),
+  },
+  {
+    accessorKey: "version",
+    header: "Version",
+    meta: { label: "Version", align: "right" },
+    cell: ({ row }) => (
+      <span className="font-mono text-xs text-muted">v{row.original.version}</span>
     ),
   },
   {

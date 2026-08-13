@@ -24,6 +24,8 @@ import { DetailMap } from "./detail-map";
 import { DetailReviews } from "./detail-reviews";
 import { DetailFaq } from "./detail-faq";
 import { BookingWidget } from "./booking-widget";
+import { AvailabilitySection } from "./availability-section";
+import { VerifiedReviews } from "./verified-reviews";
 
 /**
  * Build document metadata for a details route from the listing itself, so every
@@ -128,7 +130,12 @@ export function ListingDetailPage({ detail, related }: ListingDetailPageProps) {
                 excluded={detail.excluded}
               />
               <DetailItinerary steps={detail.itinerary} />
+              {/* Live inventory: room types, rate plans and what's actually free. */}
+              <AvailabilitySection listing={listing} />
               <DetailMap location={listing.location} />
+              {/* Reviews written against completed bookings on the platform… */}
+              <VerifiedReviews listingSlug={listing.slug} />
+              {/* …then the editorial/imported reviews the template ships with. */}
               <DetailReviews summary={detail.reviewSummary} reviews={detail.reviews} />
               {/* Unified booking: what else this trip needs, in this city. */}
               <ListingRecommendations listing={listing} />

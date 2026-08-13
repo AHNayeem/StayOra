@@ -2,17 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 import type { Listing } from "@/types/catalog";
-import {
-  ACTIVITIES,
-  APARTMENTS,
-  CONVENTION_HALLS,
-  HOTELS,
-  RESORTS,
-  SHARED_ROOMS,
-  TOURS,
-  TRANSPORT,
-  VISAS,
-} from "@/constants/listings";
+import { listingsByIds } from "@/features/discovery/catalog-index";
 import { ACCOUNT_DATA } from "@/lib/mock/account-data";
 import { createCollectionStore } from "./collection-store";
 
@@ -20,23 +10,8 @@ import { createCollectionStore } from "./collection-store";
  * Wishlist store — the traveler's saved listings, held as an ordered list of
  * listing ids and persisted client-side. The heart button on any card reads
  * and toggles it live; the wishlist page resolves the ids back to full
- * {@link Listing} objects via a module-level index.
+ * {@link Listing} objects via the shared catalogue index.
  */
-
-/** id → Listing lookup, built once from the catalog constants (client bundle). */
-const LISTING_INDEX: Map<string, Listing> = new Map(
-  [
-    ...HOTELS,
-    ...APARTMENTS,
-    ...RESORTS,
-    ...SHARED_ROOMS,
-    ...CONVENTION_HALLS,
-    ...TRANSPORT,
-    ...TOURS,
-    ...ACTIVITIES,
-    ...VISAS,
-  ].map((l) => [l.id, l]),
-);
 
 const store = createCollectionStore<string>({
   key: "otithee:wishlist",
@@ -87,5 +62,5 @@ export function useIsWishlisted(id: string): boolean {
 /** Reactive, resolved wishlist listings in saved order (unknown ids dropped). */
 export function useWishlistListings(): Listing[] {
   const ids = useWishlistIds();
-  return ids.map((id) => LISTING_INDEX.get(id)).filter((l): l is Listing => Boolean(l));
+  return listingsByIds(ids);
 }

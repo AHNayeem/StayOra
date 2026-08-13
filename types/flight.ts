@@ -424,6 +424,10 @@ export const ANCILLARY_CATEGORIES = [
   "comfort",
   "protection",
   "transfer",
+  /** Destination extras — sold against where the traveller lands, not the fare. */
+  "esim",
+  "activity",
+  "stay",
 ] as const;
 export type AncillaryCategory = (typeof ANCILLARY_CATEGORIES)[number];
 
@@ -442,6 +446,30 @@ export interface AncillaryOption {
   maxQuantity?: number;
   /** Free of charge — shown as "Included". */
   free?: boolean;
+
+  /* -- Destination extras ---------------------------------------------------
+   * Optional presentation fields. They change nothing about how an option is
+   * priced — only how much of the offer the row can show before the traveller
+   * has to leave the flow to find out.
+   */
+
+  /**
+   * Noun for one charged unit of {@link AncillarySelection.quantity}, e.g.
+   * "night" for a hotel. Defaults to "traveller", or "booking" when
+   * {@link perBooking} — which is what every flight-side extra means.
+   */
+  unitLabel?: string;
+  /** Short factual chips, e.g. ["10 GB", "15 days"] or ["4★", "Old Town"]. */
+  highlights?: string[];
+  /** Review score out of 5, shown as stars (hotels and experiences). */
+  rating?: number;
+  reviewCount?: number;
+  /** Thumbnail shown in place of {@link icon}. */
+  imageUrl?: string;
+  /** Detail page for the underlying listing, opened in a new tab. */
+  href?: string;
+  /** Small print under the row — what happens after payment. */
+  note?: string;
 }
 
 /** A chosen ancillary with its quantity. */

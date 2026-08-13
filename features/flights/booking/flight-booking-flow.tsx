@@ -15,6 +15,7 @@ import type {
 import { getSeatMaps, getVisaRequirement } from "@/services/flight.service";
 import { createFlightBooking } from "@/services/flight-checkout";
 import { seatMapPrice } from "@/lib/mock/seatmap";
+import { destinationCodeOf } from "@/lib/mock/destination-extras";
 import { airportLabel } from "@/lib/mock/airports";
 import { useAuth } from "@/features/auth";
 import { useRequireAuth } from "@/features/auth/guards";
@@ -101,7 +102,9 @@ function BookingInner({
   const [createdRef, setCreatedRef] = useState("");
   const [createdPnr, setCreatedPnr] = useState("");
 
-  const destination = offer.slices[offer.slices.length - 1].toCode;
+  // The turnaround point, not the last airport flown to — on a round trip those
+  // are different, and it is the former the traveller needs a visa for.
+  const destination = destinationCodeOf(offer);
 
   // Seat maps are needed to price picks; visa status informs the traveller step.
   useEffect(() => {

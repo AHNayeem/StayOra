@@ -4,6 +4,7 @@ import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react";
 import type { PaymentTxn } from "@/types/traveler";
 import { useLocale } from "@/features/i18n";
 import { useMergedPayments } from "@/features/account/created-bookings";
+import { useCustomerPayments } from "@/features/booking";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
 import { AccountStat } from "@/components/account/account-stat";
@@ -13,7 +14,12 @@ import { cn } from "@/lib/utils";
 
 export function PaymentsView({ payments: serverPayments }: { payments: PaymentTxn[] }) {
   const { date } = useLocale();
-  const payments = useMergedPayments(serverPayments);
+  const domainPayments = useCustomerPayments();
+  const merged = useMergedPayments(serverPayments);
+  const ids = new Set(domainPayments.map((p) => p.id));
+  const payments = [...domainPayments, ...merged.filter((p) => !ids.has(p.id))].sort((a, z) =>
+    z.date.localeCompare(a.date),
+  );
 
   const totalPaid = payments
     .filter((p) => p.type === "charge" && p.status === "succeeded")

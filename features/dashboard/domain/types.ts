@@ -153,6 +153,59 @@ export interface BookingMoney {
   netSettlement: number;
 }
 
+/**
+ * An extra bought alongside the main product (breakfast, transfer, insurance).
+ * Add-ons are folded into the booking's `base`, so they attract commission and
+ * tax exactly like the product itself.
+ */
+export interface BookingAddOn {
+  id: string;
+  label: string;
+  description?: string;
+  unitPrice: number;
+  quantity: number;
+  total: number;
+  /** Insurance is called out separately in the UI and on the invoice. */
+  kind: "extra" | "insurance";
+}
+
+/**
+ * The exchange rate in force when the booking was taken.
+ *
+ * Captured once so a historical total never moves when today's rates do — the
+ * customer's invoice must still read the same number next year.
+ */
+export interface FxSnapshot {
+  /** Currency the customer was quoted in. */
+  currency: string;
+  /** Units of `currency` per 1 USD at the time of booking. */
+  rate: number;
+  capturedAt: string;
+}
+
+/** How the customer is paying: in full now, or a deposit with a balance later. */
+export interface PaymentPlan {
+  kind: "full" | "deposit";
+  /** Taken at checkout. */
+  depositAmount: number;
+  /** Still owed. Zero for `kind: "full"`. */
+  balanceAmount: number;
+  balanceDueAt?: string;
+}
+
+/** What was actually selected on a stay — room type, rate plan, occupancy. */
+export interface StaySelection {
+  roomTypeId: string;
+  roomTypeName: string;
+  ratePlanId: string;
+  ratePlanName: string;
+  /** Rooms/beds/tickets booked. */
+  units: number;
+  guests: number;
+  boardIncluded: boolean;
+  refundable: boolean;
+}
+
 /** A discount line applied to a booking (offer, coupon or combo). */
 export interface AppliedDiscount {
   kind: "offer" | "coupon" | "combo";
@@ -275,6 +328,25 @@ export interface Booking {
   refundIds: string[];
   /** Settlement batch this booking's earning belongs to. */
   settlementId?: string;
+
+  // --- optional, set for bookings taken through the customer checkout -----
+
+  /** Catalog listing the booking was made against. */
+  listing?: { id: string; slug: string; image: string; vertical: BookingVertical };
+  /** Room type / rate plan chosen, for products sold from inventory. */
+  stay?: StaySelection;
+  /** Inventory hold this booking consumed — what a cancellation releases. */
+  holdId?: string;
+  addOns?: BookingAddOn[];
+  /** Rate the customer was quoted in, frozen at purchase. */
+  fx?: FxSnapshot;
+  paymentPlan?: PaymentPlan;
+  /** Free-text notes the traveller left at checkout. */
+  specialRequests?: string;
+  /** Loyalty points spent on this booking (already in `discounts`). */
+  pointsRedeemed?: number;
+  /** Points the booking earned once completed. */
+  pointsEarned?: number;
 }
 
 /** What a lifecycle transition produced — returned by `bookingService.transition`. */

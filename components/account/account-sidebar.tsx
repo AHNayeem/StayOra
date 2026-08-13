@@ -4,30 +4,43 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ACCOUNT_NAV, type AccountBadgeKey, type AccountNavItem } from "@/features/account/nav";
 import { useWishlistCount } from "@/features/account/wishlist";
-import { useUnreadCount } from "@/features/account/notifications-store";
+import { useUnreadCount as useLocalUnread } from "@/features/account/notifications-store";
+import {
+  useCustomerEmail,
+  useDomainValue,
+  useReviewInvitations,
+  useUnreadCount as useInboxUnread,
+} from "@/features/booking";
+import { supportService } from "@/features/dashboard/domain";
 import { ACCOUNT_DATA } from "@/lib/mock/account-data";
 import { cn } from "@/lib/utils";
 
-/** Static counts derived once from the seed (messages / pending reviews). */
+/** Host-thread unread count still comes from the messaging seed. */
 const UNREAD_MESSAGES = ACCOUNT_DATA.threads.reduce((sum, t) => sum + t.unread, 0);
-const PENDING_REVIEWS = ACCOUNT_DATA.bookings.filter(
-  (b) => b.status === "completed" && !b.reviewed,
-).length;
 
 function isActive(pathname: string, href: string): boolean {
   if (href === "/account") return pathname === "/account";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Resolves the live badge count for a nav item, or 0 when it has none. */
+/**
+ * Live badge counts. Reviews, support and notifications come off the domain, so
+ * the sidebar reflects real state rather than a snapshot of the seed.
+ */
 function useBadgeCounts(): Record<AccountBadgeKey, number> {
   const wishlist = useWishlistCount();
-  const notifications = useUnreadCount();
+  const localNotifications = useLocalUnread();
+  const inboxUnread = useInboxUnread();
+  const email = useCustomerEmail();
+  const pendingReviews = useReviewInvitations().length;
+  const support = useDomainValue(() => supportService.unreadForCustomer(email), [email]);
+
   return {
     wishlist,
-    notifications,
+    notifications: localNotifications + inboxUnread,
     messages: UNREAD_MESSAGES,
-    reviews: PENDING_REVIEWS,
+    reviews: pendingReviews,
+    support,
   };
 }
 

@@ -4,3 +4,4 @@ export { reviewsService, reviewKeys } from "./service";
 export { reviewColumns } from "./columns";
 export { useReviews, useModerateReview, useDeleteReview } from "./hooks";
 export { ReviewsList } from "./list";
+export { ReviewModeration } from "./moderation";

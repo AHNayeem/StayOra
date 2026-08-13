@@ -9,6 +9,13 @@
  *   types      — the normalized data model (User/Booking/Refund/Offer/…)
  *   lifecycle  — state machines, status registries, cancellation policies
  *   money      — commission, tax, discount, refund and settlement maths
+ *   inventory  — room types, rate plans, availability, holds
+ *   payments   — the mock gateway (authorize / 3DS / retry / capture)
+ *   engagement — loyalty points, wallet coupons, referrals
+ *   support    — the ticket store shared by customer and admin
+ *   reviews    — verified-stay reviews and moderation
+ *   messaging  — mock email/SMS/push/WhatsApp delivery
+ *   telemetry  — analytics + error seams (PostHog/Sentry shaped)
  *   seed       — the deterministic demo dataset
  *   store      — the persisted mutable state (localStorage on the client)
  *   services   — the async API surface every UI calls
@@ -17,6 +24,31 @@
 export * from "./types";
 export * from "./lifecycle";
 export * from "./money";
+export * from "./inventory";
+export * from "./payments";
+export * from "./engagement";
+export * from "./support";
+export * from "./reviews";
+export * from "./telemetry";
+export * from "./amendments";
+export {
+  CATEGORY_LABELS as MESSAGE_CATEGORY_LABELS,
+  CHANNELS as MESSAGE_CHANNELS,
+  CHANNEL_LABELS,
+  MESSAGE_TEMPLATES,
+  findTemplate,
+  messagingService,
+} from "./messaging";
+export type {
+  DeliveryStatus,
+  MessageCategory,
+  MessageChannel,
+  MessageTemplate,
+  NotificationPreferences,
+  OutboundMessage,
+  SendInput,
+} from "./messaging";
+export { DEMO_CUSTOMER, DEMO_CUSTOMER_PHONE } from "./seed-extra";
 export {
   B2B_ACCOUNTS,
   COMBOS_SEED,

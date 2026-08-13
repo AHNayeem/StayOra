@@ -1,205 +1,187 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { PenLine, Star, Trash2 } from "lucide-react";
-import type { ReviewableStay, TravelerReview } from "@/types/traveler";
+import { BadgeCheck, Clock, MessageSquareReply, PenLine, Star, XCircle } from "lucide-react";
 import { VERTICALS, listingHref } from "@/constants/verticals";
 import {
-  addReview,
-  deleteReview,
-  updateReview,
-  useAuthoredReviews,
-} from "@/features/account/reviews-store";
+  ASPECT_LABELS,
+  REVIEW_ASPECTS,
+  reviewService,
+  type Booking,
+  type PlatformReview,
+  type ReviewAspect,
+} from "@/features/dashboard/domain";
+import {
+  bookingVertical,
+  useCustomerReviews,
+  useReviewInvitations,
+} from "@/features/booking";
+import { useAuth } from "@/features/auth";
 import { useLocale } from "@/features/i18n";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
 import { RatingStars } from "@/components/ui/rating-stars";
+import { StatusBadge, type StatusTone } from "@/components/account/status-badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
+import { controlClasses } from "@/components/ui/field";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-type Composer =
-  | { mode: "create"; stay: ReviewableStay }
-  | { mode: "edit"; review: TravelerReview }
-  | null;
+const STATUS_META: Record<PlatformReview["status"], { label: string; tone: StatusTone }> = {
+  pending: { label: "In moderation", tone: "warning" },
+  published: { label: "Published", tone: "success" },
+  rejected: { label: "Not published", tone: "danger" },
+  removed: { label: "Removed", tone: "neutral" },
+};
 
-export function ReviewsView({ reviewable }: { reviewable: ReviewableStay[] }) {
-  const authored = useAuthoredReviews();
-  const [composer, setComposer] = useState<Composer>(null);
-
-  const reviewedRefs = useMemo(
-    () => new Set(authored.map((r) => r.bookingRef)),
-    [authored],
-  );
-  const pending = useMemo(
-    () => reviewable.filter((s) => !reviewedRefs.has(s.bookingRef)),
-    [reviewable, reviewedRefs],
-  );
+/**
+ * Reviews — write-ups the traveller has left, and prompts for stays they can
+ * still review.
+ *
+ * Eligibility is enforced by the domain: only a completed booking can be
+ * reviewed, and only once. That is why every review carries a verified-stay
+ * badge, and why a new review starts in moderation rather than going straight
+ * live — the same queue the platform's content team works.
+ */
+export function ReviewsView() {
+  const invitations = useReviewInvitations();
+  const reviews = useCustomerReviews();
+  const [composing, setComposing] = useState<Booking | null>(null);
 
   return (
     <div>
       <AccountPageHeader
         title="Reviews"
-        description="Share your experience — reviews help other travelers and earn you points."
+        description="Share your experience — reviews help other travellers and earn you points."
       />
 
-      {/* Awaiting review */}
-      {pending.length > 0 && (
+      {invitations.length > 0 && (
         <section className="mb-8">
           <h2 className="mb-3 text-lg font-semibold text-ink">
             Awaiting your review
-            <span className="ml-2 text-sm font-normal text-muted">({pending.length})</span>
+            <span className="ml-2 text-sm font-normal text-muted">({invitations.length})</span>
           </h2>
           <div className="grid gap-3">
-            {pending.map((stay) => (
+            {invitations.map((booking) => (
               <PendingRow
-                key={stay.bookingId}
-                stay={stay}
-                onWrite={() => setComposer({ mode: "create", stay })}
+                key={booking.id}
+                booking={booking}
+                onWrite={() => setComposing(booking)}
               />
             ))}
           </div>
         </section>
       )}
 
-      {/* Written reviews */}
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">
           Your reviews
-          <span className="ml-2 text-sm font-normal text-muted">({authored.length})</span>
+          <span className="ml-2 text-sm font-normal text-muted">({reviews.length})</span>
         </h2>
 
-        {authored.length > 0 ? (
-          <div className="grid gap-4">
-            {authored.map((review) => (
-              <ReviewCard
-                key={review.id}
-                review={review}
-                onEdit={() => setComposer({ mode: "edit", review })}
-                onDelete={() => {
-                  deleteReview(review.id);
-                  toast.success("Review deleted");
-                }}
-              />
-            ))}
-          </div>
-        ) : pending.length === 0 ? (
+        {reviews.length === 0 ? (
           <AccountEmpty
             icon={Star}
             title="No reviews yet"
-            description="Once you complete a trip you'll be able to review it here."
+            description="Once a trip is complete you'll be able to review it here."
           />
         ) : (
-          <p className="text-body">
-            You haven&apos;t written any reviews yet — start with one of the stays above.
-          </p>
+          <ul className="grid gap-3">
+            {reviews.map((review) => (
+              <li key={review.id}>
+                <ReviewRow review={review} />
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
-      {composer && (
-        <ReviewComposer composer={composer} onClose={() => setComposer(null)} />
+      {composing && (
+        <ReviewComposer booking={composing} onClose={() => setComposing(null)} />
       )}
     </div>
   );
 }
 
-function PendingRow({ stay, onWrite }: { stay: ReviewableStay; onWrite: () => void }) {
+function PendingRow({ booking, onWrite }: { booking: Booking; onWrite: () => void }) {
   const { date } = useLocale();
+  const vertical = bookingVertical(booking);
   return (
-    <div className="flex items-center gap-4 rounded-card border border-line bg-surface p-3 shadow-card">
-      <div className="relative size-16 shrink-0 overflow-hidden rounded-field">
-        <Image src={stay.image} alt={stay.title} fill sizes="64px" className="object-cover" />
-      </div>
+    <div className="flex flex-wrap items-center gap-4 rounded-card border border-line bg-surface p-4 shadow-card">
+      {booking.listing && (
+        <div className="relative size-16 shrink-0 overflow-hidden rounded-field">
+          <Image src={booking.listing.image} alt="" fill sizes="64px" className="object-cover" />
+        </div>
+      )}
       <div className="min-w-0 flex-1">
-        <span className="text-overline text-primary">{VERTICALS[stay.vertical].label}</span>
-        <p className="truncate font-semibold text-ink">{stay.title}</p>
-        <p className="text-sm text-muted">Stayed {date(stay.stayedAt)}</p>
+        <span className="text-overline text-primary">{VERTICALS[vertical].label}</span>
+        <p className="truncate font-medium text-ink">{booking.productTitle}</p>
+        <p className="text-xs text-muted">
+          Stayed {date(booking.endAt)} · {booking.reference}
+        </p>
       </div>
       <Button variant="primary" size="sm" onClick={onWrite}>
         <PenLine className="size-4" aria-hidden="true" />
-        Review
+        Write a review
       </Button>
     </div>
   );
 }
 
-function ReviewCard({
-  review,
-  onEdit,
-  onDelete,
-}: {
-  review: TravelerReview;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
+function ReviewRow({ review }: { review: PlatformReview }) {
   const { date } = useLocale();
+  const meta = STATUS_META[review.status];
   return (
-    <article className="rounded-card border border-line bg-surface p-4 shadow-card">
-      <div className="flex gap-3">
-        <Link
-          href={listingHref({ vertical: review.vertical, slug: review.listingSlug })}
-          className="relative size-14 shrink-0 overflow-hidden rounded-field"
-        >
-          <Image
-            src={review.listingImage}
-            alt={review.listingTitle}
-            fill
-            sizes="56px"
-            className="object-cover"
-          />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <Link
-                href={listingHref({ vertical: review.vertical, slug: review.listingSlug })}
-                className="truncate font-semibold text-ink hover:text-primary"
-              >
-                {review.listingTitle}
-              </Link>
-              <div className="mt-0.5 flex items-center gap-2">
-                <RatingStars value={review.rating} size="sm" />
-                <span className="text-xs text-muted">
-                  {date(review.updatedAt ?? review.createdAt)}
-                </span>
-              </div>
-            </div>
-            <div className="flex shrink-0 gap-1">
-              <button
-                type="button"
-                onClick={onEdit}
-                aria-label="Edit review"
-                className="grid size-8 place-items-center rounded-field text-muted transition-colors hover:bg-surface-muted hover:text-primary"
-              >
-                <PenLine className="size-4" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                onClick={onDelete}
-                aria-label="Delete review"
-                className="grid size-8 place-items-center rounded-field text-muted transition-colors hover:bg-danger/10 hover:text-danger"
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
+    <article className="rounded-card border border-line bg-surface p-5 shadow-card">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link
+            href={listingHref({ vertical: review.vertical, slug: review.listingSlug })}
+            className="truncate font-medium text-ink hover:text-primary"
+          >
+            {review.listingTitle}
+          </Link>
+          <p className="text-xs text-muted">
+            {review.bookingRef} · {date(review.createdAt)}
+          </p>
         </div>
-      </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <RatingStars value={review.rating} size="sm" />
+          <StatusBadge label={meta.label} tone={meta.tone} />
+        </div>
+      </header>
 
-      <h3 className="mt-3 font-semibold text-ink">{review.title}</h3>
+      <h3 className="mt-3 text-base font-semibold text-ink">{review.title}</h3>
       <p className="mt-1 text-sm text-body">{review.body}</p>
 
-      {review.helpfulCount > 0 && (
-        <p className="mt-2 text-xs text-muted">{review.helpfulCount} found this helpful</p>
+      {review.status === "pending" && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-amber-700">
+          <Clock className="size-3.5" aria-hidden="true" />
+          A moderator is checking this before it goes live.
+        </p>
+      )}
+      {review.status === "rejected" && (
+        <p className="mt-3 flex items-start gap-1.5 text-xs text-danger">
+          <XCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+          {review.moderation?.note ??
+            "This didn't meet our review guidelines, so it wasn't published."}
+        </p>
+      )}
+      {review.verifiedStay && review.status === "published" && (
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-emerald-700">
+          <BadgeCheck className="size-3.5" aria-hidden="true" />
+          Published as a verified stay
+        </p>
       )}
 
       {review.response && (
-        <div className="mt-3 rounded-field bg-surface-muted/60 p-3">
-          <p className="text-xs font-semibold text-ink">
-            Response from {review.response.author}
+        <div className="mt-4 rounded-field border-l-2 border-primary bg-surface-muted/60 p-3">
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-ink">
+            <MessageSquareReply className="size-3.5 text-primary" aria-hidden="true" />
+            {review.response.authorName} replied
           </p>
           <p className="mt-1 text-sm text-body">{review.response.body}</p>
         </div>
@@ -208,127 +190,129 @@ function ReviewCard({
   );
 }
 
-function ReviewComposer({ composer, onClose }: { composer: NonNullable<Composer>; onClose: () => void }) {
-  const existing = composer.mode === "edit" ? composer.review : null;
-  const [rating, setRating] = useState(existing?.rating ?? 5);
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [body, setBody] = useState(existing?.body ?? "");
+function ReviewComposer({ booking, onClose }: { booking: Booking; onClose: () => void }) {
+  const { user } = useAuth();
+  const [aspects, setAspects] = useState<Partial<Record<ReviewAspect, number>>>({
+    cleanliness: 5,
+    location: 5,
+    service: 5,
+    value: 4,
+    comfort: 5,
+  });
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const listingTitle =
-    composer.mode === "edit" ? composer.review.listingTitle : composer.stay.title;
+  const eligibility = reviewService.eligibility(booking);
+  const vertical = bookingVertical(booking);
 
-  const canSubmit = title.trim().length > 0 && body.trim().length >= 10;
-
-  const onSubmit = () => {
-    if (!canSubmit) return;
-    if (composer.mode === "edit") {
-      updateReview(composer.review.id, {
-        rating,
+  const submit = () => {
+    setBusy(true);
+    try {
+      reviewService.create({
+        booking,
+        listingId: booking.listing?.id ?? `lst_${booking.id}`,
+        listingSlug: booking.listing?.slug ?? "",
+        vertical,
+        authorName: user?.name ?? booking.customer.name,
+        authorAvatar: user?.avatar,
         title: title.trim(),
         body: body.trim(),
-        updatedAt: new Date().toISOString(),
+        aspects,
       });
-      toast.success("Review updated");
-    } else {
-      const { stay } = composer;
-      addReview({
-        id: `rvw_${Date.now().toString(36)}`,
-        listingId: stay.listingId,
-        listingSlug: stay.listingSlug,
-        vertical: stay.vertical,
-        listingTitle: stay.title,
-        listingImage: stay.image,
-        bookingRef: stay.bookingRef,
-        rating,
-        title: title.trim(),
-        body: body.trim(),
-        createdAt: new Date().toISOString(),
-        helpfulCount: 0,
+      onClose();
+      toast.success("Thanks for your review", {
+        description: "It'll appear on the listing once a moderator approves it.",
       });
-      toast.success("Review published", { description: "You earned 50 reward points." });
+    } finally {
+      setBusy(false);
     }
-    onClose();
   };
 
   return (
     <Modal
       open
       onClose={onClose}
-      title={composer.mode === "edit" ? "Edit review" : "Write a review"}
-      description={listingTitle}
+      title={`Review ${booking.productTitle}`}
+      description={`Booking ${booking.reference} · your review will be marked as a verified stay.`}
       footer={
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
             Cancel
           </Button>
-          <Button variant="primary" onClick={onSubmit} disabled={!canSubmit}>
-            {composer.mode === "edit" ? "Save changes" : "Publish review"}
+          <Button
+            variant="primary"
+            loading={busy}
+            disabled={!eligibility.eligible || title.trim().length < 3 || body.trim().length < 20}
+            onClick={submit}
+          >
+            Submit review
           </Button>
         </div>
       }
     >
-      <div className="space-y-4">
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-ink">Your rating</label>
-          <StarInput value={rating} onChange={setRating} />
-        </div>
-        <div>
-          <label htmlFor="review-title" className="mb-1.5 block text-sm font-medium text-ink">
-            Title
-          </label>
-          <input
-            id="review-title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Sum up your experience"
-            maxLength={80}
-            className="h-11 w-full rounded-field border border-line bg-surface px-3.5 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-3 focus:ring-primary/25"
-          />
-        </div>
-        <div>
-          <label htmlFor="review-body" className="mb-1.5 block text-sm font-medium text-ink">
-            Your review
-          </label>
-          <textarea
-            id="review-body"
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            rows={5}
-            placeholder="What did you like? What could be better?"
-            className="w-full rounded-field border border-line bg-surface p-3.5 text-sm text-ink placeholder:text-muted focus:border-primary focus:outline-none focus:ring-3 focus:ring-primary/25"
-          />
-          <p className="mt-1 text-xs text-muted">Minimum 10 characters.</p>
-        </div>
-      </div>
-    </Modal>
-  );
-}
+      {!eligibility.eligible ? (
+        <p className="text-sm text-danger">{eligibility.reason}</p>
+      ) : (
+        <div className="grid gap-4">
+          <fieldset>
+            <legend className="text-sm font-medium text-ink">Rate your stay</legend>
+            <ul className="mt-2 space-y-2">
+              {REVIEW_ASPECTS.map((aspect) => (
+                <li key={aspect} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-body">{ASPECT_LABELS[aspect]}</span>
+                  <span className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((score) => (
+                      <button
+                        key={score}
+                        type="button"
+                        aria-label={`${ASPECT_LABELS[aspect]}: ${score} of 5`}
+                        aria-pressed={(aspects[aspect] ?? 0) >= score}
+                        onClick={() => setAspects((prev) => ({ ...prev, [aspect]: score }))}
+                        className="p-0.5"
+                      >
+                        <Star
+                          className={cn(
+                            "size-5 transition-colors",
+                            (aspects[aspect] ?? 0) >= score
+                              ? "fill-accent text-accent"
+                              : "text-line",
+                          )}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    ))}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </fieldset>
 
-function StarInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const [hover, setHover] = useState(0);
-  const active = hover || value;
-  return (
-    <div className="flex items-center gap-1" onMouseLeave={() => setHover(0)}>
-      {[1, 2, 3, 4, 5].map((n) => (
-        <button
-          key={n}
-          type="button"
-          onClick={() => onChange(n)}
-          onMouseEnter={() => setHover(n)}
-          aria-label={`${n} star${n > 1 ? "s" : ""}`}
-          aria-pressed={value === n}
-          className="p-0.5"
-        >
-          <Star
-            className={cn(
-              "size-7 transition-colors",
-              n <= active ? "fill-accent text-accent" : "text-line",
-            )}
-            aria-hidden="true"
-          />
-        </button>
-      ))}
-    </div>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Headline</span>
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Sum up your stay in a few words"
+              maxLength={80}
+              className={cn(controlClasses(false), "h-11")}
+            />
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-ink">Your review</span>
+            <textarea
+              rows={5}
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              placeholder="What stood out? What would you tell a friend before they book?"
+              className={cn(controlClasses(false), "resize-none py-2.5")}
+            />
+            <span className="text-xs text-muted">{body.trim().length}/20 characters minimum</span>
+          </label>
+        </div>
+      )}
+    </Modal>
   );
 }

@@ -12,3 +12,5 @@ export { DetailReviews } from "./detail-reviews";
 export { DetailFaq } from "./detail-faq";
 export { DetailBlock } from "./detail-block";
 export { BookingWidget } from "./booking-widget";
+export { AvailabilitySection } from "./availability-section";
+export { VerifiedReviews } from "./verified-reviews";

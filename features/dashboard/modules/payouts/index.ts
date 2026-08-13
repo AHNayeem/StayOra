@@ -2,5 +2,5 @@
 export * from "./types";
 export { payoutsService, payoutKeys } from "./service";
 export { payoutColumns } from "./columns";
-export { usePayouts } from "./hooks";
+export { usePayouts, useUpdatePayout } from "./hooks";
 export { PayoutsList } from "./list";

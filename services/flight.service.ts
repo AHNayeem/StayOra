@@ -65,6 +65,10 @@ import {
   includedAncillaryIds,
   isRelevant,
 } from "@/lib/mock/ancillaries";
+import {
+  destinationCodeOf,
+  destinationExtras,
+} from "@/lib/mock/destination-extras";
 import { baseFareForDistance } from "@/lib/mock/fares";
 import {
   FLIGHT_DEALS,
@@ -500,7 +504,14 @@ export function getSeatMaps(offerId: string): Promise<SeatMap[]> {
   return mockDelay(maps, 650);
 }
 
-/** The ancillary catalogue, filtered to what this party can actually buy. */
+/**
+ * The ancillary catalogue for one offer: the flight-side extras this party can
+ * actually buy, followed by the extras sold against where they land — a local
+ * eSIM, experiences and stays in the destination city.
+ *
+ * Both halves come back in one call because the booking flow treats them as one
+ * cart; only the group each option declares decides where it renders.
+ */
 export function getAncillaries(offerId: string): Promise<AncillaryOption[]> {
   const offer = offerFromId(offerId);
   if (!offer) return mockDelay(ANCILLARY_OPTIONS, 400);
@@ -509,7 +520,7 @@ export function getAncillaries(offerId: string): Promise<AncillaryOption[]> {
   const options = ANCILLARY_OPTIONS.filter(
     (option) => !included.has(option.id) && isRelevant(option, offer.passengers),
   );
-  return mockDelay(options, 400);
+  return mockDelay([...options, ...destinationExtras(destinationCodeOf(offer))], 400);
 }
 
 /** Extras already covered by the fare — rendered as "Included", never sold. */

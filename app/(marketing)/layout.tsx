@@ -2,6 +2,7 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { JsonLd } from "@/components/shared/json-ld";
 import { AssistantLauncher, AssistantProvider } from "@/features/ai";
+import { CompareTray } from "@/features/discovery";
 import { LocaleProvider } from "@/features/i18n";
 import { organizationSchema, websiteSchema } from "@/lib/structured-data";
 
@@ -35,6 +36,9 @@ export default function MarketingLayout({
           {children}
         </div>
         <SiteFooter />
+        {/* Renders nothing until something is added, so it costs an empty tray
+            no layout — but it follows the traveller across every public page. */}
+        <CompareTray />
         <AssistantLauncher />
       </AssistantProvider>
     </LocaleProvider>

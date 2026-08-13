@@ -23,6 +23,7 @@ import {
   REFUNDS_SEED,
   SETTLEMENTS_SEED,
 } from "./seed";
+import { buildExtras } from "./seed-extra";
 import type {
   AuditLogEntry,
   B2BAccount,
@@ -35,9 +36,16 @@ import type {
   Refund,
   Settlement,
 } from "./types";
+import type { InventoryHold, InventoryOverride } from "./inventory";
+import type { PaymentAttempt } from "./payments";
+import type { LoyaltyEntry, Referral, WalletCoupon } from "./engagement";
+import type { SupportTicket } from "./support";
+import type { PlatformReview } from "./reviews";
+import type { NotificationPreferences, OutboundMessage } from "./messaging";
+import type { TelemetryEvent } from "./telemetry";
 
 /** Bump when a shape changes so stale persisted state is discarded. */
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const STORAGE_KEY = `otithee:domain:v${SCHEMA_VERSION}`;
 
 export interface DomainState {
@@ -51,14 +59,33 @@ export interface DomainState {
   b2bInvoices: B2BInvoice[];
   notifications: PlatformNotification[];
   auditLog: AuditLogEntry[];
+  /** Revenue-manager edits to the generated availability baseline. */
+  inventoryOverrides: InventoryOverride[];
+  /** Units sold or held, keyed `${roomTypeId}|${YYYY-MM-DD}`. */
+  inventoryConsumed: Record<string, number>;
+  holds: InventoryHold[];
+  paymentAttempts: PaymentAttempt[];
+  loyalty: LoyaltyEntry[];
+  walletCoupons: WalletCoupon[];
+  referrals: Referral[];
+  tickets: SupportTicket[];
+  reviews: PlatformReview[];
+  /** Every mock email/SMS/push/WhatsApp/in-app message ever "sent". */
+  outbox: OutboundMessage[];
+  notificationPreferences: Record<string, NotificationPreferences>;
+  telemetry: TelemetryEvent[];
   /** Monotonic counter for generated ids/references. */
   sequence: number;
 }
 
 function freshState(): DomainState {
   // Structured-clone the seed so mutations never touch the frozen dataset.
+  const bookings = structuredClone(BOOKINGS_SEED);
+  // `buildExtras` re-points a spread of bookings at the demo traveller, so it
+  // must run against the clone above — before anything else reads it.
+  const extras = buildExtras(bookings);
   return {
-    bookings: structuredClone(BOOKINGS_SEED),
+    bookings,
     refunds: structuredClone(REFUNDS_SEED),
     commissions: structuredClone(COMMISSIONS_SEED),
     settlements: structuredClone(SETTLEMENTS_SEED),
@@ -68,6 +95,18 @@ function freshState(): DomainState {
     b2bInvoices: structuredClone(B2B_INVOICES_SEED),
     notifications: structuredClone(NOTIFICATIONS_SEED),
     auditLog: structuredClone(AUDIT_LOG_SEED),
+    inventoryOverrides: [],
+    inventoryConsumed: {},
+    holds: [],
+    paymentAttempts: [],
+    loyalty: extras.loyalty,
+    walletCoupons: extras.walletCoupons,
+    referrals: extras.referrals,
+    tickets: extras.tickets,
+    reviews: extras.reviews,
+    outbox: extras.outbox,
+    notificationPreferences: {},
+    telemetry: [],
     sequence: 1,
   };
 }

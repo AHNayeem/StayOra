@@ -16,6 +16,15 @@ export interface ResourceService<T, TCreate = Partial<T>, TUpdate = Partial<T>> 
   create: (input: TCreate) => Promise<T>;
   update: (id: ID, input: TUpdate) => Promise<T>;
   remove: (id: ID) => Promise<void>;
+  /**
+   * Synchronous, un-delayed snapshot of every row.
+   *
+   * Only in-memory sources can offer this, so it is optional — a repository
+   * backed by HTTP simply won't have it. Use it for local, whole-set work that
+   * must not pay the simulated network latency (scanning for due scheduled
+   * publishes, for instance), never as a substitute for `list`.
+   */
+  peek?: () => T[];
 }
 
 /**

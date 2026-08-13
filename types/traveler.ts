@@ -22,10 +22,13 @@ import type { LoyaltyTier } from "./account";
  */
 export type BookingStatus =
   | "upcoming"
+  | "checked_in"
   | "completed"
+  | "cancellation_requested"
   | "cancelled"
   | "pending"
   | "failed"
+  | "refund_pending"
   | "refunded";
 
 /** A trip the traveler has booked, pointing at a real catalog listing. */

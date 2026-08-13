@@ -1,319 +1,415 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  AlertTriangle,
   ArrowLeft,
   Check,
   CheckCircle2,
+  Info,
   Loader2,
   Lock,
-  Plus,
-  ShieldCheck,
+  Sparkles,
   Tag,
-  Trash2,
-  UserPlus,
+  UserCheck,
   X,
 } from "lucide-react";
 import type { Listing } from "@/types/catalog";
 import { BOOKING_CONFIG } from "@/constants/detail";
 import { VERTICALS, listingHref } from "@/constants/verticals";
-import {
-  computeBookingPricing,
-  guestsFromSelection,
-  roomsFromSelection,
-  type BookingSelection,
-} from "@/lib/booking-pricing";
 import { AskAiButton } from "@/features/ai";
 import { RecommendationRail } from "@/features/trip";
 import { useAuth } from "@/features/auth";
-import { useRequireAuth } from "@/features/auth/guards";
 import { useSavedTravelers } from "@/features/account/travelers-store";
-import { addCreatedBooking } from "@/features/account/created-bookings";
-import {
-  applyPromoCode,
-  createBooking,
-  fallbackDates,
-  isRequestVertical,
-} from "@/services/checkout";
 import { useLocale } from "@/features/i18n";
-import { AuthGate } from "@/components/auth/auth-gate";
+import {
+  DEMO_CUSTOMER,
+  REDEEM_STEP,
+  isPerNight,
+  nightsBetween,
+  track,
+  unitNoun,
+  type Booking,
+  type InventoryHold,
+  type PaymentAttempt,
+  type RatePlanId,
+} from "@/features/dashboard/domain";
+import {
+  INSURANCE_OFFER,
+  abandonHold,
+  addOnsFor,
+  attemptPayment,
+  confirmBooking,
+  createHold,
+  depositPlan,
+  isRequestVertical,
+  quoteCheckout,
+  submitAuthentication,
+  toBookingAddOn,
+  useDomainValue,
+  useLoyalty,
+  useWalletCoupons,
+  type CheckoutSelection,
+} from "@/features/booking";
+import {
+  RoomRateSelector,
+  defaultChoice,
+  type RoomRateChoice,
+} from "@/components/booking/room-rate-selector";
 import { Container } from "@/components/ui/container";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Stepper } from "@/components/ui/stepper";
 import { controlClasses } from "@/components/ui/field";
 import { OrderSummary } from "./order-summary";
+import { AddOnsPicker } from "./add-ons-picker";
+import { HoldTimer } from "./hold-timer";
 import {
-  PaymentMethodPicker,
-  usePaymentSelection,
-  type PaymentSelection,
-} from "./payment-methods";
+  MockPaymentPicker,
+  PaymentFailure,
+  ThreeDsChallenge,
+  useMockPayment,
+} from "./mock-payment";
+import { TravelerFields, emptyTraveler, type TravelerDraft } from "./traveler-fields";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const MAX_GUEST_NAMES = 8;
+const MAX_TRAVELERS = 9;
 
-interface CheckoutFlowProps {
-  listing: Listing;
-  selection: BookingSelection;
+export interface CheckoutIntent {
+  checkIn: string;
+  checkOut: string;
+  units: number;
+  guests: number;
+  roomTypeId?: string;
+  ratePlanId?: RatePlanId;
 }
+
+type Step = 0 | 1 | 2 | 3;
+
+const STEP_LABELS = ["Your trip", "Travellers", "Payment", "Review"];
 
 /**
- * CheckoutFlow — the multi-step booking checkout. Auth-guarded (guests bounce to
- * `/login?next=/checkout…`). Step 1 confirms trip details and travellers, step 2
- * takes payment (or, for visa/convention requests, reviews the enquiry), then a
- * confirmation screen shows the reference and links into `/account/bookings`.
- * On submit it calls {@link createBooking} and persists the result client-side
- * via {@link addCreatedBooking}, so the booking shows across the account area.
+ * The customer checkout.
+ *
+ * Its job is orchestration, not arithmetic: dates and room choice go into
+ * {@link quoteCheckout}, the resulting quote drives every number on screen, and
+ * {@link confirmBooking} turns it into the one booking record the dashboard also
+ * reads. Inventory is held from the moment the traveller reaches the payment
+ * step, so the last room can't be sold twice while they type.
+ *
+ * Guests may check out without an account; the booking is filed against the
+ * email they give, and signing in with it later surfaces the booking in
+ * `/account`.
  */
-export function CheckoutFlow({ listing, selection: initial }: CheckoutFlowProps) {
-  const { isResolving, status } = useRequireAuth();
-  const { user } = useAuth();
-
-  if (isResolving || status !== "authenticated" || !user) {
-    return (
-      <Container className="py-16">
-        <AuthGate label="Preparing your checkout…" />
-      </Container>
-    );
-  }
-
-  return <CheckoutInner listing={listing} initial={initial} user={user} />;
-}
-
-function CheckoutInner({
+export function CheckoutFlow({
   listing,
-  initial,
-  user,
+  intent,
 }: {
   listing: Listing;
-  initial: BookingSelection;
-  user: NonNullable<ReturnType<typeof useAuth>["user"]>;
+  intent: CheckoutIntent;
 }) {
-  const { money } = useLocale();
-  const config = BOOKING_CONFIG[listing.vertical];
-  const vertical = VERTICALS[listing.vertical];
-  const isRequest = isRequestVertical(listing.vertical);
+  const { user } = useAuth();
+  const { money, date } = useLocale();
   const savedTravelers = useSavedTravelers();
+  const config = BOOKING_CONFIG[listing.vertical];
+  const noun = unitNoun(listing.vertical);
+  const requestOnly = isRequestVertical(listing.vertical);
+  const perNight = isPerNight(listing.vertical);
+  const needsDocuments = listing.vertical === "visa";
 
-  // --- Editable selection (dates + quantities) -----------------------------
-  const [selection, setSelection] = useState<BookingSelection>(initial);
-  const pricing = computeBookingPricing(listing, config, selection);
-  const guests = guestsFromSelection(config, selection.quantities);
+  // --- selection -----------------------------------------------------------
+  const [checkIn, setCheckIn] = useState(intent.checkIn);
+  const [checkOut, setCheckOut] = useState(intent.checkOut);
+  const [units, setUnits] = useState(Math.max(1, intent.units));
+  const [guests, setGuests] = useState(Math.max(1, intent.guests));
+  const [choice, setChoice] = useState<RoomRateChoice | null>(
+    intent.roomTypeId && intent.ratePlanId
+      ? { roomTypeId: intent.roomTypeId, ratePlanId: intent.ratePlanId }
+      : null,
+  );
 
-  // --- Traveller + contact details -----------------------------------------
-  const [guestNames, setGuestNames] = useState<string[]>([user.name]);
-  const [contactName, setContactName] = useState(user.name);
-  const [contactEmail, setContactEmail] = useState(user.email);
-  const [contactCountry, setContactCountry] = useState(user.country ?? "");
-  const [requests, setRequests] = useState("");
+  // Resolve a starting room/rate once the dates are known.
+  const resolvedChoice = useDomainValue(
+    () => choice ?? defaultChoice(listing, checkIn, checkOut, units, guests),
+    [choice?.roomTypeId, choice?.ratePlanId, listing.id, checkIn, checkOut, units, guests],
+  );
 
-  // --- Payment (shared with the flight flow — see ./payment-methods) --------
-  const payment = usePaymentSelection(user.name);
+  // --- extras --------------------------------------------------------------
+  const offers = useMemo(() => addOnsFor(listing.vertical), [listing.vertical]);
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+  const [insurance, setInsurance] = useState(false);
 
-  // --- Promo ----------------------------------------------------------------
+  // --- traveller + contact -------------------------------------------------
+  const [travelers, setTravelers] = useState<TravelerDraft[]>(() => [
+    {
+      fullName: user?.name ?? "",
+      type: "adult",
+      email: user?.email ?? "",
+      phone: user?.phone ?? "",
+    },
+  ]);
+  const [specialRequests, setSpecialRequests] = useState("");
+  const [consent, setConsent] = useState(false);
+
+  // --- money ---------------------------------------------------------------
+  const email = (travelers[0]?.email || user?.email || DEMO_CUSTOMER.email).toLowerCase();
+  const loyalty = useLoyalty();
+  const wallet = useWalletCoupons();
   const [promoInput, setPromoInput] = useState("");
-  const [promo, setPromo] = useState<{ code: string; discountUsd: number } | null>(null);
-  const [promoBusy, setPromoBusy] = useState(false);
-  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState<string | undefined>();
+  const [points, setPoints] = useState(0);
+  const [payLater, setPayLater] = useState(false);
 
-  // --- Flow state -----------------------------------------------------------
-  const [step, setStep] = useState<0 | 1 | 2>(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [createdRef, setCreatedRef] = useState<string>("");
+  const nights = perNight ? nightsBetween(checkIn, checkOut) : 1;
+  const addOnScale = { nights: Math.max(1, nights), guests, units };
+  /** Stable dependency key for the ticked add-ons. */
+  const addOnKey = selectedAddOns.join(",");
 
-  const discountUsd = promo?.discountUsd ?? 0;
-  const finalTotal = Math.max(0, pricing.totalUsd - discountUsd);
+  const selection: CheckoutSelection = useMemo(
+    () => ({
+      listing,
+      roomTypeId: resolvedChoice.roomTypeId,
+      ratePlanId: resolvedChoice.ratePlanId,
+      checkIn,
+      checkOut: perNight ? checkOut : checkIn,
+      units,
+      guests,
+      addOns: [
+        ...offers.filter((o) => selectedAddOns.includes(o.id)).map((o) => toBookingAddOn(o, addOnScale)),
+        ...(insurance ? [toBookingAddOn(INSURANCE_OFFER, addOnScale)] : []),
+      ],
+      promoCode,
+      pointsToRedeem: points,
+      customerEmail: email,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      listing,
+      resolvedChoice.roomTypeId,
+      resolvedChoice.ratePlanId,
+      checkIn,
+      checkOut,
+      units,
+      guests,
+      addOnKey,
+      insurance,
+      promoCode,
+      points,
+      email,
+      nights,
+      perNight,
+    ],
+  );
 
-  const detailsValid =
-    contactName.trim().length > 1 &&
-    EMAIL_RE.test(contactEmail) &&
-    pricing.priceable &&
-    (config.dateMode !== "single" || Boolean(selection.singleDate));
+  const quote = useDomainValue(() => quoteCheckout(selection), [
+    JSON.stringify({
+      room: selection.roomTypeId,
+      rate: selection.ratePlanId,
+      checkIn: selection.checkIn,
+      checkOut: selection.checkOut,
+      units: selection.units,
+      guests: selection.guests,
+      addOns: selection.addOns.map((a) => `${a.id}:${a.quantity}`),
+      promoCode: selection.promoCode,
+      points: selection.pointsToRedeem,
+      email: selection.customerEmail,
+    }),
+  ]);
 
-  const paymentValid = isRequest || payment.isValid;
+  // --- flow ----------------------------------------------------------------
+  const [step, setStep] = useState<Step>(0);
+  const [hold, setHold] = useState<InventoryHold | null>(null);
+  const [holdError, setHoldError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState<PaymentAttempt | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [confirmed, setConfirmed] = useState<Booking | null>(null);
+  /** Guards against a double click or a re-entrant submit creating two bookings. */
+  const submitting = useRef(false);
 
-  const setQuantity = (key: string, value: number) =>
-    setSelection((prev) => ({ ...prev, quantities: { ...prev.quantities, [key]: value } }));
+  const payment = useMockPayment();
+  const plan = payLater ? depositPlan(quote.money.total, checkIn) : null;
+  const amountNow = plan ? plan.depositAmount : quote.money.total;
 
-  const setGuestName = (index: number, value: string) =>
-    setGuestNames((prev) => prev.map((n, i) => (i === index ? value : n)));
+  // Release the hold if the traveller leaves before confirming. The unmount
+  // cleanup needs the *latest* hold, so it reads through refs that are kept in
+  // step by their own effects rather than written during render.
+  const holdRef = useRef<InventoryHold | null>(null);
+  const confirmedRef = useRef<Booking | null>(null);
+  useEffect(() => {
+    holdRef.current = hold;
+  }, [hold]);
+  useEffect(() => {
+    confirmedRef.current = confirmed;
+  }, [confirmed]);
+  useEffect(
+    () => () => {
+      if (holdRef.current && !confirmedRef.current) abandonHold(holdRef.current.id);
+    },
+    [],
+  );
 
-  const addGuestName = (value = "") =>
-    setGuestNames((prev) => (prev.length >= MAX_GUEST_NAMES ? prev : [...prev, value]));
+  useEffect(() => {
+    track("checkout_viewed", { listing: listing.slug, vertical: listing.vertical });
+  }, [listing.slug, listing.vertical]);
 
-  const removeGuestName = (index: number) =>
-    setGuestNames((prev) => prev.filter((_, i) => i !== index));
+  const releaseAndRequote = () => {
+    setHold(null);
+    setAttempt(null);
+    setStep(0);
+    toast.error("Your hold expired", {
+      description: "We've released the rooms and refreshed the price.",
+    });
+  };
 
-  const onApplyPromo = async () => {
-    if (!promoInput.trim()) return;
-    setPromoBusy(true);
-    setPromoError(null);
-    const result = await applyPromoCode(promoInput, pricing.subtotalUsd);
-    setPromoBusy(false);
-    if (result.ok) {
-      setPromo({ code: result.coupon.code, discountUsd: result.discountUsd });
-      toast.success(`Promo applied — you saved ${money(result.discountUsd)}`);
-    } else {
-      setPromo(null);
-      setPromoError(result.reason);
+  // --- validation ----------------------------------------------------------
+  const datesValid =
+    config.dateMode === "none" ||
+    (Boolean(checkIn) && (!perNight || (Boolean(checkOut) && nights >= 1)));
+  const tripValid = datesValid && (quote.available || requestOnly);
+  const lead = travelers[0];
+  const travelersValid =
+    travelers.every((t) => t.fullName.trim().length > 1) &&
+    EMAIL_RE.test(lead?.email ?? "") &&
+    (!needsDocuments || travelers.every((t) => (t.passportNumber ?? "").trim().length > 3));
+  const paymentValid = requestOnly || consent;
+
+  // --- actions -------------------------------------------------------------
+  const goToPayment = () => {
+    if (requestOnly) {
+      setStep(2);
+      return;
+    }
+    const result = createHold(selection, quote);
+    if (!result.ok) {
+      setHoldError(result.message);
+      toast.error("Those dates just went", { description: result.message });
+      setStep(0);
+      return;
+    }
+    setHoldError(null);
+    setHold(result.hold);
+    setStep(2);
+    scrollTop();
+  };
+
+  const runPayment = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    setAuthError(null);
+
+    const result = attemptPayment({
+      intentId: hold?.id ?? `intent_${listing.slug}`,
+      amount: amountNow,
+      instrument: payment.instrument,
+      outcome: payment.outcome,
+      holdId: hold?.id,
+      balanceDue: plan?.balanceAmount,
+      balanceDueAt: plan?.balanceDueAt,
+    });
+    setAttempt(result);
+
+    if (result.status === "captured") {
+      await finalize(result);
+      return;
+    }
+    // 3-D Secure or a decline — both leave the hold in place so the traveller
+    // keeps their dates while they sort it out.
+    submitting.current = false;
+    setBusy(false);
+    if (result.status === "failed") {
+      toast.error("Payment failed", { description: result.failureMessage });
     }
   };
 
-  const onSubmit = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    const nowMs = Date.now();
+  const finalize = async (paidWith: PaymentAttempt | null) => {
+    try {
+      const booking = await confirmBooking({
+        selection,
+        quote,
+        hold,
+        attempt: paidWith,
+        customer: {
+          id: user?.id,
+          name: lead?.fullName || user?.name || "Guest",
+          email,
+          phone: lead?.phone,
+        },
+        travelers,
+        specialRequests: specialRequests.trim() || undefined,
+        paymentPlan: plan ?? undefined,
+        requestOnly,
+      });
+      setConfirmed(booking);
+      setStep(3);
+      scrollTop();
+      toast.success(requestOnly ? "Request submitted" : "Booking confirmed!", {
+        description: `Reference ${booking.reference}`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Something went wrong finishing your booking.";
+      setHoldError(message);
+      toast.error("We couldn't finish your booking", { description: message });
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
 
-    // Persist a freshly-typed card so it's there next time.
-    if (!isRequest) payment.persist(nowMs, contactCountry);
+  const onAuthenticate = async (code: string) => {
+    if (!attempt) return;
+    setBusy(true);
+    const result = submitAuthentication(attempt.id, code);
+    setAttempt(result.attempt);
+    if (result.ok) {
+      setAuthError(null);
+      submitting.current = true;
+      await finalize(result.attempt);
+    } else {
+      setAuthError(result.message);
+      setBusy(false);
+    }
+  };
 
-    const { method, brand } = isRequest
-      ? ({ method: "Pay on confirmation", brand: "visa" } as const)
-      : payment.resolve();
-    const dates =
-      config.dateMode === "range"
-        ? { checkIn: selection.checkIn, checkOut: selection.checkOut }
-        : config.dateMode === "single"
-          ? { checkIn: selection.singleDate, checkOut: selection.singleDate }
-          : fallbackDates(nowMs);
-
-    const names = guestNames.map((n) => n.trim()).filter(Boolean);
-
-    const created = await createBooking({
-      listing,
-      checkIn: dates.checkIn,
-      checkOut: dates.checkOut,
-      nights: pricing.duration,
-      guests,
-      rooms: roomsFromSelection(selection.quantities),
-      subtotalUsd: pricing.subtotalUsd,
-      serviceFeeUsd: pricing.serviceFeeUsd,
-      discountUsd,
-      totalUsd: finalTotal,
-      couponCode: promo?.code,
-      guestNames: names,
-      specialRequests: requests.trim() || undefined,
-      paymentMethod: method,
-      cardBrand: brand,
-      billTo: {
-        name: contactName.trim(),
-        email: contactEmail.trim(),
-        country: contactCountry || undefined,
-      },
-      cancellationPolicy: isRequest
-        ? "Our team will confirm availability and pricing before any payment is taken."
-        : "Free cancellation up to 48 hours before check-in. Cancellations after that are subject to the property's policy.",
-      nowMs,
-    });
-
-    addCreatedBooking(created);
-    setCreatedId(created.booking.id);
-    setCreatedRef(created.booking.reference);
-    setSubmitting(false);
+  const retryPayment = () => {
+    setAttempt(null);
+    setAuthError(null);
     setStep(2);
-    toast.success(isRequest ? "Request submitted!" : "Booking confirmed!", {
-      description: `Reference ${created.booking.reference}`,
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    scrollTop();
   };
 
-  const goNext = () => {
-    setStep(1);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const applyPromo = () => {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromoCode(code);
   };
-  const goBack = () => setStep(0);
 
-  const stepLabels = ["Details", isRequest ? "Review" : "Payment", "Confirmation"];
-  const payCta = isRequest ? "Submit request" : `Pay ${money(finalTotal)}`;
+  // The reason a code was refused is rendered next to the input rather than
+  // thrown at a toast, so it stays on screen while they fix it.
+  const rejected = quote.rejected[0];
 
-  // --- Confirmation screen --------------------------------------------------
-  if (step === 2 && createdId) {
+  // --- confirmation --------------------------------------------------------
+  if (step === 3 && confirmed) {
     return (
-      <Container className="py-10 md:py-14">
-        <div className="mx-auto max-w-xl text-center">
-          <div className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-500/12 text-emerald-600">
-            <CheckCircle2 className="size-9" aria-hidden="true" />
-          </div>
-          <h1 className="mt-5 text-h3 text-ink">
-            {isRequest ? "Request submitted" : "You're all booked!"}
-          </h1>
-          <p className="mt-2 text-body">
-            {isRequest
-              ? "We've received your enquiry and will confirm availability by email shortly."
-              : "A confirmation has been sent to your email. Your booking is now in your account."}
-          </p>
-
-          <div className="mt-6 rounded-panel border border-line bg-surface p-5 text-left shadow-card">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <span className="text-sm text-muted">Reference</span>
-              <span className="font-mono font-semibold text-ink">{createdRef}</span>
-            </div>
-            <div className="flex items-center justify-between pt-3">
-              <span className="text-sm text-muted">{vertical.label}</span>
-              <span className="max-w-[60%] truncate text-sm font-medium text-ink">
-                {listing.title}
-              </span>
-            </div>
-            <div className="mt-2 flex items-center justify-between">
-              <span className="text-sm text-muted">{isRequest ? "Estimated total" : "Total paid"}</span>
-              <span className="font-bold text-accent-600">{money(finalTotal)}</span>
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
-            <Link
-              href={`/account/bookings/${createdId}`}
-              className={buttonVariants({ variant: "primary", size: "md" })}
-            >
-              View booking
-            </Link>
-            <Link
-              href="/account/bookings"
-              className={buttonVariants({ variant: "outline", size: "md" })}
-            >
-              All bookings
-            </Link>
-            <Link href="/" className={buttonVariants({ variant: "ghost", size: "md" })}>
-              Keep exploring
-            </Link>
-          </div>
-        </div>
-
-        {/* Smart follow-up — what usually goes with what was just booked. */}
-        <RecommendationRail
-          context={{
-            destination: {
-              city: listing.location.city ?? listing.location.label,
-              country: listing.location.country ?? "",
-              countryCode: listing.location.countryCode,
-              label: listing.location.label,
-            },
-            departureDate: selection.checkIn || selection.singleDate || undefined,
-            returnDate: selection.checkOut || undefined,
-            travelers: { adults: guests, children: 0, infants: 0 },
-            tripType: "one-way",
-            currency: "USD",
-            seededBy: listing.vertical,
-            updatedAt: "",
-          }}
-          className="mx-auto mt-10 max-w-4xl"
-          title={
-            isRequest
-              ? `While you wait — more in ${listing.location.city ?? listing.location.label}`
-              : `Your stay is confirmed. What else for ${listing.location.city ?? listing.location.label}?`
-          }
-          subtitle="Add these to a trip and book them together next time"
-          maxGroups={3}
-          variant="compact"
-        />
-      </Container>
+      <Confirmation
+        booking={confirmed}
+        listing={listing}
+        isRequest={requestOnly}
+        isGuest={!user}
+      />
     );
   }
 
-  // --- Steps 1–2 ------------------------------------------------------------
+  const primaryLabel = requestOnly
+    ? "Submit request"
+    : payLater
+      ? `Pay deposit ${money(amountNow)}`
+      : `Pay ${money(amountNow)}`;
+
   return (
     <Container className="py-8 md:py-10">
       <div className="mb-6 flex flex-col gap-4">
@@ -324,93 +420,423 @@ function CheckoutInner({
           <ArrowLeft className="size-4" aria-hidden="true" />
           Back to listing
         </Link>
-        <h1 className="text-h3 text-ink">{isRequest ? "Complete your request" : "Checkout"}</h1>
-        <ProgressSteps labels={stepLabels} current={step} />
+        <h1 className="text-h3 text-ink">{requestOnly ? "Complete your request" : "Checkout"}</h1>
+        <ProgressSteps labels={STEP_LABELS} current={step} />
+        {/* Advancing a step replaces the whole panel with no focus move, so
+            without this the change is silent to a screen reader. */}
+        <p aria-live="polite" className="sr-only">
+          Step {step + 1} of {STEP_LABELS.length}: {STEP_LABELS[step]}
+        </p>
+        {hold && step >= 2 && (
+          <HoldTimer key={hold.id} hold={hold} onExpire={releaseAndRequote} />
+        )}
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <div className="min-w-0 space-y-6">
-          {step === 0 ? (
-            <DetailsStep
-              config={config}
-              selection={selection}
-              onCheckIn={(v) =>
-                setSelection((p) => ({
-                  ...p,
-                  checkIn: v,
-                  checkOut: p.checkOut && p.checkOut <= v ? "" : p.checkOut,
-                }))
-              }
-              onCheckOut={(v) => setSelection((p) => ({ ...p, checkOut: v }))}
-              onSingleDate={(v) => setSelection((p) => ({ ...p, singleDate: v }))}
-              onQuantity={setQuantity}
-              contactName={contactName}
-              onContactName={setContactName}
-              contactEmail={contactEmail}
-              onContactEmail={setContactEmail}
-              contactCountry={contactCountry}
-              onContactCountry={setContactCountry}
-              guestNames={guestNames}
-              onGuestName={setGuestName}
-              onAddGuest={addGuestName}
-              onRemoveGuest={removeGuestName}
-              savedTravelerNames={savedTravelers.map((t) => t.fullName)}
-              requests={requests}
-              onRequests={setRequests}
-            />
-          ) : isRequest ? (
-            <ReviewStep
-              contactName={contactName}
-              contactEmail={contactEmail}
-              guestNames={guestNames.map((n) => n.trim()).filter(Boolean)}
-              requests={requests}
-            />
-          ) : (
-            <PaymentStep
-              payment={payment}
-              promoInput={promoInput}
-              onPromoInput={setPromoInput}
-              onApplyPromo={onApplyPromo}
-              promoBusy={promoBusy}
-              promoError={promoError}
-              promo={promo}
-              onClearPromo={() => {
-                setPromo(null);
-                setPromoInput("");
-                setPromoError(null);
-              }}
-            />
+          {holdError && (
+            <p
+              role="alert"
+              className="flex items-start gap-2 rounded-card border border-danger/30 bg-danger/8 p-4 text-sm text-danger"
+            >
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              {holdError}
+            </p>
           )}
 
+          {/* ---------------------------------------------------------- Trip */}
+          {step === 0 && (
+            <>
+              <Section title="Your dates">
+                {config.dateMode === "range" && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <Labelled label={config.checkInLabel ?? "Check-in"}>
+                      <input
+                        type="date"
+                        value={checkIn}
+                        onChange={(event) => {
+                          setCheckIn(event.target.value);
+                          if (checkOut && checkOut <= event.target.value) setCheckOut("");
+                          setChoice(null);
+                        }}
+                        className={cn(controlClasses(false), "h-11")}
+                      />
+                    </Labelled>
+                    <Labelled label={config.checkOutLabel ?? "Check-out"}>
+                      <input
+                        type="date"
+                        value={checkOut}
+                        min={checkIn || undefined}
+                        onChange={(event) => {
+                          setCheckOut(event.target.value);
+                          setChoice(null);
+                        }}
+                        className={cn(controlClasses(false), "h-11")}
+                      />
+                    </Labelled>
+                  </div>
+                )}
+                {config.dateMode === "single" && (
+                  <Labelled label={config.singleDateLabel ?? "Date"}>
+                    <input
+                      type="date"
+                      value={checkIn}
+                      onChange={(event) => {
+                        setCheckIn(event.target.value);
+                        setCheckOut(event.target.value);
+                        setChoice(null);
+                      }}
+                      className={cn(controlClasses(false), "h-11")}
+                    />
+                  </Labelled>
+                )}
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-field border border-line px-4 py-3">
+                    <Stepper
+                      label={noun.many[0].toUpperCase() + noun.many.slice(1)}
+                      showLabel
+                      value={units}
+                      min={1}
+                      max={8}
+                      onChange={(value) => {
+                        setUnits(value);
+                        setChoice(null);
+                      }}
+                    />
+                  </div>
+                  <div className="rounded-field border border-line px-4 py-3">
+                    <Stepper
+                      label="Guests"
+                      showLabel
+                      value={guests}
+                      min={1}
+                      max={16}
+                      onChange={(value) => {
+                        setGuests(value);
+                        setChoice(null);
+                      }}
+                    />
+                  </div>
+                </div>
+              </Section>
+
+              <Section
+                title={`Choose your ${noun.one}`}
+                hint="Prices are per stay and include the rate plan you pick."
+              >
+                <RoomRateSelector
+                  listing={listing}
+                  checkIn={checkIn}
+                  checkOut={perNight ? checkOut : checkIn}
+                  units={units}
+                  guests={guests}
+                  value={resolvedChoice}
+                  onChange={setChoice}
+                  variant="compact"
+                />
+              </Section>
+
+              {(offers.length > 0 || true) && (
+                <Section title="Add something extra" hint="Optional — add or remove any time before you pay.">
+                  <AddOnsPicker
+                    offers={offers}
+                    selected={selectedAddOns}
+                    onToggle={(id) =>
+                      setSelectedAddOns((prev) =>
+                        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+                      )
+                    }
+                    scale={addOnScale}
+                    insuranceSelected={insurance}
+                    onToggleInsurance={setInsurance}
+                  />
+                </Section>
+              )}
+            </>
+          )}
+
+          {/* --------------------------------------------------- Travellers */}
+          {step === 1 && (
+            <>
+              {!user && (
+                <p className="flex items-start gap-2 rounded-card border border-primary/25 bg-primary-50/60 p-4 text-sm text-body">
+                  <UserCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
+                  <span>
+                    You&rsquo;re checking out as a guest.{" "}
+                    <Link href="/login?next=/checkout" className="font-medium text-primary underline">
+                      Sign in
+                    </Link>{" "}
+                    to use saved travellers, loyalty points and see this booking in your
+                    account.
+                  </span>
+                </p>
+              )}
+
+              <Section title="Who's travelling?">
+                <TravelerFields
+                  travelers={travelers}
+                  onChange={(index, patch) =>
+                    setTravelers((prev) =>
+                      prev.map((t, i) => (i === index ? { ...t, ...patch } : t)),
+                    )
+                  }
+                  onAdd={(prefill) =>
+                    setTravelers((prev) =>
+                      prev.length >= MAX_TRAVELERS ? prev : [...prev, prefill ?? emptyTraveler()],
+                    )
+                  }
+                  onRemove={(index) =>
+                    setTravelers((prev) => prev.filter((_, i) => i !== index))
+                  }
+                  savedTravelers={savedTravelers}
+                  requireDocuments={needsDocuments}
+                  max={MAX_TRAVELERS}
+                />
+              </Section>
+
+              <Section title="Anything we should know?" hint="Optional">
+                <textarea
+                  value={specialRequests}
+                  onChange={(event) => setSpecialRequests(event.target.value)}
+                  rows={3}
+                  placeholder="Early check-in, dietary needs, accessibility, a quiet room…"
+                  className={cn(controlClasses(false), "resize-none py-2.5")}
+                />
+              </Section>
+            </>
+          )}
+
+          {/* ------------------------------------------------------ Payment */}
+          {step === 2 && (
+            <>
+              {attempt?.status === "requires_action" ? (
+                <ThreeDsChallenge
+                  attempt={attempt}
+                  onSubmit={onAuthenticate}
+                  onCancel={retryPayment}
+                  busy={busy}
+                  error={authError}
+                />
+              ) : attempt?.status === "failed" ? (
+                <PaymentFailure attempt={attempt} onRetry={retryPayment} busy={busy} />
+              ) : null}
+
+              <Section title="Savings">
+                <div className="space-y-4">
+                  <div>
+                    <p className="mb-2 text-sm font-medium text-ink">Promo or coupon code</p>
+                    {promoCode && quote.discounts.some((d) => d.kind === "coupon") ? (
+                      <div className="flex items-center justify-between rounded-field border border-emerald-500/30 bg-emerald-500/8 px-4 py-3">
+                        <span className="flex items-center gap-2 text-sm font-medium text-emerald-700">
+                          <Tag className="size-4" aria-hidden="true" />
+                          {promoCode} applied
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPromoCode(undefined);
+                            setPromoInput("");
+                          }}
+                          aria-label="Remove promo code"
+                          className="grid size-7 place-items-center rounded-field text-emerald-700 hover:bg-emerald-500/15"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={promoInput}
+                            onChange={(event) => setPromoInput(event.target.value)}
+                            placeholder="Enter a code"
+                            aria-label="Promo code"
+                            className={cn(controlClasses(Boolean(rejected)), "h-11 flex-1 uppercase")}
+                          />
+                          <Button
+                            variant="outline"
+                            size="md"
+                            onClick={applyPromo}
+                            disabled={!promoInput.trim()}
+                          >
+                            Apply
+                          </Button>
+                        </div>
+                        {rejected && (
+                          <p role="alert" className="mt-2 text-sm text-danger">
+                            {rejected.reason}
+                          </p>
+                        )}
+                        {wallet.filter((c) => c.status === "active").length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {wallet
+                              .filter((c) => c.status === "active")
+                              .slice(0, 3)
+                              .map((coupon) => (
+                                <button
+                                  key={coupon.id}
+                                  type="button"
+                                  onClick={() => {
+                                    setPromoInput(coupon.code);
+                                    setPromoCode(coupon.code);
+                                  }}
+                                  className="rounded-pill bg-surface-muted px-3 py-1 text-xs font-medium text-body transition-colors hover:bg-primary-50 hover:text-primary"
+                                >
+                                  {coupon.code} · {coupon.title}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {quote.maxPointsRedeemable >= REDEEM_STEP && (
+                    <div className="rounded-field border border-line bg-surface-muted/40 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="flex items-center gap-2 text-sm font-medium text-ink">
+                          <Sparkles className="size-4 text-primary" aria-hidden="true" />
+                          Use loyalty points
+                        </p>
+                        <p className="text-xs text-muted">
+                          Balance {loyalty.balance.toLocaleString()} · up to{" "}
+                          {quote.maxPointsRedeemable.toLocaleString()} here
+                        </p>
+                      </div>
+                      <input
+                        type="range"
+                        min={0}
+                        max={quote.maxPointsRedeemable}
+                        step={REDEEM_STEP}
+                        value={points}
+                        onChange={(event) => setPoints(Number(event.target.value))}
+                        aria-label="Loyalty points to redeem"
+                        className="mt-3 w-full accent-(--color-primary)"
+                      />
+                      <p className="mt-1 text-sm text-body">
+                        {points > 0
+                          ? `Redeeming ${points.toLocaleString()} points — ${money(points * 0.01)} off`
+                          : "Slide to apply points to this booking."}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </Section>
+
+              {!requestOnly && (
+                <Section title="How would you like to pay?">
+                  <MockPaymentPicker state={payment} />
+
+                  <label className="mt-4 flex cursor-pointer items-start gap-2.5 rounded-field border border-line p-3.5">
+                    <input
+                      type="checkbox"
+                      checked={payLater}
+                      onChange={(event) => setPayLater(event.target.checked)}
+                      className="mt-0.5 size-4 rounded border-line text-primary focus:ring-primary"
+                    />
+                    <span className="text-sm">
+                      <span className="font-medium text-ink">Reserve now, pay later</span>
+                      <span className="mt-0.5 block text-muted">
+                        Pay a {money(depositPlan(quote.money.total, checkIn).depositAmount)}{" "}
+                        deposit today; the balance of{" "}
+                        {money(depositPlan(quote.money.total, checkIn).balanceAmount)} is due{" "}
+                        {date(depositPlan(quote.money.total, checkIn).balanceDueAt!)}.
+                      </span>
+                    </span>
+                  </label>
+                </Section>
+              )}
+
+              <Section title="Cancellation policy">
+                <p className="text-sm text-body">{quote.stay.cancellationSummary}</p>
+                {!quote.refundable && (
+                  <p className="mt-2 flex items-start gap-2 rounded-field bg-warning/10 p-3 text-sm text-amber-800">
+                    <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    You chose a non-refundable rate. Switching to{" "}
+                    <button
+                      type="button"
+                      className="font-semibold underline"
+                      onClick={() => {
+                        setChoice({ roomTypeId: resolvedChoice.roomTypeId, ratePlanId: "flexible" });
+                        setStep(0);
+                      }}
+                    >
+                      a flexible rate
+                    </button>{" "}
+                    lets you cancel free of charge.
+                  </p>
+                )}
+                <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-sm text-body">
+                  <input
+                    type="checkbox"
+                    checked={consent}
+                    onChange={(event) => setConsent(event.target.checked)}
+                    className="mt-0.5 size-4 rounded border-line text-primary focus:ring-primary"
+                  />
+                  <span>
+                    I&rsquo;ve read and accept the{" "}
+                    <Link href="/terms-and-conditions" className="font-medium text-primary underline">
+                      terms
+                    </Link>{" "}
+                    and this booking&rsquo;s cancellation policy.
+                  </span>
+                </label>
+              </Section>
+            </>
+          )}
+
+          {/* ------------------------------------------------------- Footer */}
           <div className="flex items-center justify-between gap-3">
-            {step === 1 ? (
-              <Button variant="outline" size="md" onClick={goBack} disabled={submitting}>
+            {step > 0 ? (
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => setStep((s) => (s - 1) as Step)}
+                disabled={busy}
+              >
                 <ArrowLeft className="size-4" aria-hidden="true" />
                 Back
               </Button>
             ) : (
               <span />
             )}
-            {step === 0 ? (
-              <Button variant="primary" size="lg" onClick={goNext} disabled={!detailsValid}>
-                Continue
-              </Button>
-            ) : (
+
+            {step === 0 && (
               <Button
                 variant="primary"
                 size="lg"
-                onClick={onSubmit}
-                disabled={!paymentValid || submitting}
+                onClick={() => {
+                  setStep(1);
+                  scrollTop();
+                }}
+                disabled={!tripValid}
               >
-                {submitting ? (
+                Continue to travellers
+              </Button>
+            )}
+            {step === 1 && (
+              <Button variant="primary" size="lg" onClick={goToPayment} disabled={!travelersValid}>
+                {requestOnly ? "Review request" : "Continue to payment"}
+              </Button>
+            )}
+            {step === 2 && (
+              <Button
+                variant="primary"
+                size="lg"
+                onClick={requestOnly ? () => finalize(null) : runPayment}
+                disabled={!paymentValid || busy || attempt?.status === "requires_action"}
+              >
+                {busy ? (
                   <>
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     Processing…
                   </>
                 ) : (
                   <>
-                    {!isRequest && <Lock className="size-4" aria-hidden="true" />}
-                    {payCta}
+                    {!requestOnly && <Lock className="size-4" aria-hidden="true" />}
+                    {primaryLabel}
                   </>
                 )}
               </Button>
@@ -421,20 +847,25 @@ function CheckoutInner({
         <aside className="lg:sticky lg:top-24">
           <OrderSummary
             listing={listing}
-            config={config}
-            pricing={pricing}
-            selection={selection}
+            quote={quote}
+            checkIn={checkIn}
+            checkOut={perNight ? checkOut : checkIn}
             guests={guests}
-            discountUsd={discountUsd}
-            couponCode={promo?.code}
+            units={units}
           />
-          <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted">
-            <ShieldCheck className="size-3.5" aria-hidden="true" />
-            {isRequest ? "No payment taken today" : "Secure checkout · you can cancel for free"}
-          </p>
+          {plan && (
+            <div className="mt-3 rounded-card border border-primary/25 bg-primary-50/60 p-4 text-sm">
+              <p className="flex justify-between font-medium text-ink">
+                <span>Due today</span>
+                <span>{money(plan.depositAmount)}</span>
+              </p>
+              <p className="mt-1 flex justify-between text-muted">
+                <span>Balance {date(plan.balanceDueAt!)}</span>
+                <span>{money(plan.balanceAmount)}</span>
+              </p>
+            </div>
+          )}
 
-          {/* Contextual AI entry — answers questions about what's being booked
-              without leaving checkout. The assistant never touches payment. */}
           <AskAiButton
             label="Ask AI about this booking"
             prompt={`What is the cancellation policy for ${listing.title}?`}
@@ -461,19 +892,144 @@ function CheckoutInner({
   );
 }
 
-// --------------------------------------------------------------------------
-// Progress indicator
-// --------------------------------------------------------------------------
+function scrollTop(): void {
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation
+// ---------------------------------------------------------------------------
+
+function Confirmation({
+  booking,
+  listing,
+  isRequest,
+  isGuest,
+}: {
+  booking: Booking;
+  listing: Listing;
+  isRequest: boolean;
+  isGuest: boolean;
+}) {
+  const { money, date } = useLocale();
+  const vertical = VERTICALS[listing.vertical];
+
+  return (
+    <Container className="py-10 md:py-14">
+      <div className="mx-auto max-w-xl text-center">
+        <div className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-500/12 text-emerald-600">
+          <CheckCircle2 className="size-9" aria-hidden="true" />
+        </div>
+        <h1 className="mt-5 text-h3 text-ink">
+          {isRequest ? "Request submitted" : "You're all booked!"}
+        </h1>
+        <p className="mt-2 text-body">
+          {isRequest
+            ? "We've received your enquiry and will confirm availability by email shortly."
+            : "A confirmation is in your inbox and the booking is in your account."}
+        </p>
+
+        <div className="mt-6 rounded-panel border border-line bg-surface p-5 text-left shadow-card">
+          <Row label="Reference">
+            <span className="font-mono font-semibold text-ink">{booking.reference}</span>
+          </Row>
+          <Row label={vertical.label}>
+            <span className="max-w-[60%] truncate text-sm font-medium text-ink">
+              {booking.productTitle}
+            </span>
+          </Row>
+          {booking.stay && (
+            <Row label="Room & rate">
+              <span className="text-sm text-ink">
+                {booking.stay.units} × {booking.stay.roomTypeName} · {booking.stay.ratePlanName}
+              </span>
+            </Row>
+          )}
+          <Row label="Dates">
+            <span className="text-sm text-ink">
+              {date(booking.startAt)} – {date(booking.endAt)}
+            </span>
+          </Row>
+          <Row label={isRequest ? "Estimated total" : "Total"}>
+            <span className="font-bold text-accent-600">{money(booking.money.total)}</span>
+          </Row>
+          {booking.paymentPlan?.kind === "deposit" && (
+            <Row label="Balance due">
+              <span className="text-sm text-ink">
+                {money(booking.paymentPlan.balanceAmount)} by{" "}
+                {date(booking.paymentPlan.balanceDueAt!)}
+              </span>
+            </Row>
+          )}
+        </div>
+
+        {isGuest && (
+          <p className="mt-4 rounded-card border border-line bg-surface-muted/50 p-4 text-sm text-body">
+            You booked as a guest. Create an account with{" "}
+            <strong className="text-ink">{booking.customer.email}</strong> and this booking
+            will be waiting for you.
+          </p>
+        )}
+
+        <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-center">
+          <Link
+            href={`/account/bookings/${booking.id}`}
+            className={buttonVariants({ variant: "primary", size: "md" })}
+          >
+            View booking
+          </Link>
+          <Link
+            href="/account/bookings"
+            className={buttonVariants({ variant: "outline", size: "md" })}
+          >
+            All bookings
+          </Link>
+          <Link href="/" className={buttonVariants({ variant: "ghost", size: "md" })}>
+            Keep exploring
+          </Link>
+        </div>
+      </div>
+
+      <RecommendationRail
+        context={{
+          destination: {
+            city: listing.location.city ?? listing.location.label,
+            country: listing.location.country ?? "",
+            countryCode: listing.location.countryCode,
+            label: listing.location.label,
+          },
+          departureDate: booking.startAt.slice(0, 10),
+          returnDate: booking.endAt.slice(0, 10),
+          travelers: { adults: booking.travelers.length, children: 0, infants: 0 },
+          tripType: "one-way",
+          currency: "USD",
+          seededBy: listing.vertical,
+          updatedAt: "",
+        }}
+        className="mx-auto mt-10 max-w-4xl"
+        title={`What else for ${listing.location.city ?? listing.location.label}?`}
+        subtitle="Add these to a trip and book them together next time"
+        maxGroups={3}
+        variant="compact"
+      />
+    </Container>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Shared bits
+// ---------------------------------------------------------------------------
 
 function ProgressSteps({ labels, current }: { labels: string[]; current: number }) {
   return (
     <ol className="flex items-center gap-2">
-      {labels.map((label, i) => {
-        const done = i < current;
-        const active = i === current;
+      {labels.map((label, index) => {
+        const done = index < current;
+        const active = index === current;
         return (
           <li key={label} className="flex flex-1 items-center gap-2">
             <span
+              aria-current={active ? "step" : undefined}
               className={cn(
                 "grid size-7 shrink-0 place-items-center rounded-full text-xs font-semibold transition-colors",
                 done && "bg-primary text-white",
@@ -481,17 +1037,19 @@ function ProgressSteps({ labels, current }: { labels: string[]; current: number 
                 !done && !active && "bg-surface-muted text-muted",
               )}
             >
-              {done ? <Check className="size-4" aria-hidden="true" /> : i + 1}
+              {done ? <Check className="size-4" aria-hidden="true" /> : index + 1}
             </span>
+            {/* `sr-only` rather than `hidden` below `sm`: the numbered circle
+                alone gives a screen reader no idea what step 2 *is*. */}
             <span
               className={cn(
-                "hidden text-sm font-medium sm:block",
+                "text-sm font-medium sr-only sm:not-sr-only sm:block",
                 active || done ? "text-ink" : "text-muted",
               )}
             >
               {label}
             </span>
-            {i < labels.length - 1 && (
+            {index < labels.length - 1 && (
               <span className="h-px flex-1 bg-line" aria-hidden="true" />
             )}
           </li>
@@ -501,335 +1059,38 @@ function ProgressSteps({ labels, current }: { labels: string[]; current: number 
   );
 }
 
-// --------------------------------------------------------------------------
-// Step 1 — Trip details
-// --------------------------------------------------------------------------
-
-interface DetailsStepProps {
-  config: (typeof BOOKING_CONFIG)[keyof typeof BOOKING_CONFIG];
-  selection: BookingSelection;
-  onCheckIn: (v: string) => void;
-  onCheckOut: (v: string) => void;
-  onSingleDate: (v: string) => void;
-  onQuantity: (key: string, v: number) => void;
-  contactName: string;
-  onContactName: (v: string) => void;
-  contactEmail: string;
-  onContactEmail: (v: string) => void;
-  contactCountry: string;
-  onContactCountry: (v: string) => void;
-  guestNames: string[];
-  onGuestName: (i: number, v: string) => void;
-  onAddGuest: (v?: string) => void;
-  onRemoveGuest: (i: number) => void;
-  savedTravelerNames: string[];
-  requests: string;
-  onRequests: (v: string) => void;
-}
-
-function DetailsStep(props: DetailsStepProps) {
-  const {
-    config,
-    selection,
-    onCheckIn,
-    onCheckOut,
-    onSingleDate,
-    onQuantity,
-    contactName,
-    onContactName,
-    contactEmail,
-    onContactEmail,
-    contactCountry,
-    onContactCountry,
-    guestNames,
-    onGuestName,
-    onAddGuest,
-    onRemoveGuest,
-    savedTravelerNames,
-    requests,
-    onRequests,
-  } = props;
-
-  const unusedTravellers = savedTravelerNames.filter((n) => !guestNames.includes(n));
-
-  return (
-    <div className="space-y-6">
-      <Section title="Your trip">
-        {config.dateMode === "range" && (
-          <div className="grid grid-cols-2 gap-3">
-            <FieldLabel label={config.checkInLabel ?? "Check-in"}>
-              <input
-                type="date"
-                value={selection.checkIn}
-                onChange={(e) => onCheckIn(e.target.value)}
-                className={cn(controlClasses(false), "h-11")}
-              />
-            </FieldLabel>
-            <FieldLabel label={config.checkOutLabel ?? "Check-out"}>
-              <input
-                type="date"
-                value={selection.checkOut}
-                min={selection.checkIn || undefined}
-                onChange={(e) => onCheckOut(e.target.value)}
-                className={cn(controlClasses(false), "h-11")}
-              />
-            </FieldLabel>
-          </div>
-        )}
-        {config.dateMode === "single" && (
-          <FieldLabel label={config.singleDateLabel ?? "Date"}>
-            <input
-              type="date"
-              value={selection.singleDate}
-              onChange={(e) => onSingleDate(e.target.value)}
-              className={cn(controlClasses(false), "h-11")}
-            />
-          </FieldLabel>
-        )}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {config.fields.map((field) => (
-            <div key={field.key} className="rounded-field border border-line px-4 py-3">
-              <Stepper
-                label={field.label}
-                hint={field.hint}
-                showLabel
-                value={selection.quantities[field.key] ?? field.default}
-                min={field.min}
-                max={field.max}
-                onChange={(v) => onQuantity(field.key, v)}
-              />
-            </div>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Contact details">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FieldLabel label="Full name">
-            <input
-              type="text"
-              value={contactName}
-              onChange={(e) => onContactName(e.target.value)}
-              className={cn(controlClasses(false), "h-11")}
-            />
-          </FieldLabel>
-          <FieldLabel label="Email">
-            <input
-              type="email"
-              value={contactEmail}
-              onChange={(e) => onContactEmail(e.target.value)}
-              className={cn(controlClasses(false), "h-11")}
-            />
-          </FieldLabel>
-          <FieldLabel label="Country (optional)">
-            <input
-              type="text"
-              value={contactCountry}
-              onChange={(e) => onContactCountry(e.target.value)}
-              placeholder="e.g. US"
-              className={cn(controlClasses(false), "h-11")}
-            />
-          </FieldLabel>
-        </div>
-      </Section>
-
-      <Section title="Guests">
-        <div className="space-y-2">
-          {guestNames.map((name, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => onGuestName(i, e.target.value)}
-                placeholder={i === 0 ? "Lead guest" : `Guest ${i + 1}`}
-                className={cn(controlClasses(false), "h-11 flex-1")}
-              />
-              {i > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onRemoveGuest(i)}
-                  aria-label={`Remove guest ${i + 1}`}
-                  className="grid size-10 shrink-0 place-items-center rounded-field text-muted hover:bg-danger/10 hover:text-danger"
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-        {guestNames.length < MAX_GUEST_NAMES && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => onAddGuest("")}
-              className="inline-flex items-center gap-1.5 rounded-pill border border-line px-3.5 py-1.5 text-sm font-medium text-body transition-colors hover:border-primary hover:text-primary"
-            >
-              <UserPlus className="size-4" aria-hidden="true" />
-              Add guest
-            </button>
-            {unusedTravellers.slice(0, 4).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => onAddGuest(n)}
-                className="inline-flex items-center gap-1.5 rounded-pill bg-surface-muted px-3.5 py-1.5 text-sm text-body transition-colors hover:bg-primary-50 hover:text-primary"
-              >
-                <Plus className="size-3.5" aria-hidden="true" />
-                {n}
-              </button>
-            ))}
-          </div>
-        )}
-      </Section>
-
-      <Section title="Special requests (optional)">
-        <textarea
-          value={requests}
-          onChange={(e) => onRequests(e.target.value)}
-          rows={3}
-          placeholder="Anything the host should know — early check-in, dietary needs, accessibility…"
-          className={cn(controlClasses(false), "resize-none py-2.5")}
-        />
-      </Section>
-    </div>
-  );
-}
-
-// --------------------------------------------------------------------------
-// Step 2a — Payment
-// --------------------------------------------------------------------------
-
-interface PaymentStepProps {
-  payment: PaymentSelection;
-  promoInput: string;
-  onPromoInput: (v: string) => void;
-  onApplyPromo: () => void;
-  promoBusy: boolean;
-  promoError: string | null;
-  promo: { code: string; discountUsd: number } | null;
-  onClearPromo: () => void;
-}
-
-function PaymentStep(props: PaymentStepProps) {
-  const {
-    payment,
-    promoInput,
-    onPromoInput,
-    onApplyPromo,
-    promoBusy,
-    promoError,
-    promo,
-    onClearPromo,
-  } = props;
-
-  return (
-    <div className="space-y-6">
-      <Section title="Payment method">
-        <PaymentMethodPicker selection={payment} />
-      </Section>
-
-      <Section title="Promo code">
-        {promo ? (
-          <div className="flex items-center justify-between rounded-field border border-emerald-500/30 bg-emerald-500/8 px-4 py-3">
-            <span className="flex items-center gap-2 text-sm font-medium text-emerald-700">
-              <Tag className="size-4" aria-hidden="true" />
-              {promo.code} applied
-            </span>
-            <button
-              type="button"
-              onClick={onClearPromo}
-              aria-label="Remove promo code"
-              className="grid size-7 place-items-center rounded-field text-emerald-700 hover:bg-emerald-500/15"
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={promoInput}
-              onChange={(e) => onPromoInput(e.target.value)}
-              placeholder="Enter a code"
-              className={cn(controlClasses(false), "h-11 flex-1 uppercase")}
-            />
-            <Button variant="outline" size="md" onClick={onApplyPromo} disabled={promoBusy || !promoInput.trim()}>
-              {promoBusy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : "Apply"}
-            </Button>
-          </div>
-        )}
-        {promoError && <p className="mt-2 text-sm text-danger">{promoError}</p>}
-      </Section>
-    </div>
-  );
-}
-
-// --------------------------------------------------------------------------
-// Step 2b — Review (request verticals)
-// --------------------------------------------------------------------------
-
-function ReviewStep({
-  contactName,
-  contactEmail,
-  guestNames,
-  requests,
+function Section({
+  title,
+  hint,
+  children,
 }: {
-  contactName: string;
-  contactEmail: string;
-  guestNames: string[];
-  requests: string;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-6">
-      <Section title="Review your request">
-        <dl className="space-y-3 text-sm">
-          <ReviewRow label="Contact">
-            {contactName} · {contactEmail}
-          </ReviewRow>
-          {guestNames.length > 0 && (
-            <ReviewRow label="Travellers">{guestNames.join(", ")}</ReviewRow>
-          )}
-          {requests.trim() && <ReviewRow label="Notes">{requests}</ReviewRow>}
-        </dl>
-        <div className="mt-4 flex items-start gap-2 rounded-field bg-surface-muted/60 p-3">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
-          <p className="text-sm text-body">
-            No payment is taken now. Our team reviews availability and pricing, then emails you a
-            confirmation to complete the booking.
-          </p>
-        </div>
-      </Section>
-    </div>
-  );
-}
-
-function ReviewRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-0.5 border-b border-line pb-3 last:border-0 last:pb-0 sm:flex-row sm:justify-between sm:gap-4">
-      <dt className="text-muted">{label}</dt>
-      <dd className="font-medium text-ink sm:text-right">{children}</dd>
-    </div>
-  );
-}
-
-// --------------------------------------------------------------------------
-// Shared bits
-// --------------------------------------------------------------------------
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
     <section className="rounded-card border border-line bg-surface p-5 shadow-card">
-      <h2 className="mb-4 text-base font-semibold text-ink">{title}</h2>
-      {children}
+      <h2 className="text-base font-semibold text-ink">{title}</h2>
+      {hint && <p className="mt-0.5 mb-3 text-sm text-muted">{hint}</p>}
+      <div className={hint ? "" : "mt-4"}>{children}</div>
     </section>
   );
 }
 
-function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
+function Labelled({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-ink">{label}</span>
       {children}
     </label>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-line py-2.5 last:border-0">
+      <span className="text-sm text-muted">{label}</span>
+      {children}
+    </div>
   );
 }

@@ -44,6 +44,12 @@ import {
   type PlatformFinancials,
 } from "./money";
 import { MERCHANTS } from "./seed";
+import { DEMO_CUSTOMER_PHONE } from "./seed-extra";
+import { commitHold, releaseForBooking } from "./inventory";
+import { loyaltyService } from "./engagement";
+import { messagingService } from "./messaging";
+import { recordRefund as recordPaymentRefund } from "./payments";
+import { track } from "./telemetry";
 import {
   getState,
   mutate,
@@ -208,7 +214,7 @@ export interface RecordAuditInput {
   to?: string;
 }
 
-function recordAudit(input: RecordAuditInput): AuditLogEntry {
+export function recordAudit(input: RecordAuditInput): AuditLogEntry {
   const entry: AuditLogEntry = {
     id: nextId("aud"),
     at: new Date().toISOString(),
@@ -240,7 +246,7 @@ export interface NotifyInput {
   customerId?: string;
 }
 
-function notify(input: NotifyInput): PlatformNotification {
+export function notify(input: NotifyInput): PlatformNotification {
   const notification: PlatformNotification = {
     id: nextId("ntf"),
     createdAt: new Date().toISOString(),
@@ -412,6 +418,30 @@ export interface CreateBookingInput {
    * combo/promo discount and, like them, reduces the commission base.
    */
   extraDiscount?: AppliedDiscount;
+
+  // --- customer-checkout extras ------------------------------------------
+
+  /** Catalog listing behind the booking. */
+  listing?: Booking["listing"];
+  /** Room type / rate plan selected from the inventory engine. */
+  stay?: Booking["stay"];
+  /** Hold to commit — the units this booking consumes. */
+  holdId?: string;
+  /** Extras bought at checkout; folded into the commissionable base. */
+  addOns?: Booking["addOns"];
+  fx?: Booking["fx"];
+  paymentPlan?: Booking["paymentPlan"];
+  specialRequests?: string;
+  pointsRedeemed?: number;
+  /**
+   * Cancellation policy to record. Normally derived from the product, but the
+   * stay's rate plan overrides it (non-refundable rates are the whole point).
+   */
+  cancellationPolicyId?: CancellationPolicyId;
+  /** Full traveler records, when checkout collected more than names. */
+  travelers?: Booking["travelers"];
+  /** Discount lines decided outside the offer engine (points, wallet coupons). */
+  discounts?: AppliedDiscount[];
 }
 
 export const bookingService = {
@@ -646,7 +676,22 @@ export const bookingService = {
     });
 
     notifyForTransition(result);
+    applyLifecycleSideEffects(result);
     return delay(result);
+  },
+
+  /**
+   * Synchronous refund quote — the calculation is pure, so a confirmation
+   * dialog can render it without a loading state. Returns `null` for an unknown
+   * booking rather than throwing, because the caller is mid-render.
+   */
+  quoteCancellationSync(
+    id: string,
+    reason: RefundReason = "customer_cancellation",
+  ): RefundQuote | null {
+    const booking = getState().bookings.find((b) => b.id === id);
+    if (!booking) return null;
+    return quoteRefund({ booking, reason, at: new Date().toISOString() });
   },
 
   /** Quote the refund a cancellation would produce, without changing anything. */
@@ -685,7 +730,12 @@ export const bookingService = {
     const combo = input.comboId
       ? state.combos.find((c) => c.id === input.comboId)
       : undefined;
-    const base = combo ? combo.comboPrice : input.baseAmount;
+    // Add-ons are part of what is sold, so they sit inside the commissionable
+    // base rather than being bolted on after tax.
+    const addOnTotal = money(
+      (input.addOns ?? []).reduce((sum, addOn) => sum + addOn.total, 0),
+    );
+    const base = money((combo ? combo.comboPrice : input.baseAmount) + addOnTotal);
 
     const b2b = account
       ? priceB2B({
@@ -695,7 +745,9 @@ export const bookingService = {
         })
       : null;
 
-    const discounts: Booking["discounts"] = [];
+    // Discount lines the caller already resolved (loyalty points, a wallet
+    // coupon) arrive priced; the offer engine appends to the same list.
+    const discounts: Booking["discounts"] = [...(input.discounts ?? [])];
     if (combo) {
       discounts.push({
         kind: "combo",
@@ -771,14 +823,17 @@ export const bookingService = {
         organizationId: account?.id,
         organizationName: account?.name,
       },
-      travelers: (input.travelerNames?.length
-        ? input.travelerNames
-        : [input.customerName]
-      ).map((fullName, i) => ({
-        id: `${id}_trv_${i}`,
-        fullName,
-        type: "adult" as const,
-      })),
+      travelers:
+        input.travelers?.length
+          ? input.travelers
+          : (input.travelerNames?.length
+              ? input.travelerNames
+              : [input.customerName]
+            ).map((fullName, i) => ({
+              id: `${id}_trv_${i}`,
+              fullName,
+              type: "adult" as const,
+            })),
       startAt: input.startAt,
       endAt: input.endAt,
       nights,
@@ -795,9 +850,17 @@ export const bookingService = {
       },
       money: priced,
       discounts,
-      cancellationPolicyId: combo
-        ? combo.cancellationPolicyId
-        : defaultPolicyFor(input.productKind),
+      cancellationPolicyId:
+        input.cancellationPolicyId ??
+        (combo ? combo.cancellationPolicyId : defaultPolicyFor(input.productKind)),
+      listing: input.listing,
+      stay: input.stay,
+      holdId: input.holdId,
+      addOns: input.addOns?.length ? input.addOns : undefined,
+      fx: input.fx,
+      paymentPlan: input.paymentPlan,
+      specialRequests: input.specialRequests,
+      pointsRedeemed: input.pointsRedeemed,
       createdAt: now,
       updatedAt: now,
       timeline: [
@@ -853,6 +916,16 @@ export const bookingService = {
         if (target) target.creditUsed = money(target.creditUsed + booking.money.total);
       }
     });
+
+    // The hold becomes the booking's allocation — units stay consumed, and a
+    // later cancellation is what gives them back.
+    if (input.holdId) commitHold(input.holdId, booking.id);
+    if (input.pointsRedeemed && input.pointsRedeemed > 0) {
+      loyaltyService.redeem(booking.customer.email, input.pointsRedeemed, {
+        bookingId: booking.id,
+        bookingRef: booking.reference,
+      });
+    }
 
     recordAudit({
       actor,
@@ -1011,6 +1084,101 @@ function notifyForTransition(result: BookingActionResult): void {
     default:
       break;
   }
+}
+
+/**
+ * The cross-cutting consequences of a lifecycle move: inventory, loyalty, the
+ * payment ledger and the customer's messages.
+ *
+ * Kept out of the `mutate` block above so each concern owns its own store
+ * writes — and so a real backend can move any one of them behind an event bus
+ * without unpicking the transition itself.
+ */
+function applyLifecycleSideEffects(result: BookingActionResult): void {
+  const { booking, to } = result;
+  const at = new Date().toISOString();
+  const dates = `${booking.startAt.slice(0, 10)} → ${booking.endAt.slice(0, 10)}`;
+  const context = {
+    name: booking.customer.name.split(" ")[0],
+    reference: booking.reference,
+    product: booking.productTitle,
+    dates,
+    total: `${booking.money.currency} ${booking.money.total.toFixed(2)}`,
+  };
+  const to_ = { email: booking.customer.email, phone: DEMO_CUSTOMER_PHONE };
+  const href = `/account/bookings/${booking.id}`;
+
+  // --- inventory --------------------------------------------------------
+  // A booking that will never be delivered gives its units straight back.
+  if (to === "cancelled" || to === "failed" || to === "refunded") {
+    releaseForBooking(booking.id);
+  }
+
+  // --- loyalty ----------------------------------------------------------
+  if (to === "completed") loyaltyService.earnForBooking(booking, at);
+  if (to === "refunded") loyaltyService.reverseForBooking(booking, at);
+
+  // --- payment ledger ---------------------------------------------------
+  if (to === "refunded" && result.refund) {
+    recordPaymentRefund(booking.id, result.refund.refundAmount, at);
+  }
+
+  // --- customer communications -----------------------------------------
+  const common = {
+    to: to_,
+    customerEmail: booking.customer.email,
+    bookingId: booking.id,
+    bookingRef: booking.reference,
+    href,
+  };
+  switch (to) {
+    case "confirmed":
+      messagingService.send({ templateKey: "booking_confirmed", context, ...common });
+      break;
+    case "failed":
+      messagingService.send({
+        templateKey: "payment_failed",
+        context: {
+          ...context,
+          reason: FAILURE_REASON_LABELS[booking.failureReason ?? "technical_error"],
+        },
+        ...common,
+      });
+      break;
+    case "cancelled":
+      messagingService.send({
+        templateKey: "cancellation_confirmed",
+        context: {
+          ...context,
+          refund: `${booking.money.currency} ${(result.refund?.refundAmount ?? 0).toFixed(2)}`,
+          fee: `${booking.money.currency} ${(result.refund?.cancellationFee ?? 0).toFixed(2)}`,
+        },
+        ...common,
+      });
+      break;
+    case "refunded":
+      messagingService.send({
+        templateKey: "refund_processed",
+        context: {
+          ...context,
+          refund: `${booking.money.currency} ${(result.refund?.refundAmount ?? 0).toFixed(2)}`,
+        },
+        ...common,
+      });
+      break;
+    case "completed":
+      messagingService.send({ templateKey: "review_invite", context, ...common, href: "/account/reviews" });
+      break;
+    default:
+      break;
+  }
+
+  track("booking_status_changed", {
+    from: result.from,
+    to,
+    reference: booking.reference,
+    productKind: booking.productKind,
+  });
 }
 
 // ---------------------------------------------------------------------------

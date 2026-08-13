@@ -5,6 +5,7 @@ import { Download, FileText } from "lucide-react";
 import type { Invoice } from "@/types/traveler";
 import { useLocale } from "@/features/i18n";
 import { useMergedInvoices } from "@/features/account/created-bookings";
+import { useCustomerInvoices } from "@/features/booking";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
 import { StatusBadge, invoiceStatusMeta } from "@/components/account/status-badge";
@@ -17,10 +18,21 @@ function download(invoice: Invoice) {
   toast.success("Invoice downloaded", { description: invoice.number });
 }
 
+/**
+ * Invoices are derived from bookings rather than stored: one booking, one
+ * invoice, always in step with the money on the record. Flight and trip
+ * bookings still carry their own invoices and are merged in.
+ */
 export function InvoicesView({ invoices: serverInvoices }: { invoices: Invoice[] }) {
   const { date } = useLocale();
-  const invoices = useMergedInvoices(serverInvoices);
+  const domainInvoices = useCustomerInvoices();
+  const merged = useMergedInvoices(serverInvoices);
   const [active, setActive] = useState<Invoice | null>(null);
+
+  const ids = new Set(domainInvoices.map((i) => i.id));
+  const invoices = [...domainInvoices, ...merged.filter((i) => !ids.has(i.id))].sort((a, z) =>
+    z.issuedAt.localeCompare(a.issuedAt),
+  );
 
   if (invoices.length === 0) {
     return (

@@ -3,12 +3,48 @@
  * they turn base USD amounts and ISO dates into localized strings. The UI reads
  * them through {@link "./use-locale".useLocale} so switching currency or
  * language reformats everything at once.
+ *
+ * `Intl.NumberFormat` / `Intl.DateTimeFormat` construction is orders of
+ * magnitude more expensive than calling `.format()` on an existing instance,
+ * and these run per row: a map view renders a price for every marker *and*
+ * every result row, and a dashboard table formats a currency and two dates per
+ * booking. Instances are therefore cached by locale + options, which is safe
+ * because they are immutable and stateless.
  */
 
 import type { Currency } from "@/types/geo";
 
 /** Currencies that conventionally display no decimal places. */
 const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "IDR"]);
+
+const numberFormatters = new Map<string, Intl.NumberFormat>();
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function numberFormatter(
+  locale: string,
+  options: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let formatter = numberFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, options);
+    numberFormatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+function dateFormatter(
+  locale: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let formatter = dateFormatters.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options);
+    dateFormatters.set(key, formatter);
+  }
+  return formatter;
+}
 
 /**
  * Format a base-USD amount in the active currency, converting via the mock
@@ -22,7 +58,7 @@ export function formatMoney(
 ): string {
   const converted = amountUsd * currency.rate;
   const fractionDigits = ZERO_DECIMAL.has(currency.code) ? 0 : undefined;
-  return new Intl.NumberFormat(currency.locale, {
+  return numberFormatter(currency.locale, {
     style: "currency",
     currency: currency.code,
     maximumFractionDigits: fractionDigits ?? 0,
@@ -36,7 +72,7 @@ export function formatNumber(
   locale: string,
   options: Intl.NumberFormatOptions = {},
 ): string {
-  return new Intl.NumberFormat(locale, options).format(value);
+  return numberFormatter(locale, options).format(value);
 }
 
 /** Format an ISO date string for the active language. */
@@ -47,7 +83,7 @@ export function formatDate(
 ): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat(locale, options).format(date);
+  return dateFormatter(locale, options).format(date);
 }
 
 /** Format an ISO date + time for the active language. */

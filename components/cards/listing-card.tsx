@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { PriceTag } from "@/components/ui/price-tag";
 import { RatingStars } from "@/components/ui/rating-stars";
+import { CompareButton } from "@/features/discovery/compare-button";
 import { WishlistButton } from "./wishlist-button";
 
 export interface ListingCardProps {
@@ -27,6 +28,8 @@ export interface ListingCardProps {
   priceFrom?: boolean;
   /** Show the wishlist heart. Default true. */
   wishlist?: boolean;
+  /** Show the compare toggle. Default true. */
+  compare?: boolean;
   /** next/image `sizes` for this grid context. */
   imageSizes?: string;
   className?: string;
@@ -45,6 +48,7 @@ export function ListingCard({
   leadBadge,
   priceFrom,
   wishlist = true,
+  compare = true,
   imageSizes,
   className,
 }: ListingCardProps) {
@@ -69,7 +73,14 @@ export function ListingCard({
             </>
           )
         }
-        actions={wishlist ? <WishlistButton label={title} listingId={listing.id} /> : undefined}
+        actions={
+          (wishlist || compare) && (
+            <>
+              {compare && <CompareButton listingId={listing.id} label={title} />}
+              {wishlist && <WishlistButton label={title} listingId={listing.id} />}
+            </>
+          )
+        }
       />
 
       <CardBody>

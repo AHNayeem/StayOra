@@ -168,5 +168,9 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
       await delay(latencyMs);
       store = store.filter((row) => getId(row) !== id);
     },
+
+    peek(): T[] {
+      return store.map((row) => ({ ...row }));
+    },
   };
 }

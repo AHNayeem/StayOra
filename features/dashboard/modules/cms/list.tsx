@@ -1,23 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { GitBranch, Plus } from "lucide-react";
 import { ConfirmDialog, ResourceListView, RowActions } from "../../crud";
 import { Button, Drawer, Select } from "../../ui";
 import { Can } from "../../rbac/permission-guard";
+import { DropdownItem } from "../../ui/dropdown-menu";
 import type { ActiveFilter } from "../../ui/filter-bar";
 import { labelMap, statusOptions } from "../../lib/status";
 import { useCmsPages, useDeleteCmsPage } from "./hooks";
 import { CmsPageForm } from "./form";
+import { CmsWorkflowDrawer } from "./workflow-drawer";
 import { CMS_STATUSES, type CmsPage } from "./types";
 
 const statusLabel = labelMap(CMS_STATUSES);
 
-/** CMS pages list — create, per-row edit and delete for pages, blog and FAQ. */
+/**
+ * CMS pages list — create, edit and delete, plus the editorial workflow
+ * (submit, approve, schedule, preview, version history) behind the "Workflow"
+ * row action.
+ */
 export function CmsPagesList() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<CmsPage | null>(null);
   const [deleting, setDeleting] = useState<CmsPage | null>(null);
+  const [workflow, setWorkflow] = useState<CmsPage | null>(null);
   const del = useDeleteCmsPage();
 
   const list = useCmsPages((row) => (
@@ -27,6 +34,13 @@ export function CmsPagesList() {
       onDelete={() => setDeleting(row)}
       editPermission={["cms:update"]}
       deletePermission={["cms:delete"]}
+      extra={
+        <Can anyPermission={["cms:read"]}>
+          <DropdownItem icon={<GitBranch />} onSelect={() => setWorkflow(row)}>
+            Workflow &amp; history
+          </DropdownItem>
+        </Can>
+      }
     />
   ));
 
@@ -42,7 +56,7 @@ export function CmsPagesList() {
 
   const confirmDelete = async () => {
     if (!deleting) return;
-    await del.mutateAsync(deleting.id);
+    await del.mutateAsync(deleting);
     setDeleting(null);
   };
 
@@ -90,6 +104,8 @@ export function CmsPagesList() {
           />
         )}
       </Drawer>
+
+      <CmsWorkflowDrawer page={workflow} onClose={() => setWorkflow(null)} />
 
       <ConfirmDialog
         open={Boolean(deleting)}

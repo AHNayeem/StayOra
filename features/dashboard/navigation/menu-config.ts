@@ -44,6 +44,11 @@ export const DASHBOARD_MENU: MenuNode[] = [
     icon: "Boxes",
     anyPermission: ["catalog:read"],
     children: [
+      {
+        id: "catalog-rates",
+        label: "Rates & availability",
+        href: "/dashboard/catalog/rates",
+      },
       { id: "catalog-hotels", label: "Hotels", href: "/dashboard/catalog/hotels" },
       { id: "catalog-apartments", label: "Apartments", href: "/dashboard/catalog/apartments" },
       { id: "catalog-resorts", label: "Resorts", href: "/dashboard/catalog/resorts" },

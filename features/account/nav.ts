@@ -8,6 +8,7 @@ import {
   Gift,
   Heart,
   History,
+  LifeBuoy,
   LayoutDashboard,
   Luggage,
   MessageSquare,
@@ -22,7 +23,12 @@ import {
 } from "lucide-react";
 
 /** A count that can be shown as a badge next to a nav item. */
-export type AccountBadgeKey = "messages" | "notifications" | "wishlist" | "reviews";
+export type AccountBadgeKey =
+  | "messages"
+  | "notifications"
+  | "wishlist"
+  | "reviews"
+  | "support";
 
 export interface AccountNavItem {
   label: string;
@@ -70,6 +76,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
     heading: "Account",
     items: [
       { label: "Messages", href: "/account/messages", icon: MessageSquare, badge: "messages" },
+      { label: "Help & support", href: "/account/support", icon: LifeBuoy, badge: "support" },
       { label: "Notifications", href: "/account/notifications", icon: Bell, badge: "notifications" },
       { label: "Profile", href: "/account/profile", icon: User },
       { label: "Saved travelers", href: "/account/travelers", icon: Users },

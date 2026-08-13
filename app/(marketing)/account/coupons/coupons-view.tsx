@@ -2,7 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { Copy, Ticket } from "lucide-react";
-import type { Coupon, CouponStatus } from "@/types/traveler";
+import {
+  CAMPAIGN_LABELS,
+  type WalletCoupon,
+  type WalletCouponStatus,
+} from "@/features/dashboard/domain";
+import { useWalletCoupons } from "@/features/booking";
 import { useLocale } from "@/features/i18n";
 import { AccountPageHeader } from "@/components/account/account-page-header";
 import { AccountEmpty } from "@/components/account/account-empty";
@@ -10,7 +15,7 @@ import { StatusBadge, couponStatusMeta } from "@/components/account/status-badge
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
-type Scope = CouponStatus | "all";
+type Scope = WalletCouponStatus | "all";
 
 const SCOPES: { key: Scope; label: string }[] = [
   { key: "all", label: "All" },
@@ -19,11 +24,19 @@ const SCOPES: { key: Scope; label: string }[] = [
   { key: "expired", label: "Expired" },
 ];
 
-export function CouponsView({ coupons }: { coupons: Coupon[] }) {
+/**
+ * The traveller's coupon wallet.
+ *
+ * Coupons are campaign-issued records in the domain, so a code copied here is
+ * the same record checkout validates and marks used — and an expired or
+ * already-used code is refused there with the reason shown to the customer.
+ */
+export function CouponsView() {
+  const coupons = useWalletCoupons();
   const [scope, setScope] = useState<Scope>("all");
 
   const counts = useMemo(() => {
-    const map = new Map<CouponStatus, number>();
+    const map = new Map<WalletCouponStatus, number>();
     for (const c of coupons) map.set(c.status, (map.get(c.status) ?? 0) + 1);
     return map;
   }, [coupons]);
@@ -39,7 +52,7 @@ export function CouponsView({ coupons }: { coupons: Coupon[] }) {
 
       <div className="mb-6 flex flex-wrap gap-2">
         {SCOPES.map((s) => {
-          const count = s.key === "all" ? coupons.length : (counts.get(s.key as CouponStatus) ?? 0);
+          const count = s.key === "all" ? coupons.length : (counts.get(s.key as WalletCouponStatus) ?? 0);
           return (
             <button
               key={s.key}
@@ -77,13 +90,13 @@ export function CouponsView({ coupons }: { coupons: Coupon[] }) {
   );
 }
 
-function CouponCard({ coupon }: { coupon: Coupon }) {
+function CouponCard({ coupon }: { coupon: WalletCoupon }) {
   const { date, money } = useLocale();
   const meta = couponStatusMeta(coupon.status);
   const disabled = coupon.status !== "active";
 
   const valueLabel =
-    coupon.kind === "percent" ? `${coupon.value}% OFF` : `${money(coupon.value)} OFF`;
+    coupon.discountType === "percent" ? `${coupon.value}% OFF` : `${money(coupon.value)} OFF`;
 
   const onCopy = async () => {
     try {
@@ -115,8 +128,10 @@ function CouponCard({ coupon }: { coupon: Coupon }) {
         </div>
         <p className="text-sm text-body">{coupon.description}</p>
         <p className="text-xs text-muted">
-          {coupon.scope}
-          {coupon.minSpendUsd ? ` · Min. spend ${money(coupon.minSpendUsd)}` : ""}
+          {CAMPAIGN_LABELS[coupon.campaign]}
+          {coupon.products.length > 0 ? ` · ${coupon.products.join(", ")}` : " · Any booking"}
+          {coupon.minSpend > 0 ? ` · Min. spend ${money(coupon.minSpend)}` : ""}
+          {coupon.maxDiscount > 0 ? ` · Max ${money(coupon.maxDiscount)}` : ""}
         </p>
 
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-line pt-2">

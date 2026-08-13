@@ -8,3 +8,4 @@ export {
   useMarkAllNotificationsRead,
 } from "./hooks";
 export { NotificationsView } from "./notifications-view";
+export { NotificationComposer } from "./composer";

@@ -16,8 +16,16 @@ import type {
   PassengerCounts,
 } from "@/types/flight";
 import { seatedPassengers, totalPassengers } from "./fares";
+import { destinationExtraById } from "./destination-extras";
 
-/** Display metadata for each ancillary group, in booking-flow order. */
+/**
+ * Display metadata for each ancillary group, in booking-flow order.
+ *
+ * `{city}` in a title or description is replaced with the destination city at
+ * render (see {@link fillCity}) — the destination groups at the end of the list
+ * are the only ones that need it, and a token keeps this table static data
+ * rather than a function of the offer.
+ */
 export const ANCILLARY_GROUPS: Array<{
   category: AncillaryCategory;
   title: string;
@@ -60,7 +68,30 @@ export const ANCILLARY_GROUPS: Array<{
     description: "Door-to-door pickup, booked with your flight.",
     icon: "CarFront",
   },
+  {
+    category: "esim",
+    title: "Stay connected in {city}",
+    description: "A local data eSIM that activates on landing — no roaming bill.",
+    icon: "Signal",
+  },
+  {
+    category: "activity",
+    title: "Things to do in {city}",
+    description: "Highly rated experiences, added to this booking at today's price.",
+    icon: "Ticket",
+  },
+  {
+    category: "stay",
+    title: "Where to stay in {city}",
+    description: "Add a room to your trip and pay for the flight and hotel together.",
+    icon: "BedDouble",
+  },
 ];
+
+/** Replace the `{city}` token in group copy with the destination city. */
+export function fillCity(text: string, city: string): string {
+  return text.replace(/\{city\}/g, city);
+}
 
 export const ANCILLARY_OPTIONS: AncillaryOption[] = [
   // ---- Baggage --------------------------------------------------------------
@@ -283,6 +314,28 @@ export const ANCILLARY_BY_ID: Record<string, AncillaryOption> = Object.fromEntri
   ANCILLARY_OPTIONS.map((o) => [o.id, o]),
 );
 
+/**
+ * Resolve any selected extra by id — flight-side from the static catalogue,
+ * destination-side rebuilt from the id itself.
+ *
+ * Everything that prices a selection goes through here, because `{ optionId,
+ * quantity }` is all that survives into checkout, the invoice and the ticket:
+ * if an id didn't resolve there, a traveller would be charged for a hotel that
+ * vanished from their receipt.
+ */
+export function resolveAncillary(id: string): AncillaryOption | undefined {
+  return ANCILLARY_BY_ID[id] ?? destinationExtraById(id);
+}
+
+/**
+ * Noun for what `quantity` counts on an option — nights for a hotel, travellers
+ * for a meal, bookings for a transfer. Pluralised for the count given.
+ */
+export function ancillaryUnitNoun(option: AncillaryOption, count: number): string {
+  const noun = option.unitLabel ?? (option.perBooking ? "booking" : "traveller");
+  return `${noun}${count === 1 ? "" : "s"}`;
+}
+
 /** Options in one group, in catalogue order. */
 export function ancillariesIn(category: AncillaryCategory): AncillaryOption[] {
   return ANCILLARY_OPTIONS.filter((o) => o.category === category);
@@ -311,7 +364,9 @@ export function includedAncillaryIds(
  *
  * Per-passenger options multiply by the *seated* head count — an infant on a lap
  * doesn't get their own meal tray or checked bag allowance to extend — while
- * per-booking options (transfers) are charged once no matter the party size.
+ * per-booking options (transfers, a hotel room) are charged once no matter the
+ * party size, their `quantity` counting whatever their `unitLabel` says: one
+ * pickup, or four nights.
  */
 export function ancillariesTotal(
   selections: AncillarySelection[],
@@ -319,7 +374,7 @@ export function ancillariesTotal(
 ): number {
   const seated = Math.max(1, seatedPassengers(passengers));
   return selections.reduce((sum, selection) => {
-    const option = ANCILLARY_BY_ID[selection.optionId];
+    const option = resolveAncillary(selection.optionId);
     if (!option || option.free) return sum;
     const multiplier = option.perBooking ? 1 : seated;
     return sum + option.priceUsd * multiplier * Math.max(0, selection.quantity);
@@ -342,7 +397,7 @@ export function ancillaryLines(
   const seated = Math.max(1, seatedPassengers(passengers));
   return selections
     .map((selection) => {
-      const option = ANCILLARY_BY_ID[selection.optionId];
+      const option = resolveAncillary(selection.optionId);
       if (!option || selection.quantity <= 0) return null;
       const units = option.perBooking
         ? selection.quantity

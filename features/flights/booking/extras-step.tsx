@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Minus, Plus } from "lucide-react";
+import Image from "next/image";
+import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Minus, Plus } from "lucide-react";
 import type {
   AncillaryOption,
   AncillarySelection,
@@ -11,12 +12,20 @@ import { getAncillaries, getIncludedAncillaries } from "@/services/flight.servic
 import {
   ANCILLARY_GROUPS,
   ancillariesTotal,
+  ancillaryUnitNoun,
+  fillCity,
   totalCheckedKg,
 } from "@/lib/mock/ancillaries";
+import {
+  destinationCityName,
+  destinationCodeOf,
+  stayNights,
+} from "@/lib/mock/destination-extras";
 import { seatedPassengers } from "@/lib/mock/fares";
 import { useLocale } from "@/features/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { RatingStars } from "@/components/ui/rating-stars";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Icon } from "@/components/shared/lucide-icon";
 import { cn } from "@/lib/utils";
@@ -30,17 +39,23 @@ interface ExtrasStepProps {
 }
 
 /**
- * ExtrasStep — baggage, meals, assistance, protection and transfers.
+ * ExtrasStep — baggage, meals, assistance, protection, transfers, and the
+ * destination extras a traveller needs once they land: a local eSIM, things to
+ * do, and a bed.
  *
  * Grouped by what the traveller is actually deciding rather than by how the
- * airline files it. Two details matter:
+ * airline files it. Three details matter:
  *
  *  - **Extras already in the fare are shown as included, never sold.** A
  *    business-class ticket bundles lounge access; offering to sell it again is
  *    how a booking flow loses trust.
  *  - **Per-passenger pricing is spelled out.** "$18 × 3 travellers = $54" is
  *    stated on the row, because a party of four discovering the multiplication
- *    at the payment screen is the classic drip-pricing complaint.
+ *    at the payment screen is the classic drip-pricing complaint. Hotels say the
+ *    same thing in nights: "$189 × 4 nights = $756".
+ *  - **Destination extras are the real catalogue.** Activities and hotels are
+ *    the listings Otithee already sells, each linking out to its own page, so
+ *    "add a hotel" doesn't mean buying something the traveller can't inspect.
  *
  * Special assistance is free and stays free — it's a right, not an upsell.
  */
@@ -68,6 +83,12 @@ export function ExtrasStep({
   const seated = Math.max(1, seatedPassengers(offer.passengers));
   const total = ancillariesTotal(value, offer.passengers);
   const checkedKg = totalCheckedKg(offer.baggage, value, offer.passengers);
+
+  const city = destinationCityName(destinationCodeOf(offer));
+  // Hotels are priced per night, so "Add" has to mean a length of stay. The gap
+  // between landing and the return flight is the only number the traveller has
+  // already told us — start there, and let the stepper correct it.
+  const nights = stayNights(offer);
 
   const quantityOf = (id: string) =>
     value.find((s) => s.optionId === id)?.quantity ?? 0;
@@ -153,124 +174,29 @@ export function ExtrasStep({
                   <Icon name={group.icon} className="size-4" aria-hidden="true" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-ink">{group.title}</h2>
-                  <p className="text-sm text-muted">{group.description}</p>
+                  <h2 className="text-base font-semibold text-ink">
+                    {fillCity(group.title, city)}
+                  </h2>
+                  <p className="text-sm text-muted">
+                    {fillCity(group.description, city)}
+                  </p>
                 </div>
               </div>
 
               <ul className="space-y-2">
-                {groupOptions.map((option) => {
-                  const quantity = quantityOf(option.id);
-                  const max = option.maxQuantity ?? 1;
-                  const isToggle = max === 1;
-                  const selected = quantity > 0;
-                  const units = option.perBooking ? quantity : quantity * seated;
-                  const lineTotal = option.free ? 0 : option.priceUsd * units;
-
-                  return (
-                    <li key={option.id}>
-                      <div
-                        className={cn(
-                          "flex flex-wrap items-center gap-3 rounded-field border p-3 transition-colors",
-                          selected ? "border-primary bg-primary-50/50" : "border-line",
-                        )}
-                      >
-                        <Icon
-                          name={option.icon}
-                          className={cn(
-                            "size-5 shrink-0",
-                            selected ? "text-primary" : "text-muted",
-                          )}
-                          aria-hidden="true"
-                        />
-
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-ink">{option.label}</p>
-                          <p className="text-xs text-muted">{option.description}</p>
-                          {selected && !option.free && (
-                            <p className="mt-0.5 text-xs font-medium text-primary">
-                              {money(option.priceUsd)} ×{" "}
-                              {option.perBooking
-                                ? `${quantity} booking`
-                                : `${units} traveller${units === 1 ? "" : "s"}`}{" "}
-                              = {money(lineTotal)}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="text-sm font-semibold text-ink">
-                            {option.free ? (
-                              <span className="text-success">Free</span>
-                            ) : (
-                              <>
-                                {money(option.priceUsd)}
-                                <span className="text-xs font-normal text-muted">
-                                  {option.perBooking ? " / booking" : " / traveller"}
-                                </span>
-                              </>
-                            )}
-                          </span>
-
-                          {isToggle ? (
-                            <Button
-                              variant={selected ? "primary" : "outline"}
-                              size="sm"
-                              onClick={() => setQuantity(option.id, selected ? 0 : 1)}
-                              aria-pressed={selected}
-                            >
-                              {selected ? (
-                                <>
-                                  <Check className="size-4" aria-hidden="true" />
-                                  Added
-                                </>
-                              ) : (
-                                "Add"
-                              )}
-                            </Button>
-                          ) : (
-                            <span className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => setQuantity(option.id, quantity - 1)}
-                                disabled={quantity === 0}
-                                aria-label={`Remove one ${option.label}`}
-                                className={cn(
-                                  "grid size-8 place-items-center rounded-full border transition-colors",
-                                  quantity === 0
-                                    ? "cursor-not-allowed border-line text-muted/40"
-                                    : "border-line text-ink hover:border-primary hover:text-primary",
-                                )}
-                              >
-                                <Minus className="size-4" aria-hidden="true" />
-                              </button>
-                              <span
-                                aria-live="polite"
-                                className="w-5 text-center text-sm font-semibold tabular-nums text-ink"
-                              >
-                                {quantity}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => setQuantity(option.id, quantity + 1)}
-                                disabled={quantity >= max}
-                                aria-label={`Add one ${option.label}`}
-                                className={cn(
-                                  "grid size-8 place-items-center rounded-full border transition-colors",
-                                  quantity >= max
-                                    ? "cursor-not-allowed border-line text-muted/40"
-                                    : "border-line text-ink hover:border-primary hover:text-primary",
-                                )}
-                              >
-                                <Plus className="size-4" aria-hidden="true" />
-                              </button>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
+                {groupOptions.map((option) => (
+                  <li key={option.id}>
+                    <ExtraRow
+                      option={option}
+                      quantity={quantityOf(option.id)}
+                      seated={seated}
+                      // Everything else is added one at a time; a stay is added
+                      // for the length of the trip.
+                      addQuantity={option.category === "stay" ? nights : 1}
+                      onQuantity={(next) => setQuantity(option.id, next)}
+                    />
+                  </li>
+                ))}
               </ul>
 
               {group.category === "assistance" && (
@@ -304,6 +230,199 @@ export function ExtrasStep({
             <ArrowRight className="size-4" aria-hidden="true" />
           </Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+interface ExtraRowProps {
+  option: AncillaryOption;
+  quantity: number;
+  /** Seated head count — what a per-traveller price multiplies by. */
+  seated: number;
+  /** Quantity "Add" sets: 1 for most things, the night count for a stay. */
+  addQuantity: number;
+  onQuantity: (next: number) => void;
+}
+
+/**
+ * One purchasable row, from a $16 vegan meal to a four-night hotel stay.
+ *
+ * A single row rather than a card grid for the destination extras: an eSIM, a
+ * tour and a hotel are the same decision at different prices, and a traveller
+ * comparing them across two visual languages compares nothing. The extra fields
+ * a listing carries — thumbnail, review score, its own page — attach to the row
+ * without changing its shape.
+ */
+function ExtraRow({ option, quantity, seated, addQuantity, onQuantity }: ExtraRowProps) {
+  const { money } = useLocale();
+
+  const max = option.maxQuantity ?? 1;
+  const selected = quantity > 0;
+  // Per-traveller extras charge the head count; per-booking ones charge their
+  // own quantity, which for a stay is the number of nights.
+  const units = option.perBooking ? quantity : quantity * seated;
+  const lineTotal = option.free ? 0 : option.priceUsd * units;
+  const highlights = option.highlights ?? [];
+
+  // A multi-unit extra whose natural starting quantity isn't 1 (a stay) opens
+  // with an Add button and only then reveals the stepper — starting a hotel at
+  // "0 nights" with a disabled minus is a worse first impression than "Add".
+  const stepper = max > 1 && (selected || addQuantity <= 1);
+
+  return (
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-3 rounded-field border p-3 transition-colors",
+        selected ? "border-primary bg-primary-50/50" : "border-line",
+      )}
+    >
+      {option.imageUrl ? (
+        <Image
+          src={option.imageUrl}
+          alt=""
+          width={56}
+          height={56}
+          sizes="56px"
+          className="size-14 shrink-0 rounded-field object-cover"
+        />
+      ) : (
+        <Icon
+          name={option.icon}
+          className={cn("size-5 shrink-0", selected ? "text-primary" : "text-muted")}
+          aria-hidden="true"
+        />
+      )}
+
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-ink">{option.label}</p>
+        <p className="text-xs text-muted">{option.description}</p>
+
+        {(option.rating !== undefined || highlights.length > 0) && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {option.rating !== undefined && (
+              <RatingStars
+                value={option.rating}
+                size="sm"
+                showValue
+                reviewCount={option.reviewCount}
+              />
+            )}
+            {highlights.map((highlight) => (
+              <Badge key={highlight} variant="neutral" size="sm">
+                {highlight}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        {selected && !option.free && (
+          <p className="mt-1 text-xs font-medium text-primary">
+            {money(option.priceUsd)} × {units} {ancillaryUnitNoun(option, units)} ={" "}
+            {money(lineTotal)}
+          </p>
+        )}
+
+        {option.href && (
+          <a
+            href={option.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-1 inline-flex items-center gap-0.5 text-xs font-medium text-primary hover:underline"
+          >
+            Full details
+            <ArrowUpRight className="size-3" aria-hidden="true" />
+            <span className="sr-only">for {option.label} (opens in a new tab)</span>
+          </a>
+        )}
+
+        {selected && option.note && (
+          <p className="mt-1 text-xs text-muted">{option.note}</p>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-3">
+        <span className="text-sm font-semibold text-ink">
+          {option.free ? (
+            <span className="text-success">Free</span>
+          ) : (
+            <>
+              {money(option.priceUsd)}
+              <span className="text-xs font-normal text-muted">
+                {" / "}
+                {ancillaryUnitNoun(option, 1)}
+              </span>
+            </>
+          )}
+        </span>
+
+        {stepper ? (
+          <span className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => onQuantity(quantity - 1)}
+              disabled={quantity === 0}
+              aria-label={
+                option.unitLabel
+                  ? `Remove one ${option.unitLabel} from ${option.label}`
+                  : `Remove one ${option.label}`
+              }
+              className={cn(
+                "grid size-8 place-items-center rounded-full border transition-colors",
+                quantity === 0
+                  ? "cursor-not-allowed border-line text-muted/40"
+                  : "border-line text-ink hover:border-primary hover:text-primary",
+              )}
+            >
+              <Minus className="size-4" aria-hidden="true" />
+            </button>
+            <span
+              aria-live="polite"
+              className="min-w-5 text-center text-sm font-semibold tabular-nums text-ink"
+            >
+              {quantity}
+              {option.unitLabel && (
+                <span className="ml-1 text-xs font-normal text-muted">
+                  {ancillaryUnitNoun(option, quantity)}
+                </span>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => onQuantity(quantity + 1)}
+              disabled={quantity >= max}
+              aria-label={
+                option.unitLabel
+                  ? `Add one ${option.unitLabel} to ${option.label}`
+                  : `Add one ${option.label}`
+              }
+              className={cn(
+                "grid size-8 place-items-center rounded-full border transition-colors",
+                quantity >= max
+                  ? "cursor-not-allowed border-line text-muted/40"
+                  : "border-line text-ink hover:border-primary hover:text-primary",
+              )}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+            </button>
+          </span>
+        ) : (
+          <Button
+            variant={selected ? "primary" : "outline"}
+            size="sm"
+            onClick={() => onQuantity(selected ? 0 : Math.min(addQuantity, max))}
+            aria-pressed={selected}
+          >
+            {selected ? (
+              <>
+                <Check className="size-4" aria-hidden="true" />
+                Added
+              </>
+            ) : (
+              "Add"
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
