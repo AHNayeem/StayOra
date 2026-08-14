@@ -8,11 +8,34 @@ import { DASHBOARD_MENU } from "./menu-config";
 import { useBadgeCounts } from "./use-badge-counts";
 import type { MenuNode, ResolvedMenuNode } from "./types";
 
-/** Is `href` the active route for the current `pathname`? */
+/** Every href in the menu, so prefix matches can be resolved by specificity. */
+const MENU_HREFS: string[] = (function collect(nodes: MenuNode[]): string[] {
+  return nodes.flatMap((n) => [
+    ...(n.href ? [n.href] : []),
+    ...(n.children ? collect(n.children) : []),
+  ]);
+})(DASHBOARD_MENU);
+
+/** Does `pathname` sit at or under `href`? */
+function matchesHref(href: string, pathname: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * Is `href` the active route for the current `pathname`?
+ *
+ * Only the *most specific* matching link wins. Some links are prefixes of their
+ * siblings (Coupons lives at `/dashboard/promotions`, Offers at
+ * `/dashboard/promotions/offers`), so a plain prefix test would light up both.
+ */
 function isHrefActive(href: string | undefined, pathname: string): boolean {
   if (!href) return false;
   if (href === "/dashboard") return pathname === "/dashboard";
-  return pathname === href || pathname.startsWith(`${href}/`);
+  if (!matchesHref(href, pathname)) return false;
+  return !MENU_HREFS.some(
+    (other) =>
+      other.length > href.length && matchesHref(other, pathname),
+  );
 }
 
 /** Can the current user see this node (ignoring children)? */

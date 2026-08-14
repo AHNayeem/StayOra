@@ -23,7 +23,13 @@ import { useRbac } from "../../rbac/rbac-provider";
 import { useRoleView } from "../../domain/use-domain";
 import { useCommissionBreakdown } from "../commission/hooks";
 import { PRODUCT_KIND_LABELS } from "../bookings/types";
-import { settlementKeys, useMerchantFinancials, useSettlements } from "./hooks";
+import {
+  settlementKeys,
+  useMerchantBreakdown,
+  useMerchantFinancials,
+  useSettlements,
+} from "./hooks";
+import { PayoutTimeline } from "./payout-timeline";
 
 const statusLabel = labelMap(SETTLEMENT_STATUSES);
 const statusTone = toneMap(SETTLEMENT_STATUSES);
@@ -45,6 +51,7 @@ export function MerchantEarnings() {
   const merchantId = user.merchantId ?? MERCHANTS[0].id;
   const merchant = MERCHANTS.find((m) => m.id === merchantId);
   const financials = useMerchantFinancials(merchantId);
+  const mine = useMerchantBreakdown(merchantId);
   const breakdown = useCommissionBreakdown();
   const settlements = useSettlements();
 
@@ -60,6 +67,16 @@ export function MerchantEarnings() {
     name: PRODUCT_KIND_LABELS[r.key as keyof typeof PRODUCT_KIND_LABELS] ?? r.label,
     value: r.value,
   }));
+  // My own earnings, cut the ways a merchant actually asks about them.
+  const ratePlanRows = (mine.data?.byRatePlan ?? []).map((r) => ({
+    name: r.label,
+    value: r.value,
+  }));
+  const monthRows = (mine.data?.byMonth ?? []).slice(-12).map((r) => ({
+    name: r.key,
+    value: r.value,
+  }));
+  const latestSettlement = payouts.data?.[0];
 
   return (
     <div className="flex flex-col gap-5">
@@ -135,6 +152,53 @@ export function MerchantEarnings() {
           />
         </ChartCard>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="Net earnings by rate plan"
+          description="Which rate plans actually pay"
+          loading={mine.isLoading}
+          empty={mine.isSuccess && ratePlanRows.length === 0}
+        >
+          <CategoryBarChart
+            data={ratePlanRows}
+            xKey="name"
+            valueKey="value"
+            label="Net earnings"
+            horizontal
+            height={240}
+            valueFormatter={(v) => formatCurrency(v, currency)}
+          />
+        </ChartCard>
+        <ChartCard
+          title="Net earnings by month"
+          description="After commission and refunds"
+          loading={mine.isLoading}
+          empty={mine.isSuccess && monthRows.length === 0}
+        >
+          <CategoryBarChart
+            data={monthRows}
+            xKey="name"
+            valueKey="value"
+            label="Net earnings"
+            color={CHART_COLORS.primary}
+            height={240}
+            valueFormatter={(v) => formatCurrency(v, currency)}
+          />
+        </ChartCard>
+      </div>
+
+      {latestSettlement && (
+        <Panel flush>
+          <PanelHeader
+            title="Payout status"
+            description={`${latestSettlement.reference} · ${formatCurrency(latestSettlement.netPayable, latestSettlement.currency)} · ${latestSettlement.method}`}
+          />
+          <PanelBody>
+            <PayoutTimeline settlement={latestSettlement} />
+          </PanelBody>
+        </Panel>
+      )}
 
       <Panel flush>
         <PanelHeader

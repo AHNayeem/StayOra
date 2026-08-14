@@ -15,7 +15,12 @@
  */
 
 import {
+  adService,
+  advertisingService,
+  b2bService,
+  benefitsFor,
   bookingService,
+  campaignSpend,
   checkAvailability,
   cheapestQuote,
   couponService,
@@ -24,9 +29,21 @@ import {
   getState,
   holdInventory,
   loyaltyService,
+  commissionRuleService,
+  insuranceService,
+  membershipAdminService,
+  membershipService,
+  priceB2B,
+  propertyRecommendations,
+  quoteInsurance,
   quoteRefund,
   quoteStay,
   releaseHold,
+  resolveCommission,
+  revenueLedger,
+  revenueManagementService,
+  revenueService,
+  summarizeRevenue,
   supportService,
   sweepExpiredHolds,
   type PropertyRef,
@@ -452,6 +469,466 @@ const near = HOTELS.filter((l) => haversineKm(DEMO_ORIGIN, coordsFor(l)) <= 50);
 const far = HOTELS.filter((l) => haversineKm(DEMO_ORIGIN, coordsFor(l)) <= 20_000);
 check("radius filter narrows the set", near.length < far.length, `${near.length} vs ${far.length}`);
 check("a 20,000 km radius keeps everything", far.length === HOTELS.length);
+
+
+// ---------------------------------------------------------------------------
+section("Commission rules — resolution order, bounds, basis");
+// ---------------------------------------------------------------------------
+
+const azure = resolveCommission({
+  productKind: "hotels",
+  merchantId: "mrc_azure",
+  gross: 1_000,
+  net: 900,
+  merchantRate: 12,
+});
+check("a merchant rule beats the vertical rule", azure.scope === "merchant", azure.ruleName);
+check("merchant rule charges its own rate", azure.commission === 108, `${azure.commission}`);
+
+const highline = resolveCommission({
+  productKind: "hotels",
+  merchantId: "mrc_highline",
+  gross: 1_000,
+  net: 900,
+});
+check("a gross-basis rule ignores the discount", highline.basisAmount === 1_000, `${highline.basisAmount}`);
+check("gross basis charges on the gross sale", highline.commission === 130, `${highline.commission}`);
+
+const capped = resolveCommission({
+  productKind: "tours",
+  merchantId: "mrc_desert",
+  gross: 20_000,
+  net: 20_000,
+});
+check("a maximum fee caps the commission", capped.commission === 120, `${capped.commission}`);
+check("the cap is reported", capped.maxFeeApplied);
+
+const floored = resolveCommission({
+  productKind: "tours",
+  merchantId: "mrc_desert",
+  gross: 10,
+  net: 10,
+});
+check("a minimum fee floors the commission", floored.commission === 8, `${floored.commission}`);
+
+const flat = resolveCommission({ productKind: "flights", merchantId: "mrc_skyfare", gross: 900, net: 900 });
+check("a fixed-fee rule ignores the sale value", flat.commission === 9, `${flat.commission}`);
+
+const fallback = resolveCommission({ productKind: "apartments", merchantId: "mrc_nobody", gross: 100, net: 100 });
+check("an unmatched merchant falls back to the vertical rule", fallback.scope === "vertical", fallback.ruleName);
+
+// ---------------------------------------------------------------------------
+section("Scenario 1 — hotel commission end to end");
+// ---------------------------------------------------------------------------
+
+const scenarioMerchant = getState().bookings.find((b) => b.merchant.id === "mrc_azure")!.merchant;
+const hotelBooking = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: "Regression Suite — Deluxe",
+    destination: "Dubai",
+    merchantId: scenarioMerchant.id,
+    customerName: "Scenario Customer",
+    customerEmail: "scenario@otithee.com",
+    segment: "b2c",
+    startAt: "2026-10-01T14:00:00.000Z",
+    endAt: "2026-10-04T11:00:00.000Z",
+    quantity: 1,
+    baseAmount: 1_000,
+  },
+  ACTOR,
+);
+check("booking priced by the rule engine", hotelBooking.money.commissionRuleId === "cmr_m_azure", String(hotelBooking.money.commissionRuleId));
+check("commission is 12% of net sale", hotelBooking.money.commission === 120, `${hotelBooking.money.commission}`);
+check(
+  "merchant earning is net sale less commission",
+  hotelBooking.money.merchantEarning === 880,
+  `${hotelBooking.money.merchantEarning}`,
+);
+check(
+  "platform revenue is commission plus fees",
+  hotelBooking.money.platformRevenue === 140,
+  `${hotelBooking.money.platformRevenue}`,
+);
+check(
+  "the merchant's earning is NOT counted as platform revenue",
+  hotelBooking.money.platformRevenue < hotelBooking.money.merchantEarning,
+);
+check(
+  "tax is not platform revenue",
+  hotelBooking.money.taxes > 0 &&
+    hotelBooking.money.platformRevenue ===
+      hotelBooking.money.commission + hotelBooking.money.fees,
+);
+
+const commissionEntry = getState().commissions.find((c) => c.bookingId === hotelBooking.id);
+check("a commission ledger entry was written", Boolean(commissionEntry));
+check("the ledger agrees with the booking", commissionEntry?.commission === hotelBooking.money.commission);
+
+// ---------------------------------------------------------------------------
+section("Scenario 2 — insurance attach");
+// ---------------------------------------------------------------------------
+
+const plans = insuranceService.plansFor("hotels");
+check("insurance plans are offered", plans.length >= 3, `${plans.length}`);
+
+const standard = plans.find((p) => p.id === "ins_standard")!;
+const insuranceQuote = quoteInsurance(standard, { travelers: 2, tripValue: 1_000 });
+check("premium is per traveller", insuranceQuote.premium === 52, `${insuranceQuote.premium}`);
+check(
+  "premium splits into provider share and platform revenue",
+  insuranceQuote.providerShare + insuranceQuote.platformRevenue === insuranceQuote.premium,
+);
+check(
+  "a plan-scoped commission rule decides the platform's cut",
+  insuranceQuote.commissionRuleId === "cmr_i_standard",
+  String(insuranceQuote.commissionRuleId),
+);
+
+const insured = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: "Regression Suite — Insured",
+    destination: "Dubai",
+    merchantId: scenarioMerchant.id,
+    customerName: "Insured Customer",
+    customerEmail: "insured@otithee.com",
+    segment: "b2c",
+    startAt: "2026-10-10T14:00:00.000Z",
+    endAt: "2026-10-12T11:00:00.000Z",
+    quantity: 1,
+    baseAmount: 1_000,
+    travelerNames: ["Insured Customer", "Companion"],
+    insurancePlanId: "ins_standard",
+  },
+  ACTOR,
+);
+check("the premium is on the booking", insured.money.insurance === 52, `${insured.money.insurance}`);
+check(
+  "insurance is NOT in the commissionable base",
+  insured.money.commission === hotelBooking.money.commission,
+  `${insured.money.commission}`,
+);
+check(
+  "the booking total includes the premium",
+  insured.money.total === hotelBooking.money.total + 52,
+  `${insured.money.total} vs ${hotelBooking.money.total}`,
+);
+check(
+  "platform revenue includes the insurance margin",
+  insured.money.platformRevenue ===
+    hotelBooking.money.platformRevenue + insured.money.insuranceRevenue,
+);
+const policy = insuranceService.policyFor(insured.id);
+check("a policy record was issued", Boolean(policy), policy?.reference);
+
+// ---------------------------------------------------------------------------
+section("Scenario 3 — premium membership");
+// ---------------------------------------------------------------------------
+
+const premiumPlan = membershipService.planByCode("premium")!;
+const member = await membershipAdminService.subscribe(
+  {
+    customerEmail: "member@otithee.com",
+    customerName: "Member Tester",
+    planId: premiumPlan.id,
+  },
+  ACTOR,
+);
+check("subscription is active", member.status === "active");
+check("membership revenue was recorded", revenueLedger({ source: "membership" }).some((e) => e.customerEmail === "member@otithee.com"));
+
+const memberBenefits = benefitsFor("member@otithee.com");
+check("benefits resolve to the paid plan", memberBenefits.code === "premium", memberBenefits.code);
+
+const memberBooking = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: "Regression Suite — Member",
+    destination: "Dubai",
+    merchantId: scenarioMerchant.id,
+    customerName: "Member Tester",
+    customerEmail: "member@otithee.com",
+    segment: "b2c",
+    startAt: "2026-10-20T14:00:00.000Z",
+    endAt: "2026-10-22T11:00:00.000Z",
+    quantity: 1,
+    baseAmount: 1_000,
+  },
+  ACTOR,
+);
+check("the service fee is waived for a member", memberBooking.money.fees === 0, `${memberBooking.money.fees}`);
+check(
+  "the member discount is platform-funded",
+  memberBooking.money.platformFundedDiscount === 80,
+  `${memberBooking.money.platformFundedDiscount}`,
+);
+check(
+  "the merchant is made whole for a platform-funded discount",
+  memberBooking.money.merchantEarning === 880,
+  `${memberBooking.money.merchantEarning}`,
+);
+check(
+  "the subsidy comes out of platform revenue",
+  memberBooking.money.platformRevenue < hotelBooking.money.platformRevenue,
+  `${memberBooking.money.platformRevenue} vs ${hotelBooking.money.platformRevenue}`,
+);
+
+// ---------------------------------------------------------------------------
+section("Scenario 4 — advertising");
+// ---------------------------------------------------------------------------
+
+const campaign = adService.campaigns().find((c) => c.status === "pending_review")!;
+check("a campaign is awaiting review", Boolean(campaign), campaign?.name);
+check("a campaign under review does not serve", !adService.campaigns().some((c) => c.status === "pending_review" && campaignSpend(c) > 0));
+
+const approved = await advertisingService.setStatus(campaign.id, "active", { actor: ACTOR });
+check("the campaign was approved", approved.status === "active");
+
+await advertisingService.recordEvent(campaign.id, "impression", { count: 10_000 });
+const delivered = adService.campaign(campaign.id)!;
+check("impressions were recorded", delivered.metrics.impressions === 10_000, `${delivered.metrics.impressions}`);
+check("CPM spend follows delivery", campaignSpend(delivered) === 220, `${campaignSpend(delivered)}`);
+
+const billed = await advertisingService.bill(campaign.id, ACTOR);
+check("billing recognises the unbilled spend", billed.amount === 220, `${billed.amount}`);
+check(
+  "advertising revenue reaches the ledger",
+  revenueLedger({ source: "advertising" }).some((e) => e.campaignId === campaign.id),
+);
+
+const cappedCampaign = adService.campaign(campaign.id)!;
+await advertisingService.recordEvent(campaign.id, "impression", { count: 5_000_000 });
+check(
+  "spend never exceeds the budget",
+  campaignSpend(adService.campaign(campaign.id)!) <= cappedCampaign.budget,
+);
+
+// ---------------------------------------------------------------------------
+section("Scenario 5 — B2B booking, credit and margin");
+// ---------------------------------------------------------------------------
+
+const b2bTerms = priceB2B({
+  publicRate: 1_000,
+  netRateDiscount: 8,
+  markupRate: 12,
+  model: "commission_plus_markup",
+  agencyCommissionRate: 6,
+});
+check("net rate applies the negotiated discount", b2bTerms.netRate === 920, `${b2bTerms.netRate}`);
+check("markup is the agency's margin", b2bTerms.markup === 110.4, `${b2bTerms.markup}`);
+check("agency commission is paid out of the public rate", b2bTerms.agencyCommission === 60, `${b2bTerms.agencyCommission}`);
+check("the build-up is renderable", b2bTerms.lines.length >= 4, `${b2bTerms.lines.length}`);
+
+const creditBefore = await b2bService.creditStatus("org_globetrek");
+const b2bBooking = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: "Regression Suite — Agency",
+    destination: "Dubai",
+    merchantId: scenarioMerchant.id,
+    customerName: "Agency Traveller",
+    customerEmail: "agency@globetrek.example",
+    segment: "b2b",
+    organizationId: "org_globetrek",
+    startAt: "2026-11-01T14:00:00.000Z",
+    endAt: "2026-11-03T11:00:00.000Z",
+    quantity: 1,
+    baseAmount: 1_000,
+  },
+  ACTOR,
+);
+check("a B2B booking carries markup", b2bBooking.money.markup > 0, `${b2bBooking.money.markup}`);
+check(
+  "the account-scoped commission rule applied",
+  b2bBooking.money.commissionRuleId === "cmr_b_globetrek",
+  String(b2bBooking.money.commissionRuleId),
+);
+const creditAfter = await b2bService.creditStatus("org_globetrek");
+check(
+  "credit used rose by the invoiced total",
+  Math.round((creditAfter.creditUsed - creditBefore.creditUsed) * 100) ===
+    Math.round(b2bBooking.money.total * 100),
+  `${creditAfter.creditUsed - creditBefore.creditUsed} vs ${b2bBooking.money.total}`,
+);
+
+const overLimit = await b2bService.checkCredit("org_globetrek", creditAfter.available + 1);
+check("a booking over the limit is refused", !overLimit.ok, overLimit.reason);
+
+let creditRejected = false;
+try {
+  await bookingService.create(
+    {
+      productKind: "hotels",
+      productTitle: "Regression Suite — Over limit",
+      destination: "Dubai",
+      merchantId: scenarioMerchant.id,
+      customerName: "Agency Traveller",
+      customerEmail: "agency@globetrek.example",
+      segment: "b2b",
+      organizationId: "org_globetrek",
+      startAt: "2026-11-05T14:00:00.000Z",
+      endAt: "2026-11-06T11:00:00.000Z",
+      quantity: 1,
+      baseAmount: creditAfter.available * 2,
+    },
+    ACTOR,
+  );
+} catch {
+  creditRejected = true;
+}
+check("the credit limit is enforced at booking time", creditRejected);
+
+// ---------------------------------------------------------------------------
+section("Scenario 6 — cancellation reverses the right amounts");
+// ---------------------------------------------------------------------------
+
+await bookingService.transition(insured.id, "capture_payment", { actor: ACTOR });
+await bookingService.transition(insured.id, "confirm", { actor: ACTOR });
+const cancelQuote = quoteRefund({
+  booking: getState().bookings.find((b) => b.id === insured.id)!,
+  reason: "customer_cancellation",
+});
+check("the insurance premium is refundable pro-rata", cancelQuote.insuranceRefund > 0, `${cancelQuote.insuranceRefund}`);
+check(
+  "the platform keeps an administration share of the cancellation fee",
+  cancelQuote.platformCancellationFee >= 0,
+);
+
+await bookingService.transition(insured.id, "request_cancellation", { actor: ACTOR });
+await bookingService.transition(insured.id, "cancel", { actor: ACTOR });
+await bookingService.transition(insured.id, "initiate_refund", { actor: ACTOR });
+await bookingService.transition(insured.id, "process_refund", { actor: ACTOR });
+await bookingService.transition(insured.id, "complete_refund", { actor: ACTOR });
+
+const cancelled = getState().bookings.find((b) => b.id === insured.id)!;
+check("commission was reversed", cancelled.money.commissionReversed > 0, `${cancelled.money.commissionReversed}`);
+check(
+  "commission reversal is proportional, never more than what was charged",
+  cancelled.money.commissionReversed <= cancelled.money.commission,
+);
+check(
+  "insurance revenue was reversed too",
+  cancelled.money.insuranceRevenueReversed > 0,
+  `${cancelled.money.insuranceRevenueReversed}`,
+);
+const cancelledPolicy = getState().insurancePolicies.find((p) => p.bookingId === insured.id);
+check("the policy was unwound", (cancelledPolicy?.refunded ?? 0) > 0, `${cancelledPolicy?.refunded}`);
+const cancelledEntry = getState().commissions.find((c) => c.bookingId === insured.id);
+check(
+  "the commission ledger entry reflects the reversal",
+  (cancelledEntry?.reversed ?? 0) > 0,
+  `${cancelledEntry?.reversed}`,
+);
+
+// ---------------------------------------------------------------------------
+section("Scenario 7 — revenue management changes the price");
+// ---------------------------------------------------------------------------
+
+const rmRecommendations = propertyRecommendations(property, "2026-09-01", 30);
+check("recommendations are generated", rmRecommendations.length > 0, `${rmRecommendations.length}`);
+check(
+  "every recommendation carries its evidence",
+  rmRecommendations.every((r) => r.evidence.length > 0 && r.message.length > 0),
+);
+check(
+  "recommendations are deterministic",
+  JSON.stringify(propertyRecommendations(property, "2026-09-01", 30)) ===
+    JSON.stringify(rmRecommendations),
+);
+
+const priceRec = rmRecommendations.find((r) => r.action.price !== undefined);
+if (priceRec) {
+  const roomForRec = rooms.find((r) => r.id === priceRec.roomTypeId)!;
+  const before = quoteStay({
+    property,
+    roomTypeId: roomForRec.id,
+    ratePlanId: "standard",
+    checkIn: priceRec.date,
+    checkOut: new Date(new Date(`${priceRec.date}T00:00:00Z`).getTime() + 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+    units: 1,
+  });
+  await revenueManagementService.apply(priceRec, ACTOR);
+  const after = quoteStay({
+    property,
+    roomTypeId: roomForRec.id,
+    ratePlanId: "standard",
+    checkIn: priceRec.date,
+    checkOut: new Date(new Date(`${priceRec.date}T00:00:00Z`).getTime() + 86_400_000)
+      .toISOString()
+      .slice(0, 10),
+    units: 1,
+  });
+  check(
+    "applying a recommendation changes what the next customer is quoted",
+    after.roomSubtotal !== before.roomSubtotal,
+    `${before.roomSubtotal} → ${after.roomSubtotal}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+section("Revenue Center — the ledger reconciles");
+// ---------------------------------------------------------------------------
+
+const ledger = revenueLedger();
+const revenue = summarizeRevenue(ledger);
+check("the ledger has entries from several sources", revenue.bySource.length >= 5, `${revenue.bySource.length}`);
+check("GBV exceeds platform revenue", revenue.gmv > revenue.netPlatformRevenue);
+check("partner revenue is not platform revenue", revenue.partnerRevenue > revenue.netPlatformRevenue);
+check(
+  "net = gross − reversals − subsidies",
+  Math.abs(
+    revenue.netPlatformRevenue -
+      (revenue.grossPlatformRevenue - revenue.reversals - revenue.subsidies),
+  ) < 0.01,
+);
+
+const bookingSourced = ledger.filter(
+  (e) => e.source === "booking_commission" || e.source === "b2b_margin",
+);
+check(
+  "no failed booking earns commission",
+  !bookingSourced.some((e) => e.bookingStatus === "failed"),
+);
+check(
+  "every booking contributes at most one commission line",
+  new Set(bookingSourced.map((e) => e.bookingId)).size === bookingSourced.length,
+);
+
+const center = await revenueService.center();
+check(
+  "the ledger and the booking engine agree on commission",
+  Math.abs(
+    (center.summary.bySource.find((s) => s.source === "booking_commission")?.net ?? 0) +
+      (center.summary.bySource.find((s) => s.source === "b2b_margin")?.net ?? 0) -
+      center.financials.commission,
+  ) < 0.01,
+  `${center.financials.commission}`,
+);
+
+const merchantScoped = await revenueService.summary({}, { merchantId: scenarioMerchant.id });
+check(
+  "revenue is scoped to a merchant",
+  merchantScoped.netPlatformRevenue < revenue.netPlatformRevenue,
+  `${merchantScoped.netPlatformRevenue} vs ${revenue.netPlatformRevenue}`,
+);
+
+// ---------------------------------------------------------------------------
+section("Audit — every financial change is recorded");
+// ---------------------------------------------------------------------------
+
+const ruleBefore = getState().auditLog.length;
+await commissionRuleService.update(
+  "cmr_v_hotels",
+  { percent: 16 },
+  { id: "usr_test", name: "Test Operator", role: "admin" },
+);
+const ruleAudit = getState().auditLog[0];
+check("a commission change is audited", getState().auditLog.length > ruleBefore);
+check("the audit records the before and after", ruleAudit.from !== ruleAudit.to, `${ruleAudit.from} → ${ruleAudit.to}`);
+check("the audit names the entity", ruleAudit.entity === "commission_rule", ruleAudit.entity);
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

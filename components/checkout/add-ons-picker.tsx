@@ -3,7 +3,6 @@
 import * as Icons from "lucide-react";
 import { Check } from "lucide-react";
 import {
-  INSURANCE_OFFER,
   quantityFor,
   scaleLabel,
   type AddOnOffer,
@@ -22,21 +21,17 @@ export function AddOnsPicker({
   selected,
   onToggle,
   scale,
-  insuranceSelected,
-  onToggleInsurance,
 }: {
   offers: AddOnOffer[];
   selected: string[];
   onToggle: (id: string) => void;
   scale: AddOnScale;
-  insuranceSelected: boolean;
-  onToggleInsurance: (next: boolean) => void;
 }) {
   const { money } = useLocale();
 
   return (
     <div className="space-y-3">
-      {offers.length === 0 && !insuranceSelected && (
+      {offers.length === 0 && (
         <p className="text-sm text-muted">No extras are offered for this product.</p>
       )}
 
@@ -57,17 +52,6 @@ export function AddOnsPicker({
           );
         })}
       </ul>
-
-      <div className="rounded-card border border-primary/25 bg-primary-50/50 p-1">
-        <AddOnRow
-          offer={INSURANCE_OFFER}
-          selected={insuranceSelected}
-          onToggle={() => onToggleInsurance(!insuranceSelected)}
-          priceLabel={money(INSURANCE_OFFER.unitPrice * quantityFor(INSURANCE_OFFER, scale))}
-          qualifier={scaleLabel(INSURANCE_OFFER, quantityFor(INSURANCE_OFFER, scale))}
-          recommended
-        />
-      </div>
     </div>
   );
 }

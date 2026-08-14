@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarCheck,
   CreditCard,
+  Crown,
   FileText,
   Gift,
   Heart,
@@ -70,6 +71,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
       { label: "Saved cards", href: "/account/cards", icon: CreditCard },
       { label: "Coupons", href: "/account/coupons", icon: Ticket },
       { label: "Rewards", href: "/account/rewards", icon: Gift },
+      { label: "Membership", href: "/account/membership", icon: Crown },
     ],
   },
   {

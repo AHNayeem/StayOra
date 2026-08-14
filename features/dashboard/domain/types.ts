@@ -119,8 +119,21 @@ export interface CancellationPolicy {
 // ---------------------------------------------------------------------------
 
 /**
+ * What a commission rate is measured against.
+ *
+ * `net` — the discounted net sale (the platform shares the cost of a discount).
+ * `gross` — `base + markup`, i.e. before discounts (the merchant funds them).
+ * `fixed` — the rate is irrelevant; a flat fee applies per booking.
+ */
+export type CommissionBasis = "net" | "gross" | "fixed";
+
+/**
  * The money breakdown of a booking. Every figure is derived once by
  * {@link import("./money").priceBooking} — components never recompute them.
+ *
+ * The three revenue pots are kept strictly apart: `merchantEarning` is the
+ * merchant's, `taxes` belongs to the tax authority, and only
+ * `platformRevenue` is StayOra's.
  */
 export interface BookingMoney {
   currency: string;
@@ -130,25 +143,49 @@ export interface BookingMoney {
   markup: number;
   /** Offer/coupon/combo discount applied at checkout. */
   discount: number;
-  /** `base + markup - discount` — the amount commission is calculated on. */
+  /**
+   * The slice of `discount` the platform funds rather than the merchant. The
+   * merchant is made whole for it, so it comes out of platform revenue.
+   */
+  platformFundedDiscount: number;
+  /** `base + markup - discount` — the sale value after discounts. */
   netSale: number;
   taxes: number;
   /** Platform service fee charged to the customer. */
   fees: number;
+  /** Insurance premium the customer paid (0 when no policy was attached). */
+  insurance: number;
+  /** Of `insurance`, what the demo insurance provider is owed. */
+  insuranceProviderShare: number;
+  /** Of `insurance`, what the platform keeps. */
+  insuranceRevenue: number;
   /** What the customer (or agency) is invoiced. */
   total: number;
+  /**
+   * The platform's administration share of any cancellation fee charged on this
+   * booking. Deducted from the merchant's settlement, added to platform revenue.
+   */
+  platformCancellationFee: number;
   /** Effective commission rate, percent (e.g. 12.5). */
   commissionRate: number;
-  /** Platform commission on `netSale`. */
+  /** What the commission was measured against. */
+  commissionBasis: CommissionBasis;
+  /** The amount `commissionRate` was applied to. */
+  commissionBase: number;
+  /** Commission rule that decided the rate, when one matched. */
+  commissionRuleId?: string;
+  /** Platform commission. */
   commission: number;
-  /** `netSale - commission` — what the merchant is owed. */
+  /** `netSale - commission + platformFundedDiscount` — what the merchant is owed. */
   merchantEarning: number;
-  /** Commission + platform fees. */
+  /** Commission + fees + insurance revenue − platform-funded discount. */
   platformRevenue: number;
   /** Total refunded to the customer so far. */
   refunded: number;
   /** Commission reversed because of refunds. */
   commissionReversed: number;
+  /** Insurance revenue reversed because of refunds. */
+  insuranceRevenueReversed: number;
   /** `merchantEarning - refund adjustment` — what actually settles. */
   netSettlement: number;
 }
@@ -347,6 +384,12 @@ export interface Booking {
   pointsRedeemed?: number;
   /** Points the booking earned once completed. */
   pointsEarned?: number;
+  /** Demo insurance policy attached at checkout, if any. */
+  insurancePolicyId?: string;
+  /** Advertising campaign this booking was attributed to (CPA billing). */
+  attributedCampaignId?: string;
+  /** Membership the customer held when they booked, for benefit auditing. */
+  membershipCode?: string;
 }
 
 /** What a lifecycle transition produced — returned by `bookingService.transition`. */
@@ -408,6 +451,12 @@ export interface Refund {
   refundAmount: number;
   /** Commission the platform gives back. */
   commissionReversed: number;
+  /** Insurance premium returned to the customer. */
+  insuranceRefund: number;
+  /** Insurance revenue the platform gives back. */
+  insuranceRevenueReversed: number;
+  /** The platform's administration share of the cancellation fee. */
+  platformCancellationFee: number;
   /** What the merchant loses from settlement. */
   merchantDeduction: number;
   method: string;
@@ -436,6 +485,12 @@ export interface RefundQuote {
   taxAdjustment: number;
   refundAmount: number;
   commissionReversed: number;
+  /** Insurance premium returned to the customer. */
+  insuranceRefund: number;
+  /** Insurance revenue the platform gives back. */
+  insuranceRevenueReversed: number;
+  /** The platform's administration share of the cancellation fee. */
+  platformCancellationFee: number;
   merchantDeduction: number;
   /** Human-readable reason when `eligible` is false. */
   reason?: string;
@@ -597,6 +652,23 @@ export type B2BAccountType = "travel_agency" | "corporate" | "tour_operator";
 export type B2BAccountStatus = "pending" | "active" | "suspended" | "closed";
 export type B2BSettlementTerm = "prepaid" | "net_7" | "net_15" | "net_30";
 
+/**
+ * How an account's commercials are structured.
+ *
+ * `agency_commission` — the agency sells at the public rate and is paid a
+ *   commission out of it; the platform keeps the rest of its margin.
+ * `markup` — the agency buys at a net rate and resells at whatever it likes;
+ *   the whole markup is the agency's.
+ * `commission_plus_markup` — both, which is what most consolidators run.
+ */
+export type B2BCommercialModel =
+  | "agency_commission"
+  | "markup"
+  | "commission_plus_markup";
+
+/** Paid B2B access tiers. `standard` is the free tier. */
+export type B2BTier = "standard" | "professional" | "enterprise";
+
 /** An agency or corporate client that books platform inventory. */
 export interface B2BAccount {
   id: string;
@@ -612,6 +684,10 @@ export interface B2BAccount {
   defaultMarkupRate: number;
   /** Discount off public rates the platform grants this account, percent. */
   netRateDiscount: number;
+  /** Which commercial structure applies to this account. */
+  commercialModel: B2BCommercialModel;
+  /** Commission paid back to the agency out of the sale, percent. */
+  agencyCommissionRate: number;
   creditLimit: number;
   /** Outstanding invoiced-but-unpaid balance. */
   creditUsed: number;
@@ -619,8 +695,27 @@ export interface B2BAccount {
   currency: string;
   /** Named travelers/employees the account books for. */
   seats: number;
+  /** Paid access tier — drives fee waivers and reporting depth. */
+  tier: B2BTier;
+  /** Recurring fee for the tier (0 on `standard`), USD per period. */
+  subscriptionFee: number;
+  /** Simulated renewal date for the tier subscription. */
+  subscriptionRenewsAt?: string;
   createdAt: string;
   ownerUserId?: string;
+}
+
+/** A named user who books under a B2B account. */
+export interface B2BSubUser {
+  id: string;
+  accountId: string;
+  name: string;
+  email: string;
+  role: "owner" | "agent" | "finance" | "viewer";
+  /** Per-booking ceiling this user may commit, USD. 0 = the account limit. */
+  bookingLimit: number;
+  status: "active" | "suspended";
+  createdAt: string;
 }
 
 export type B2BInvoiceStatus = "draft" | "issued" | "part_paid" | "paid" | "overdue" | "void";
@@ -658,7 +753,11 @@ export type NotificationCategory =
   | "commission"
   | "review"
   | "support"
-  | "system";
+  | "system"
+  | "revenue"
+  | "insurance"
+  | "membership"
+  | "advertising";
 
 /** Which role surfaces a notification is addressed to. */
 export type NotificationAudience = "admin" | "merchant" | "customer" | "agency";

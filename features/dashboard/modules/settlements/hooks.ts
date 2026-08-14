@@ -12,6 +12,8 @@ export const settlementKeys = {
   all: ["finance", "settlements"] as const,
   bookings: (id: string) => ["finance", "settlements", "bookings", id] as const,
   merchantSummary: (id: string) => ["finance", "settlements", "merchant", id] as const,
+  merchantBreakdown: (id: string) =>
+    ["finance", "settlements", "merchant-breakdown", id] as const,
 };
 
 const SIDE_EFFECTS = [
@@ -59,6 +61,16 @@ export function useMerchantFinancials(merchantId: string | undefined) {
   return useQuery({
     queryKey: settlementKeys.merchantSummary(merchantId ?? "none"),
     queryFn: () => settlementService.merchantSummary(merchantId!),
+    enabled: Boolean(merchantId),
+    staleTime: 10_000,
+  });
+}
+
+/** A merchant's earnings cut by product, rate plan, destination and month. */
+export function useMerchantBreakdown(merchantId: string | undefined) {
+  return useQuery({
+    queryKey: settlementKeys.merchantBreakdown(merchantId ?? "none"),
+    queryFn: () => settlementService.merchantBreakdown(merchantId!),
     enabled: Boolean(merchantId),
     staleTime: 10_000,
   });

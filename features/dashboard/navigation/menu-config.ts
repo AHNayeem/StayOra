@@ -49,6 +49,11 @@ export const DASHBOARD_MENU: MenuNode[] = [
         label: "Rates & availability",
         href: "/dashboard/catalog/rates",
       },
+      {
+        id: "catalog-revenue-management",
+        label: "Revenue Management",
+        href: "/dashboard/catalog/revenue-management",
+      },
       { id: "catalog-hotels", label: "Hotels", href: "/dashboard/catalog/hotels" },
       { id: "catalog-apartments", label: "Apartments", href: "/dashboard/catalog/apartments" },
       { id: "catalog-resorts", label: "Resorts", href: "/dashboard/catalog/resorts" },
@@ -116,6 +121,12 @@ export const DASHBOARD_MENU: MenuNode[] = [
     anyPermission: ["finance:read"],
     children: [
       {
+        id: "finance-revenue-center",
+        label: "Revenue Center",
+        href: "/dashboard/finance/revenue",
+        anyPermission: ["finance:read"],
+      },
+      {
         id: "finance-earnings",
         label: "My earnings",
         href: "/dashboard/finance/earnings",
@@ -128,6 +139,8 @@ export const DASHBOARD_MENU: MenuNode[] = [
       { id: "finance-payouts", label: "Payouts", href: "/dashboard/finance/payouts" },
       { id: "finance-refunds", label: "Refunds", href: "/dashboard/finance/refunds" },
       { id: "finance-commission", label: "Commission", href: "/dashboard/finance/commission" },
+      { id: "finance-commission-rules", label: "Commission Rules", href: "/dashboard/finance/commission/rules" },
+      { id: "finance-insurance", label: "Insurance", href: "/dashboard/finance/insurance" },
       { id: "finance-settlements", label: "Settlements", href: "/dashboard/finance/settlements" },
       { id: "finance-tax", label: "Tax", href: "/dashboard/finance/tax" },
       { id: "finance-reconciliation", label: "Reconciliation", href: "/dashboard/finance/reconciliation" },
@@ -147,6 +160,20 @@ export const DASHBOARD_MENU: MenuNode[] = [
     ],
   },
   {
+    id: "membership",
+    label: "Membership",
+    icon: "Crown",
+    href: "/dashboard/membership",
+    anyPermission: ["finance:read", "customers:read"],
+  },
+  {
+    id: "advertising",
+    label: "Advertising",
+    icon: "Megaphone",
+    href: "/dashboard/advertising",
+    anyPermission: ["promotions:read"],
+  },
+  {
     id: "b2b",
     label: "B2B",
     icon: "Building2",
@@ -156,6 +183,7 @@ export const DASHBOARD_MENU: MenuNode[] = [
       { id: "b2b-accounts", label: "Accounts", href: "/dashboard/b2b/accounts" },
       { id: "b2b-bookings", label: "B2B Bookings", href: "/dashboard/b2b/bookings" },
       { id: "b2b-invoices", label: "Invoices", href: "/dashboard/b2b/invoices" },
+      { id: "b2b-statements", label: "Statements", href: "/dashboard/b2b/statements" },
     ],
   },
   {

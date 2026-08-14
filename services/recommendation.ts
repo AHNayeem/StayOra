@@ -37,9 +37,9 @@ import {
 } from "@/constants/listings";
 import { VERTICALS, listingHref } from "@/constants/verticals";
 import { COMBOS_SEED } from "@/features/dashboard/domain/seed";
-import { comboTotals } from "@/features/dashboard/domain/money";
 import { durationBetween } from "@/lib/booking-pricing";
 import { mockDelay } from "./http";
+import { comboSuggestion } from "./promotions";
 
 /* -------------------------------------------------------------------------- */
 /* Category rules                                                              */
@@ -524,7 +524,7 @@ function overlapCount(comboKinds: BookingVertical[], tripKinds: Set<BookingVerti
 /**
  * Bundles the current trip is eligible for, best saving first.
  *
- * Reuses the platform's own combo definitions and {@link comboTotals} maths —
+ * Reuses the platform's own combo definitions and {@link comboSuggestion} —
  * nothing about pricing a bundle is re-implemented here. A combo is offered
  * when it is active, sells the trip's destination, and the traveller has
  * already chosen at least two of the kinds it bundles.
@@ -548,27 +548,7 @@ export function getComboSuggestions(
     const matched = overlapCount(kinds, tripKinds);
     if (matched < 2) continue;
 
-    const totals = comboTotals(combo);
-    suggestions.push({
-      comboId: combo.id,
-      name: combo.name,
-      description: combo.description,
-      destination: combo.destination,
-      separatelyUsd: totals.individualTotal,
-      comboPrice: combo.comboPrice,
-      savingsUsd: totals.savings,
-      items: combo.items.map((i) => ({
-        id: i.id,
-        kind: i.kind as BookingVertical,
-        title: i.title,
-        detail: i.detail,
-        merchantId: i.merchantId,
-        merchantName: i.merchantName,
-        priceUsd: i.price,
-      })),
-      matchedKinds: matched,
-      terms: combo.terms,
-    });
+    suggestions.push(comboSuggestion(combo, matched));
   }
 
   suggestions.sort((a, z) => z.savingsUsd - a.savingsUsd);

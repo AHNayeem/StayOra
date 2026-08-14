@@ -7,6 +7,8 @@ import { DestinationSlider } from "@/components/sections/destination-slider";
 import { ListingCarousel } from "@/components/sections/listing-carousel";
 import { FeaturedListings } from "@/components/sections/featured-listings";
 import { FlashDeals } from "@/components/sections/flash-deals";
+import { PromoOffers } from "@/components/sections/promo-offers";
+import { ComboDeals } from "@/components/sections/combo-deals";
 import { TravelInspiration } from "@/components/sections/travel-inspiration";
 import { TrendingPackages } from "@/components/sections/trending-packages";
 import { PromoBanner } from "@/components/sections/promo-banner";
@@ -21,6 +23,7 @@ import { TestimonialsSection } from "@/components/sections/testimonials-section"
 import { HomeFaqs } from "@/components/sections/home-faqs";
 import { CtaSection } from "@/components/sections/cta-section";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { SponsoredRail } from "@/components/sections/sponsored-rail";
 import { AiConciergeSection } from "@/features/ai";
 import { FlightDeals } from "@/features/flights/sections/flight-deals";
 import { PopularRoutes } from "@/features/flights/sections/popular-routes";
@@ -121,6 +124,10 @@ export default async function HomePage() {
       {/* Trust strip */}
       {/* <Partners partners={partners} /> */}
 
+      {/* Homepage featured placements — always labelled, never mixed in with
+          organic results. Delivery here drives advertising revenue. */}
+      <SponsoredRail placement="homepage_featured" title="Featured partners" />
+
       {/* AI concierge — the highest-intent entry point on the page, placed
           directly under the hero so it reads as part of "how you search here". */}
       <AiConciergeSection />
@@ -181,8 +188,16 @@ export default async function HomePage() {
       {/* Trending packages */}
       <TrendingPackages packages={packages} />
 
+      {/* Combo bundles — live from the dashboard's promotions desk, priced by
+          the domain's own bundle maths and limited by its real inventory. */}
+      <ComboDeals background="surface" />
+
       {/* Members promo */}
       <PromoBanner />
+
+      {/* Offers & promo codes — the campaigns currently running. The codes here
+          are the ones the checkout accepts; nothing is hard-coded. */}
+      <PromoOffers background="muted" />
 
       {/* Browse by country */}
       <CountryCards countries={countries} />

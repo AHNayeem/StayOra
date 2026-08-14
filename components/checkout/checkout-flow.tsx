@@ -36,7 +36,6 @@ import {
   type RatePlanId,
 } from "@/features/dashboard/domain";
 import {
-  INSURANCE_OFFER,
   abandonHold,
   addOnsFor,
   attemptPayment,
@@ -63,6 +62,8 @@ import { Stepper } from "@/components/ui/stepper";
 import { controlClasses } from "@/components/ui/field";
 import { OrderSummary } from "./order-summary";
 import { AddOnsPicker } from "./add-ons-picker";
+import { InsurancePicker } from "./insurance-picker";
+import { MembershipUpsell } from "./membership-upsell";
 import { HoldTimer } from "./hold-timer";
 import {
   MockPaymentPicker,
@@ -139,7 +140,8 @@ export function CheckoutFlow({
   // --- extras --------------------------------------------------------------
   const offers = useMemo(() => addOnsFor(listing.vertical), [listing.vertical]);
   const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
-  const [insurance, setInsurance] = useState(false);
+  // The chosen demo insurance plan. Priced by the domain, never here.
+  const [insurancePlanId, setInsurancePlanId] = useState<string | undefined>();
 
   // --- traveller + contact -------------------------------------------------
   const [travelers, setTravelers] = useState<TravelerDraft[]>(() => [
@@ -176,13 +178,13 @@ export function CheckoutFlow({
       checkOut: perNight ? checkOut : checkIn,
       units,
       guests,
-      addOns: [
-        ...offers.filter((o) => selectedAddOns.includes(o.id)).map((o) => toBookingAddOn(o, addOnScale)),
-        ...(insurance ? [toBookingAddOn(INSURANCE_OFFER, addOnScale)] : []),
-      ],
+      addOns: offers
+        .filter((o) => selectedAddOns.includes(o.id))
+        .map((o) => toBookingAddOn(o, addOnScale)),
       promoCode,
       pointsToRedeem: points,
       customerEmail: email,
+      insurancePlanId,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
@@ -194,7 +196,7 @@ export function CheckoutFlow({
       units,
       guests,
       addOnKey,
-      insurance,
+      insurancePlanId,
       promoCode,
       points,
       email,
@@ -212,6 +214,7 @@ export function CheckoutFlow({
       units: selection.units,
       guests: selection.guests,
       addOns: selection.addOns.map((a) => `${a.id}:${a.quantity}`),
+      insurancePlanId: selection.insurancePlanId,
       promoCode: selection.promoCode,
       points: selection.pointsToRedeem,
       email: selection.customerEmail,
@@ -548,8 +551,33 @@ export function CheckoutFlow({
                       )
                     }
                     scale={addOnScale}
-                    insuranceSelected={insurance}
-                    onToggleInsurance={setInsurance}
+                  />
+                </Section>
+              )}
+
+              {quote.insuranceOffers.length > 0 && (
+                <Section
+                  title="Travel insurance"
+                  hint="Optional cover for cancellation, medical costs and baggage."
+                >
+                  <InsurancePicker
+                    offers={quote.insuranceOffers}
+                    selectedPlanId={insurancePlanId}
+                    onSelect={setInsurancePlanId}
+                  />
+                </Section>
+              )}
+
+              {quote.membership.code === "free" && (
+                <Section
+                  title="StayOra membership"
+                  hint="Member rates and no service fee — optional, and never applied without a purchase."
+                >
+                  <MembershipUpsell
+                    customerEmail={email}
+                    customerName={travelers[0]?.fullName || user?.name || "Traveller"}
+                    serviceFee={quote.money.fees}
+                    netSale={quote.money.netSale}
                   />
                 </Section>
               )}

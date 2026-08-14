@@ -13,6 +13,9 @@ import {
   type ChartSeries,
 } from "../../ui";
 import { formatCurrency, formatNumber, formatPercent } from "../../lib/format";
+import { Panel, PanelBody, PanelHeader } from "../../ui";
+import { useDomainScope } from "../../domain/use-domain";
+import { PRODUCT_KIND_LABELS } from "../bookings/types";
 import { analyticsKeys, analyticsService } from "./service";
 
 const REVENUE_SERIES: ChartSeries[] = [
@@ -58,6 +61,18 @@ export function AnalyticsDashboard() {
     queryFn: () => analyticsService.getFunnel(),
     staleTime: 60_000,
   });
+
+  // Revenue analytics come from the live ledger, not a fixture — so these
+  // answer "which vertical is most profitable?" with the real numbers.
+  const scope = useDomainScope();
+  const scopeKey = scope.merchantId ?? scope.organizationId ?? "all";
+  const revenueAnalytics = useQuery({
+    queryKey: analyticsKeys.revenueSources(scopeKey),
+    queryFn: () => analyticsService.getRevenueAnalytics(scope),
+    staleTime: 10_000,
+  });
+  const ra = revenueAnalytics.data;
+  const raCurrency = ra?.currency ?? "USD";
 
   const s = summary.data;
   const kpis = s
@@ -180,6 +195,124 @@ export function AnalyticsDashboard() {
             horizontal
             height={280}
             valueFormatter={(v) => formatNumber(v)}
+          />
+        </ChartCard>
+      </div>
+
+      {/* ---- revenue analytics, straight from the ledger ------------------ */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="Platform revenue by source"
+          description="Where StayOra's own revenue comes from"
+          loading={revenueAnalytics.isLoading}
+          empty={revenueAnalytics.isSuccess && (ra?.bySource.length ?? 0) === 0}
+        >
+          <CategoryBarChart
+            data={(ra?.bySource ?? []).map((r) => ({ name: r.label, value: r.value }))}
+            xKey="name"
+            valueKey="value"
+            label="Net revenue"
+            horizontal
+            height={280}
+            valueFormatter={(v) => formatCurrency(v, raCurrency)}
+          />
+        </ChartCard>
+
+        <ChartCard
+          title="Most profitable merchants"
+          description="Platform revenue attributable to each merchant"
+          loading={revenueAnalytics.isLoading}
+          empty={revenueAnalytics.isSuccess && (ra?.byMerchant.length ?? 0) === 0}
+        >
+          <CategoryBarChart
+            data={(ra?.byMerchant ?? []).map((r) => ({ name: r.label, value: r.net }))}
+            xKey="name"
+            valueKey="value"
+            label="Platform revenue"
+            color={CHART_COLORS.accent}
+            horizontal
+            height={280}
+            valueFormatter={(v) => formatCurrency(v, raCurrency)}
+          />
+        </ChartCard>
+      </div>
+
+      <Panel flush>
+        <PanelHeader
+          title="Vertical profitability"
+          description="Gross booking value versus the platform revenue it produced."
+        />
+        <PanelBody>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-2xl border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line text-muted">
+                  <th className="px-3 py-2 text-left font-medium">Vertical</th>
+                  <th className="px-3 py-2 text-right font-medium">Bookings</th>
+                  <th className="px-3 py-2 text-right font-medium">Gross booking value</th>
+                  <th className="px-3 py-2 text-right font-medium">Platform revenue</th>
+                  <th className="px-3 py-2 text-right font-medium">Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(ra?.byVertical ?? []).map((row) => (
+                  <tr key={row.key} className="border-b border-line last:border-0">
+                    <td className="px-3 py-2 font-medium text-ink">
+                      {PRODUCT_KIND_LABELS[row.key as keyof typeof PRODUCT_KIND_LABELS] ??
+                        row.label}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-body">
+                      {formatNumber(row.bookings)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-body">
+                      {formatCurrency(row.gbv, raCurrency)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums text-ink">
+                      {formatCurrency(row.net, raCurrency)}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums text-body">
+                      {row.margin.toFixed(1)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </PanelBody>
+      </Panel>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartCard
+          title="B2B accounts by platform margin"
+          description="Which agencies generate the most margin"
+          loading={revenueAnalytics.isLoading}
+          empty={revenueAnalytics.isSuccess && (ra?.byAccount.length ?? 0) === 0}
+        >
+          <CategoryBarChart
+            data={(ra?.byAccount ?? []).map((r) => ({ name: r.label, value: r.net }))}
+            xKey="name"
+            valueKey="value"
+            label="Platform margin"
+            horizontal
+            height={260}
+            valueFormatter={(v) => formatCurrency(v, raCurrency)}
+          />
+        </ChartCard>
+        <ChartCard
+          title="Customers by platform revenue"
+          description="Including membership and insurance, not just bookings"
+          loading={revenueAnalytics.isLoading}
+          empty={revenueAnalytics.isSuccess && (ra?.byCustomer.length ?? 0) === 0}
+        >
+          <CategoryBarChart
+            data={(ra?.byCustomer ?? []).map((r) => ({ name: r.label, value: r.net }))}
+            xKey="name"
+            valueKey="value"
+            label="Platform revenue"
+            color={CHART_COLORS.violet}
+            horizontal
+            height={260}
+            valueFormatter={(v) => formatCurrency(v, raCurrency)}
           />
         </ChartCard>
       </div>

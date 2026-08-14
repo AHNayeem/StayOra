@@ -3,6 +3,7 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { JsonLd } from "@/components/shared/json-ld";
 import { AssistantLauncher, AssistantProvider } from "@/features/ai";
 import { CompareTray } from "@/features/discovery";
+import { FlightCompareTray } from "@/features/flights/results/flight-compare-tray";
 import { LocaleProvider } from "@/features/i18n";
 import { organizationSchema, websiteSchema } from "@/lib/structured-data";
 
@@ -36,9 +37,15 @@ export default function MarketingLayout({
           {children}
         </div>
         <SiteFooter />
-        {/* Renders nothing until something is added, so it costs an empty tray
-            no layout — but it follows the traveller across every public page. */}
-        <CompareTray />
+        {/* Both compare trays dock to the same edge, so they share one stacking
+            column — a traveller holding stays *and* flights gets two bars above
+            each other rather than one hidden under the other. Each renders
+            nothing until something is added, so an empty column costs no layout,
+            but the trays follow the traveller across every public page. */}
+        <div className="fixed inset-x-0 bottom-0 z-50 flex flex-col print:hidden">
+          <CompareTray />
+          <FlightCompareTray />
+        </div>
         <AssistantLauncher />
       </AssistantProvider>
     </LocaleProvider>

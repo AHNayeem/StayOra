@@ -28,6 +28,7 @@ import type {
   AuditLogEntry,
   B2BAccount,
   B2BInvoice,
+  B2BSubUser,
   Booking,
   ComboOffer,
   CommissionEntry,
@@ -43,9 +44,16 @@ import type { SupportTicket } from "./support";
 import type { PlatformReview } from "./reviews";
 import type { NotificationPreferences, OutboundMessage } from "./messaging";
 import type { TelemetryEvent } from "./telemetry";
+import type { CommissionRule } from "./commission-rules";
+import type { RevenueEntry } from "./revenue";
+import type { InsurancePlan, InsurancePolicy, InsuranceProvider } from "./insurance";
+import type { MembershipPlan, MembershipSubscription } from "./membership";
+import type { AdCampaign, Advertiser } from "./advertising";
+import type { PricingRule } from "./revenue-management";
+import { buildMonetization } from "./seed-revenue";
 
 /** Bump when a shape changes so stale persisted state is discarded. */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const STORAGE_KEY = `otithee:domain:v${SCHEMA_VERSION}`;
 
 export interface DomainState {
@@ -74,6 +82,28 @@ export interface DomainState {
   outbox: OutboundMessage[];
   notificationPreferences: Record<string, NotificationPreferences>;
   telemetry: TelemetryEvent[];
+
+  // --- monetization -------------------------------------------------------
+  /** Configurable commission rules; empty falls back to the product defaults. */
+  commissionRules: CommissionRule[];
+  /**
+   * Revenue entries the platform *stores* — membership, advertising, B2B
+   * subscriptions and adjustments. Commission, fees and insurance are derived
+   * from bookings on read, never stored (see `revenue.ts`).
+   */
+  revenueEntries: RevenueEntry[];
+  insuranceProviders: InsuranceProvider[];
+  insurancePlans: InsurancePlan[];
+  insurancePolicies: InsurancePolicy[];
+  membershipPlans: MembershipPlan[];
+  memberships: MembershipSubscription[];
+  advertisers: Advertiser[];
+  adCampaigns: AdCampaign[];
+  /** Revenue-management automation rules. */
+  pricingRules: PricingRule[];
+  /** Named users who book under a B2B account. */
+  b2bSubUsers: B2BSubUser[];
+
   /** Monotonic counter for generated ids/references. */
   sequence: number;
 }
@@ -84,6 +114,9 @@ function freshState(): DomainState {
   // `buildExtras` re-points a spread of bookings at the demo traveller, so it
   // must run against the clone above — before anything else reads it.
   const extras = buildExtras(bookings);
+  // Monetization seeds read the (already re-pointed) bookings so insurance
+  // policies and revenue attribution line up with real references.
+  const monetization = buildMonetization(bookings);
   return {
     bookings,
     refunds: structuredClone(REFUNDS_SEED),
@@ -107,6 +140,17 @@ function freshState(): DomainState {
     outbox: extras.outbox,
     notificationPreferences: {},
     telemetry: [],
+    commissionRules: monetization.commissionRules,
+    revenueEntries: monetization.revenueEntries,
+    insuranceProviders: monetization.insuranceProviders,
+    insurancePlans: monetization.insurancePlans,
+    insurancePolicies: monetization.insurancePolicies,
+    membershipPlans: monetization.membershipPlans,
+    memberships: monetization.memberships,
+    advertisers: monetization.advertisers,
+    adCampaigns: monetization.adCampaigns,
+    pricingRules: monetization.pricingRules,
+    b2bSubUsers: monetization.b2bSubUsers,
     sequence: 1,
   };
 }

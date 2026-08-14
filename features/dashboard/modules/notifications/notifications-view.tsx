@@ -9,8 +9,12 @@ import {
   CalendarCheck,
   Check,
   CheckCheck,
+  CircleDollarSign,
+  Crown,
   LifeBuoy,
+  Megaphone,
   Percent,
+  ShieldCheck,
   Star,
   Wallet,
   type LucideIcon,
@@ -36,6 +40,10 @@ const TYPE_ICON: Record<NotificationType, LucideIcon> = {
   review: Star,
   support: LifeBuoy,
   system: Bell,
+  revenue: CircleDollarSign,
+  insurance: ShieldCheck,
+  membership: Crown,
+  advertising: Megaphone,
 };
 
 /** Tone → accent classes for the leading icon chip. */

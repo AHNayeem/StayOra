@@ -9,6 +9,12 @@
  *   types      — the normalized data model (User/Booking/Refund/Offer/…)
  *   lifecycle  — state machines, status registries, cancellation policies
  *   money      — commission, tax, discount, refund and settlement maths
+ *   commission-rules    — the configurable commission book
+ *   revenue             — the platform revenue ledger (all sources)
+ *   insurance           — demo insurance plans, policies and their margin
+ *   membership          — paid membership plans, subscriptions and benefits
+ *   advertising         — advertisers, campaigns, placements and ad revenue
+ *   revenue-management  — occupancy/ADR/RevPAR, pricing rules, recommendations
  *   inventory  — room types, rate plans, availability, holds
  *   payments   — the mock gateway (authorize / 3DS / retry / capture)
  *   engagement — loyalty points, wallet coupons, referrals
@@ -24,6 +30,12 @@
 export * from "./types";
 export * from "./lifecycle";
 export * from "./money";
+export * from "./commission-rules";
+export * from "./revenue";
+export * from "./insurance";
+export * from "./membership";
+export * from "./advertising";
+export * from "./revenue-management";
 export * from "./inventory";
 export * from "./payments";
 export * from "./engagement";
@@ -62,15 +74,21 @@ export { getRevision, getState, resetState, subscribe } from "./store";
 export type { DomainState } from "./store";
 export {
   SYSTEM_ACTOR,
+  advertisingService,
   auditService,
   b2bService,
   bookingService,
   comboService,
+  commissionRuleService,
   commissionService,
+  insuranceAdminService,
+  membershipAdminService,
   notificationService,
   offerService,
   platformService,
   refundService,
+  revenueManagementService,
+  revenueService,
   settlementService,
 } from "./services";
 export type {

@@ -27,7 +27,6 @@ import {
   PLATFORM_NOW,
   PRICING_CONFIG,
   applyRefundToMoney,
-  commissionRateFor,
   comboTotals,
   defaultPolicyFor,
   evaluateOffer,
@@ -47,6 +46,71 @@ import { MERCHANTS } from "./seed";
 import { DEMO_CUSTOMER_PHONE } from "./seed-extra";
 import { commitHold, releaseForBooking } from "./inventory";
 import { loyaltyService } from "./engagement";
+import {
+  commissionRuleStore,
+  describeRule,
+  matchingRules,
+  resolveCommission,
+  type CommissionContext,
+  type CommissionResolution,
+  type CommissionRule,
+  type CommissionRuleInput,
+} from "./commission-rules";
+import {
+  insurancePlanStore,
+  insuranceService,
+  quoteInsurance,
+  type InsurancePlan,
+  type InsurancePlanInput,
+  type InsurancePolicy,
+  type InsuranceProvider,
+} from "./insurance";
+import {
+  benefitsFor,
+  membershipPlanStore,
+  membershipService,
+  type MembershipPlan,
+  type MembershipPlanInput,
+  type MembershipSubscription,
+} from "./membership";
+import {
+  CAMPAIGN_STATUS_LABELS,
+  PLACEMENT_LABELS,
+  PRICING_MODEL_LABELS,
+  adService,
+  campaignPerformance,
+  campaignSpend,
+  spendExplanation,
+  type AdCampaign,
+  type AdCampaignInput,
+  type Advertiser,
+  type CampaignStatus,
+} from "./advertising";
+import {
+  groupRevenue,
+  recordRevenue,
+  revenueByMonth,
+  revenueLedger,
+  revenueMixByMonth,
+  reverseRevenue,
+  storedEntriesFor,
+  summarizeRevenue,
+  type RevenueEntry,
+  type RevenueFilters,
+  type RevenueScope,
+  type RevenueSummary,
+} from "./revenue";
+import {
+  RECOMMENDATION_LABELS,
+  RULE_KIND_LABELS,
+  applyRecommendation,
+  bookingPace,
+  bookingPerformance,
+  pricingRuleStore,
+  type PricingRule,
+  type PricingRuleInput,
+  type Recommendation,
+} from "./revenue-management";
 import { messagingService } from "./messaging";
 import { recordRefund as recordPaymentRefund } from "./payments";
 import { track } from "./telemetry";
@@ -63,6 +127,7 @@ import type {
   AuditAction,
   AuditLogEntry,
   B2BAccount,
+  B2BSubUser,
   CancellationPolicyId,
   B2BInvoice,
   Booking,
@@ -442,6 +507,18 @@ export interface CreateBookingInput {
   travelers?: Booking["travelers"];
   /** Discount lines decided outside the offer engine (points, wallet coupons). */
   discounts?: AppliedDiscount[];
+
+  // --- monetization -------------------------------------------------------
+
+  /** Demo insurance plan the traveller chose. Priced outside the commissionable base. */
+  insurancePlanId?: string;
+  /**
+   * Apply the customer's membership benefits (fee waiver, member discount,
+   * insurance discount). On by default for B2C; B2B books on account terms.
+   */
+  applyMembership?: boolean;
+  /** Advertising campaign the booking is attributed to, for CPA billing. */
+  attributedCampaignId?: string;
 }
 
 export const bookingService = {
@@ -628,6 +705,8 @@ export const bookingService = {
             booking.money,
             linked.refundAmount,
             linked.commissionReversed,
+            linked.insuranceRevenueReversed ?? 0,
+            linked.platformCancellationFee ?? 0,
           );
           booking.payment.status =
             booking.money.refunded >= booking.money.total ? "refunded" : "partially_refunded";
@@ -635,7 +714,22 @@ export const bookingService = {
           const entry = draft.commissions.find((c) => c.bookingId === booking.id);
           if (entry) {
             entry.reversed = booking.money.commissionReversed;
-            entry.status = "reversed";
+            entry.status =
+              entry.reversed >= entry.commission ? "reversed" : "adjusted";
+          }
+          // The demo insurance policy unwinds by the same share.
+          if (booking.insurancePolicyId && linked.insuranceRefund > 0) {
+            const policy = draft.insurancePolicies.find(
+              (p) => p.bookingId === booking.id && p.status === "active",
+            );
+            if (policy) {
+              policy.refunded = money(policy.refunded + linked.insuranceRefund);
+              policy.revenueReversed = money(
+                policy.revenueReversed + (linked.insuranceRevenueReversed ?? 0),
+              );
+              policy.cancelledAt = new Date().toISOString();
+              if (policy.refunded >= policy.premium) policy.status = "refunded";
+            }
           }
           const settlement = draft.settlements.find((s) => s.id === booking.settlementId);
           if (settlement && settlement.status !== "paid") {
@@ -742,8 +836,15 @@ export const bookingService = {
           publicRate: base,
           netRateDiscount: account.netRateDiscount,
           markupRate: account.defaultMarkupRate,
+          model: account.commercialModel,
+          agencyCommissionRate: account.agencyCommissionRate,
         })
       : null;
+
+    // Membership benefits apply to consumer bookings only — an agency books on
+    // its own negotiated terms, not a traveller's subscription.
+    const useMembership = (input.applyMembership ?? true) && input.segment === "b2c";
+    const benefits = useMembership ? benefitsFor(input.customerEmail) : undefined;
 
     // Discount lines the caller already resolved (loyalty points, a wallet
     // coupon) arrive priced; the offer engine appends to the same list.
@@ -788,13 +889,84 @@ export const bookingService = {
       discounts.push(input.extraDiscount);
     }
 
-    const commissionRate = commissionRateFor(input.productKind, merchant.commissionRate);
-    const priced = priceBooking({
-      base: b2b ? b2b.netRate : base,
-      markup: b2b ? b2b.markup : 0,
-      discount: money(discounts.reduce((n, d) => n + d.amount, 0)),
-      commissionRate,
+    // --- membership discount ------------------------------------------------
+    // The platform funds this one, so it is tracked separately: the merchant is
+    // made whole and the subsidy comes out of platform revenue.
+    const saleBase = b2b ? b2b.netRate : base;
+    let platformFundedDiscount = 0;
+    if (benefits && benefits.memberDiscountPercent > 0) {
+      const raw = money(saleBase * (benefits.memberDiscountPercent / 100));
+      platformFundedDiscount = money(
+        benefits.memberDiscountCap > 0 ? Math.min(raw, benefits.memberDiscountCap) : raw,
+      );
+      if (platformFundedDiscount > 0) {
+        discounts.push({
+          kind: "offer",
+          ref: `membership:${benefits.code}`,
+          label: `${benefits.planName} member discount`,
+          amount: platformFundedDiscount,
+        });
+      }
+    }
+
+    const discountTotal = money(discounts.reduce((n, d) => n + d.amount, 0));
+    const grossSale = money(saleBase + (b2b ? b2b.markup : 0));
+    const netSale = money(Math.max(0, grossSale - discountTotal));
+
+    // --- commission: the rule engine decides, never a component -------------
+    const resolution = resolveCommission({
+      productKind: input.productKind,
+      merchantId: merchant.id,
+      productId: input.listing?.id,
+      ratePlanId: input.stay?.ratePlanId,
+      b2bAccountId: account?.id,
+      gross: grossSale,
+      // A platform-funded discount doesn't reduce what the merchant sold for,
+      // so it doesn't reduce the commission base either.
+      net: money(netSale + platformFundedDiscount),
+      merchantRate: merchant.commissionRate,
     });
+
+    // --- insurance: priced alongside, never inside the commissionable base --
+    const plan = input.insurancePlanId
+      ? insuranceService.plan(input.insurancePlanId)
+      : undefined;
+    const insuranceQuote = plan
+      ? quoteInsurance(plan, {
+          travelers: Math.max(1, input.travelers?.length ?? input.travelerNames?.length ?? 1),
+          tripValue: netSale,
+          discountPercent: benefits?.insuranceDiscountPercent,
+        })
+      : null;
+
+    const priced = priceBooking({
+      base: saleBase,
+      markup: b2b ? b2b.markup : 0,
+      discount: discountTotal,
+      platformFundedDiscount,
+      commissionRate: resolution.rate,
+      commissionBasis: resolution.basis,
+      commissionAmount: resolution.commission,
+      commissionRuleId: resolution.ruleId,
+      // A membership can waive part or all of the platform service fee.
+      feeOverride: benefits
+        ? money(netSale * PRICING_CONFIG.platformFeeRate * (1 - benefits.serviceFeeWaiver))
+        : undefined,
+      insurance: insuranceQuote?.premium ?? 0,
+      insuranceProviderShare: insuranceQuote?.providerShare ?? 0,
+    });
+
+    // --- B2B credit limit ----------------------------------------------------
+    // Booking on account is lending: the limit is enforced here, before the
+    // booking exists, so an agency can never quietly exceed it.
+    if (account) {
+      const available = money(Math.max(0, account.creditLimit - account.creditUsed));
+      if (priced.total > available) {
+        forbidden(
+          `${account.name} has ${account.currency} ${available.toFixed(2)} of credit available — this booking needs ${account.currency} ${priced.total.toFixed(2)}. Settle an invoice or raise the limit first.`,
+        );
+      }
+    }
 
     const nights = Math.max(
       0,
@@ -861,6 +1033,8 @@ export const bookingService = {
       paymentPlan: input.paymentPlan,
       specialRequests: input.specialRequests,
       pointsRedeemed: input.pointsRedeemed,
+      membershipCode: benefits && benefits.code !== "free" ? benefits.code : undefined,
+      attributedCampaignId: input.attributedCampaignId,
       createdAt: now,
       updatedAt: now,
       timeline: [
@@ -924,6 +1098,43 @@ export const bookingService = {
       loyaltyService.redeem(booking.customer.email, input.pointsRedeemed, {
         bookingId: booking.id,
         bookingRef: booking.reference,
+      });
+    }
+
+    // The policy is written only once the booking exists, so a failed create
+    // can never leave an orphan policy behind.
+    if (insuranceQuote) {
+      const policy = insuranceService.issue({
+        quote: insuranceQuote,
+        bookingId: booking.id,
+        bookingRef: booking.reference,
+        customerEmail: booking.customer.email,
+        customerName: booking.customer.name,
+        currency: booking.money.currency,
+        travelers: booking.travelers.length,
+        startAt: booking.startAt,
+        endAt: booking.endAt,
+        at: now,
+      });
+      mutate((draft) => {
+        const target = draft.bookings.find((b) => b.id === booking.id);
+        if (target) target.insurancePolicyId = policy.id;
+      });
+      booking.insurancePolicyId = policy.id;
+      notify({
+        category: "insurance",
+        audience: ["admin"],
+        title: "Insurance attached",
+        body: `${policy.reference} · ${policy.planName} · platform revenue ${policy.currency} ${policy.platformRevenue.toFixed(2)}`,
+        href: "/dashboard/finance/insurance",
+        tone: "success",
+      });
+    }
+
+    // Attribute the conversion so the campaign's CPA billing reflects it.
+    if (input.attributedCampaignId) {
+      adService.recordEvent(input.attributedCampaignId, "conversion", {
+        value: booking.money.netSale,
       });
     }
 
@@ -995,6 +1206,9 @@ function buildRefundRecord(
     taxAdjustment: quote.taxAdjustment,
     refundAmount: quote.refundAmount,
     commissionReversed: quote.commissionReversed,
+    insuranceRefund: quote.insuranceRefund,
+    insuranceRevenueReversed: quote.insuranceRevenueReversed,
+    platformCancellationFee: quote.platformCancellationFee,
     merchantDeduction: quote.merchantDeduction,
     method:
       booking.segment === "b2b"
@@ -1385,6 +1599,9 @@ export const refundService = {
       taxAdjustment: quote.taxAdjustment,
       refundAmount: quote.refundAmount,
       commissionReversed: quote.commissionReversed,
+      insuranceRefund: quote.insuranceRefund,
+      insuranceRevenueReversed: quote.insuranceRevenueReversed,
+      platformCancellationFee: quote.platformCancellationFee,
       merchantDeduction: quote.merchantDeduction,
       method: "Original payment method",
       requestedAt: new Date().toISOString(),
@@ -1478,13 +1695,28 @@ export const refundService = {
             booking.money,
             row.refundAmount,
             row.commissionReversed,
+            row.insuranceRevenueReversed ?? 0,
+            row.platformCancellationFee ?? 0,
           );
           booking.payment.status =
             booking.money.refunded >= booking.money.total ? "refunded" : "partially_refunded";
           const entry = draft.commissions.find((c) => c.bookingId === booking.id);
           if (entry) {
             entry.reversed = booking.money.commissionReversed;
-            entry.status = "reversed";
+            entry.status = entry.reversed >= entry.commission ? "reversed" : "adjusted";
+          }
+          if (booking.insurancePolicyId && row.insuranceRefund > 0) {
+            const policy = draft.insurancePolicies.find(
+              (p) => p.bookingId === booking.id && p.status === "active",
+            );
+            if (policy) {
+              policy.refunded = money(policy.refunded + row.insuranceRefund);
+              policy.revenueReversed = money(
+                policy.revenueReversed + (row.insuranceRevenueReversed ?? 0),
+              );
+              policy.cancelledAt = now;
+              if (policy.refunded >= policy.premium) policy.status = "refunded";
+            }
           }
           const settlement = draft.settlements.find((s) => s.id === booking.settlementId);
           if (settlement && settlement.status !== "paid") {
@@ -1697,6 +1929,99 @@ export const settlementService = {
     const bookings = state.bookings.filter((b) => b.merchant.id === merchantId);
     const settlements = state.settlements.filter((s) => s.merchantId === merchantId);
     return delay(merchantFinancials(bookings, settlements));
+  },
+
+  /**
+   * A merchant's revenue cut by product, rate plan and month — the "where did
+   * my money come from" view. Derived from the merchant's own bookings, so a
+   * merchant can never see another's.
+   */
+  async merchantBreakdown(merchantId: string) {
+    const bookings = getState().bookings.filter((b) => b.merchant.id === merchantId);
+    const earning = (b: Booking) => b.money.netSettlement;
+    return delay({
+      byProduct: groupSum(bookings, (b) => b.productKind, earning),
+      byRatePlan: groupSum(
+        bookings.filter((b) => b.stay),
+        (b) => b.stay!.ratePlanId,
+        earning,
+        (b) => b.stay!.ratePlanName,
+      ),
+      byDestination: groupSum(bookings, (b) => b.destination, earning),
+      byMonth: groupSum(bookings, (b) => b.createdAt.slice(0, 7), earning).sort((a, b) =>
+        a.key.localeCompare(b.key),
+      ),
+      commissionByMonth: groupSum(bookings, (b) => b.createdAt.slice(0, 7), (b) =>
+        money(b.money.commission - b.money.commissionReversed),
+      ).sort((a, b) => a.key.localeCompare(b.key)),
+    });
+  },
+
+  /**
+   * The financial timeline of a payout, in the platform's canonical states.
+   *
+   * The settlement machine has its own status vocabulary; this maps it onto the
+   * pending → eligible → approved → released → paid chain the business talks in,
+   * so admin, merchant and finance describe a payout the same way.
+   */
+  payoutTimeline(settlement: Settlement) {
+    const order: SettlementStatus[] = [
+      "pending",
+      "scheduled",
+      "processing",
+      "paid",
+    ];
+    const reached = order.indexOf(settlement.status);
+    const held = settlement.status === "on_hold";
+    const reversed = settlement.status === "failed";
+    return [
+      {
+        key: "pending",
+        label: "Pending",
+        note: "Bookings accrued; the batch is still open.",
+        done: reached >= 0 || held || reversed,
+      },
+      {
+        key: "eligible",
+        label: "Eligible",
+        note: "Delivery confirmed and the payout window has opened.",
+        done: reached >= 1 || reversed,
+      },
+      {
+        key: "held",
+        label: "Held",
+        note: "On hold pending a dispute or verification.",
+        done: held,
+        skipped: !held,
+      },
+      {
+        key: "approved",
+        label: "Approved",
+        note: `Scheduled for ${settlement.scheduledFor.slice(0, 10)} via ${settlement.method}.`,
+        done: reached >= 1,
+      },
+      {
+        key: "released",
+        label: "Released",
+        note: "Sent to the payment rail.",
+        done: reached >= 2,
+      },
+      {
+        key: "paid",
+        label: "Paid",
+        note: settlement.paidAt
+          ? `Settled ${settlement.paidAt.slice(0, 10)}.`
+          : "Not yet settled.",
+        done: reached >= 3,
+      },
+      {
+        key: "reversed",
+        label: "Reversed",
+        note: "The payout failed and was returned.",
+        done: reversed,
+        skipped: !reversed,
+      },
+    ];
   },
 
   async all(scope: DomainScope = SCOPE_NONE): Promise<Settlement[]> {
@@ -2030,9 +2355,14 @@ export const b2bService = {
     const account = mutate((draft) => {
       const row = draft.b2bAccounts.find((a) => a.id === id) ?? notFound("B2B account");
       const from = row.status;
+      const beforeLimit = row.creditLimit;
       Object.assign(row, patch);
-      return { row: structuredClone(row), from };
+      return { row: structuredClone(row), from, beforeLimit };
     });
+    // A credit-limit change is a lending decision, so it is audited with the
+    // before/after value rather than a generic "updated".
+    const creditChanged =
+      patch.creditLimit !== undefined && patch.creditLimit !== account.beforeLimit;
     recordAudit({
       actor,
       action:
@@ -2044,10 +2374,23 @@ export const b2bService = {
       entity: "b2b_account",
       entityId: id,
       entityLabel: account.row.name,
-      summary: `Updated B2B account ${account.row.name}`,
-      from: account.from,
-      to: account.row.status,
+      summary: creditChanged
+        ? `Changed ${account.row.name} credit limit to ${account.row.currency} ${account.row.creditLimit.toFixed(2)}`
+        : `Updated B2B account ${account.row.name}`,
+      from: creditChanged ? account.beforeLimit.toFixed(2) : account.from,
+      to: creditChanged ? account.row.creditLimit.toFixed(2) : account.row.status,
     });
+    if (creditChanged) {
+      notify({
+        category: "system",
+        audience: ["admin", "agency"],
+        title: "Credit limit changed",
+        body: `${account.row.name}: ${account.row.currency} ${account.beforeLimit.toFixed(2)} → ${account.row.creditLimit.toFixed(2)}`,
+        href: "/dashboard/b2b/accounts",
+        tone: "warning",
+        organizationId: id,
+      });
+    }
     return delay(account.row);
   },
 
@@ -2060,6 +2403,9 @@ export const b2bService = {
     const overdue = money(
       invoices.filter((i) => i.status === "overdue").reduce((n, i) => n + i.balance, 0),
     );
+    const nextDue = invoices
+      .filter((i) => i.balance > 0)
+      .sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
     return delay({
       currency: account.currency,
       creditLimit: account.creditLimit,
@@ -2071,7 +2417,200 @@ export const b2bService = {
       outstanding,
       overdue,
       invoiceCount: invoices.length,
+      dueAt: nextDue?.dueAt,
+      dueAmount: nextDue?.balance ?? 0,
+      blocked: account.status !== "active",
     });
+  },
+
+  /**
+   * Can this account commit `amount` right now? The same check
+   * `bookingService.create` enforces, exposed so a UI can warn *before* the
+   * traveller fills in a form.
+   */
+  async checkCredit(
+    id: string,
+    amount: number,
+  ): Promise<{ ok: boolean; available: number; currency: string; reason?: string }> {
+    const account =
+      getState().b2bAccounts.find((a) => a.id === id) ?? notFound("B2B account");
+    const available = money(Math.max(0, account.creditLimit - account.creditUsed));
+    if (account.status !== "active") {
+      return delay(
+        {
+          ok: false,
+          available,
+          currency: account.currency,
+          reason: `${account.name} is ${account.status} and can't book on credit.`,
+        },
+        120,
+      );
+    }
+    return delay(
+      {
+        ok: amount <= available,
+        available,
+        currency: account.currency,
+        reason:
+          amount <= available
+            ? undefined
+            : `Needs ${account.currency} ${money(amount - available).toFixed(2)} more credit.`,
+      },
+      120,
+    );
+  },
+
+  /**
+   * The commercial build-up for an account at a given public rate — the
+   * transparent view of Model 1 / 2 / 3 the admin UI renders line by line.
+   */
+  async terms(id: string, publicRate = 1_000) {
+    const account =
+      getState().b2bAccounts.find((a) => a.id === id) ?? notFound("B2B account");
+    const pricing = priceB2B({
+      publicRate,
+      netRateDiscount: account.netRateDiscount,
+      markupRate: account.defaultMarkupRate,
+      model: account.commercialModel,
+      agencyCommissionRate: account.agencyCommissionRate,
+    });
+    // The platform's own commission is decided by the rule engine, exactly as
+    // it would be on a real booking through this account.
+    const resolution = resolveCommission({
+      b2bAccountId: account.id,
+      gross: pricing.transactionValue,
+      net: pricing.transactionValue,
+    });
+    const platformMargin = money(resolution.commission - pricing.agencyCommission);
+    return delay({
+      account,
+      pricing,
+      resolution,
+      platformCommission: resolution.commission,
+      /** What the platform keeps after paying the agency its commission. */
+      platformMargin,
+      supplierPayable: money(pricing.transactionValue - resolution.commission),
+      lines: [
+        ...pricing.lines,
+        {
+          label: `Platform commission (${resolution.rate}%)`,
+          amount: resolution.commission,
+          tone: "positive" as const,
+        },
+        ...(pricing.agencyCommission > 0
+          ? [
+              {
+                label: "Less agency commission",
+                amount: pricing.agencyCommission,
+                tone: "negative" as const,
+              },
+            ]
+          : []),
+        { label: "Platform margin", amount: platformMargin },
+      ],
+    });
+  },
+
+  /** Named users who book under an account. */
+  async subUsers(id: string): Promise<B2BSubUser[]> {
+    return delay(getState().b2bSubUsers.filter((u) => u.accountId === id));
+  },
+
+  /**
+   * A period statement: opening balance, the bookings and invoices raised
+   * against it, payments received, and the closing balance.
+   */
+  async statement(id: string, from: string, to: string) {
+    const state = getState();
+    const account = state.b2bAccounts.find((a) => a.id === id) ?? notFound("B2B account");
+    const inWindow = (iso: string) => iso >= from && iso <= `${to}T23:59:59.999Z`;
+
+    const bookings = state.bookings.filter(
+      (b) => b.customer.organizationId === id && inWindow(b.createdAt),
+    );
+    const invoices = state.b2bInvoices.filter(
+      (i) => i.accountId === id && inWindow(i.issuedAt),
+    );
+    const priorInvoices = state.b2bInvoices.filter(
+      (i) => i.accountId === id && i.issuedAt < from,
+    );
+
+    const charges = money(invoices.reduce((n, i) => n + i.total, 0));
+    const payments = money(invoices.reduce((n, i) => n + i.paid, 0));
+    const opening = money(priorInvoices.reduce((n, i) => n + i.balance, 0));
+    const platformMargin = money(
+      bookings.reduce((n, b) => n + b.money.commission - b.money.commissionReversed, 0),
+    );
+
+    return delay({
+      account,
+      from,
+      to,
+      opening,
+      charges,
+      payments,
+      closing: money(opening + charges - payments),
+      bookings,
+      invoices,
+      bookingCount: bookings.length,
+      grossValue: money(bookings.reduce((n, b) => n + b.money.total, 0)),
+      netValue: money(bookings.reduce((n, b) => n + b.money.base, 0)),
+      markup: money(bookings.reduce((n, b) => n + b.money.markup, 0)),
+      platformMargin,
+    });
+  },
+
+  /**
+   * Charge the account's B2B subscription for another period. Simulated —
+   * the prototype has no recurring billing.
+   */
+  async chargeSubscription(
+    id: string,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<B2BAccount> {
+    const account =
+      getState().b2bAccounts.find((a) => a.id === id) ?? notFound("B2B account");
+    if (account.subscriptionFee <= 0) {
+      throw new ApiError({
+        kind: "validation",
+        message: `${account.name} is on the free Standard tier.`,
+      });
+    }
+    const renewsAt = new Date(
+      Math.max(
+        new Date(account.subscriptionRenewsAt ?? new Date().toISOString()).getTime(),
+        Date.now(),
+      ) +
+        90 * 86_400_000,
+    ).toISOString();
+    const updated = mutate((draft) => {
+      const row = draft.b2bAccounts.find((a) => a.id === id)!;
+      row.subscriptionRenewsAt = renewsAt;
+      return structuredClone(row);
+    });
+    recordRevenue({
+      at: new Date().toISOString(),
+      source: "b2b_subscription",
+      status: "finalized",
+      currency: account.currency,
+      label: `${account.name} — ${account.tier} B2B access`,
+      grossValue: account.subscriptionFee,
+      partnerShare: 0,
+      amount: account.subscriptionFee,
+      organizationId: account.id,
+      organizationName: account.name,
+      note: "Simulated subscription period — no recurring billing in the prototype.",
+    });
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "b2b_account",
+      entityId: id,
+      entityLabel: account.name,
+      summary: `Charged ${account.currency} ${account.subscriptionFee.toFixed(2)} for ${account.tier} B2B access`,
+      to: renewsAt.slice(0, 10),
+    });
+    return delay(updated);
   },
 
   async listInvoices(
@@ -2175,7 +2714,920 @@ export const b2bService = {
       b2cBookings: b2cBookings.length,
       b2cGmv: money(b2cBookings.reduce((n, b) => n + b.money.total, 0)),
       b2bGmv: money(bookings.reduce((n, b) => n + b.money.total, 0)),
+
+      // --- platform revenue from the B2B side ------------------------------
+      /** Commission on B2B bookings, net of reversals — the platform's margin. */
+      platformMargin: money(
+        bookings.reduce((n, b) => n + b.money.commission - b.money.commissionReversed, 0),
+      ),
+      /** What agencies keep: their markup plus any agency commission. */
+      agencyEarning: money(bookings.reduce((n, b) => n + b.money.markup, 0)),
+      subscriptionRevenue: money(
+        getState()
+          .revenueEntries.filter(
+            (e) =>
+              e.source === "b2b_subscription" &&
+              (!scope.organizationId || e.organizationId === scope.organizationId),
+          )
+          .reduce((n, e) => n + e.net, 0),
+      ),
+      subscribedAccounts: accounts.filter((a) => a.subscriptionFee > 0).length,
+      byModel: groupSum(
+        accounts,
+        (a) => a.commercialModel,
+        () => 1,
+      ),
+      byAccount: groupSum(
+        bookings,
+        (b) => b.customer.organizationId ?? "—",
+        (b) => money(b.money.commission - b.money.commissionReversed),
+        (b) => b.customer.organizationName ?? "—",
+      ),
     });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Commission configuration
+// ---------------------------------------------------------------------------
+
+/**
+ * The commission rule book. Every change is audited with the before/after
+ * value, because a commission rate is the single most consequential number an
+ * operator can edit.
+ */
+export const commissionRuleService = {
+  async list(params: ListParams = {}): Promise<Paginated<CommissionRule>> {
+    return delay(
+      queryList(commissionRuleStore.list(), {
+        params,
+        searchFields: (r) => [r.name, r.targetLabel, r.targetId, r.note ?? ""],
+        sortValue: (row, field) =>
+          field === "effectiveFrom"
+            ? new Date(row.effectiveFrom).getTime()
+            : (row as unknown as Record<string, string | number>)[field],
+        filterPredicates: {
+          scope: (row, value) => row.scope === value,
+          status: (row, value) => row.status === value,
+          basis: (row, value) => row.basis === value,
+          calc: (row, value) => row.calc === value,
+        },
+      }),
+    );
+  },
+
+  async all(): Promise<CommissionRule[]> {
+    return delay(commissionRuleStore.list());
+  },
+
+  async get(id: string): Promise<CommissionRule> {
+    return delay(commissionRuleStore.get(id) ?? notFound("Commission rule"));
+  },
+
+  async create(
+    input: CommissionRuleInput,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<CommissionRule> {
+    const rule = commissionRuleStore.create(input, actor.name);
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "commission_rule",
+      entityId: rule.id,
+      entityLabel: rule.name,
+      summary: `Created commission rule ${rule.name} — ${describeRule(rule)} on ${rule.targetLabel}`,
+      to: describeRule(rule),
+    });
+    notify({
+      category: "commission",
+      audience: ["admin"],
+      title: "Commission rule created",
+      body: `${rule.name} · ${describeRule(rule)} · ${rule.targetLabel}`,
+      href: "/dashboard/finance/commission/rules",
+      tone: "neutral",
+    });
+    return delay(rule);
+  },
+
+  async update(
+    id: string,
+    patch: Partial<CommissionRuleInput>,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<CommissionRule> {
+    const result = commissionRuleStore.update(id, patch, actor.name);
+    if (!result) notFound("Commission rule");
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "commission_rule",
+      entityId: id,
+      entityLabel: result.after.name,
+      summary: `Changed commission rule ${result.after.name} on ${result.after.targetLabel}`,
+      from: describeRule(result.before),
+      to: describeRule(result.after),
+    });
+    notify({
+      category: "commission",
+      audience: ["admin"],
+      title: "Commission rule changed",
+      body: `${result.after.name}: ${describeRule(result.before)} → ${describeRule(result.after)}`,
+      href: "/dashboard/finance/commission/rules",
+      tone: "warning",
+    });
+    return delay(result.after);
+  },
+
+  async remove(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<void> {
+    const removed = commissionRuleStore.remove(id);
+    if (!removed) notFound("Commission rule");
+    recordAudit({
+      actor,
+      action: "delete",
+      entity: "commission_rule",
+      entityId: id,
+      entityLabel: removed.name,
+      summary: `Deleted commission rule ${removed.name} (${removed.targetLabel})`,
+      from: describeRule(removed),
+    });
+  },
+
+  /** Dry-run the rule book against a hypothetical booking. */
+  async preview(ctx: CommissionContext): Promise<{
+    resolution: CommissionResolution;
+    candidates: CommissionRule[];
+  }> {
+    return delay(
+      { resolution: resolveCommission(ctx), candidates: matchingRules(ctx) },
+      120,
+    );
+  },
+
+  /**
+   * The commission lifecycle for one booking: accrual → finalisation →
+   * reversal, with the numbers at each step.
+   */
+  async lifecycle(bookingId: string, scope: DomainScope = SCOPE_NONE) {
+    const booking = findBooking(bookingId);
+    if (!inScope(scope, booking)) forbidden("Not your booking.");
+    const entry = getState().commissions.find((c) => c.bookingId === bookingId);
+    const m = booking.money;
+    const stages = [
+      {
+        key: "accrued",
+        label: "Commission accrued",
+        at: booking.createdAt,
+        amount: m.commission,
+        done: true,
+        note: `${m.commissionRate}% of ${m.commissionBasis === "gross" ? "gross" : "net"} sale (${m.currency} ${m.commissionBase.toFixed(2)})`,
+      },
+      {
+        key: "finalized",
+        label: "Commission finalized",
+        at: booking.status === "completed" ? booking.updatedAt : undefined,
+        amount: m.commission,
+        done: booking.status === "completed",
+        note: "Booking delivered — the commission is no longer contingent.",
+      },
+      {
+        key: "settled",
+        label: "Settled to the merchant",
+        at: entry?.settlementId ? booking.updatedAt : undefined,
+        amount: m.netSettlement,
+        done: entry?.status === "settled",
+        note: entry?.settlementId
+          ? `Included in settlement ${entry.settlementId}`
+          : "Awaiting the next payout run.",
+      },
+      {
+        key: "reversed",
+        label: "Commission reversed",
+        at: m.commissionReversed > 0 ? booking.updatedAt : undefined,
+        amount: m.commissionReversed,
+        done: m.commissionReversed > 0,
+        note:
+          m.commissionReversed > 0
+            ? "Refund issued — commission returned proportionally."
+            : "No refund on this booking.",
+      },
+    ];
+    return delay({ booking, entry, stages });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Platform revenue
+// ---------------------------------------------------------------------------
+
+function revenueScopeFor(scope: DomainScope): RevenueScope {
+  return { merchantId: scope.merchantId, organizationId: scope.organizationId };
+}
+
+/**
+ * The Revenue Center's data source. Every figure comes from
+ * {@link revenueLedger}, so the answer to "where does StayOra make money?" has
+ * exactly one definition.
+ */
+export const revenueService = {
+  async ledger(
+    filters: RevenueFilters = {},
+    scope: DomainScope = SCOPE_NONE,
+  ): Promise<RevenueEntry[]> {
+    return delay(revenueLedger(filters, revenueScopeFor(scope)));
+  },
+
+  async list(
+    params: ListParams = {},
+    filters: RevenueFilters = {},
+    scope: DomainScope = SCOPE_NONE,
+  ): Promise<Paginated<RevenueEntry>> {
+    const rows = revenueLedger(filters, revenueScopeFor(scope));
+    return delay(
+      queryList(rows, {
+        params,
+        searchFields: (r) => [
+          r.label,
+          r.reference,
+          r.bookingRef ?? "",
+          r.merchantName ?? "",
+          r.organizationName ?? "",
+          r.customerName ?? "",
+        ],
+        sortValue: (row, field) =>
+          field === "at"
+            ? new Date(row.at).getTime()
+            : (row as unknown as Record<string, string | number>)[field],
+        defaultSort: (a, b) => b.at.localeCompare(a.at),
+      }),
+    );
+  },
+
+  async summary(
+    filters: RevenueFilters = {},
+    scope: DomainScope = SCOPE_NONE,
+  ): Promise<RevenueSummary> {
+    return delay(summarizeRevenue(revenueLedger(filters, revenueScopeFor(scope))));
+  },
+
+  /** Everything the Revenue Center renders, in one call. */
+  async center(filters: RevenueFilters = {}, scope: DomainScope = SCOPE_NONE) {
+    const entries = revenueLedger(filters, revenueScopeFor(scope));
+    const state = getState();
+    const bookings = state.bookings.filter((b) => inScope(scope, b));
+    const settlements = state.settlements.filter((s) => inScope(scope, s));
+    return delay({
+      summary: summarizeRevenue(entries),
+      byMonth: revenueByMonth(entries),
+      mixByMonth: revenueMixByMonth(entries),
+      byMerchant: groupRevenue(
+        entries,
+        (e) => e.merchantId,
+        (e) => e.merchantName ?? e.merchantId ?? "—",
+      ),
+      byProduct: groupRevenue(entries, (e) => e.productKind),
+      byDestination: groupRevenue(entries, (e) => e.destination),
+      byAccount: groupRevenue(
+        entries,
+        (e) => e.organizationId,
+        (e) => e.organizationName ?? e.organizationId ?? "—",
+      ),
+      byCustomer: groupRevenue(
+        entries,
+        (e) => e.customerEmail,
+        (e) => e.customerName ?? e.customerEmail ?? "—",
+      ),
+      bySegment: groupRevenue(entries, (e) => e.segment),
+      /** Booking-side reconciliation, so the two engines can be compared. */
+      financials: platformFinancials(bookings, settlements),
+      recent: entries.slice(0, 12),
+    });
+  },
+
+  /** Record a manual revenue adjustment — always audited. */
+  async adjust(
+    input: {
+      amount: number;
+      label: string;
+      note?: string;
+      merchantId?: string;
+      merchantName?: string;
+      organizationId?: string;
+      currency?: string;
+    },
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<RevenueEntry> {
+    if (!Number.isFinite(input.amount) || input.amount === 0) {
+      throw new ApiError({ kind: "validation", message: "Enter a non-zero amount." });
+    }
+    const entry = recordRevenue({
+      at: new Date().toISOString(),
+      source: "adjustment",
+      status: "finalized",
+      currency: input.currency ?? PRICING_CONFIG.currency,
+      label: input.label,
+      grossValue: 0,
+      partnerShare: 0,
+      amount: money(input.amount),
+      merchantId: input.merchantId,
+      merchantName: input.merchantName,
+      organizationId: input.organizationId,
+      note: input.note,
+    });
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "revenue_adjustment",
+      entityId: entry.id,
+      entityLabel: entry.reference,
+      summary: `Revenue adjustment ${entry.reference} — ${entry.currency} ${entry.amount.toFixed(2)} · ${entry.label}`,
+      to: entry.amount.toFixed(2),
+    });
+    return delay(entry);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Insurance
+// ---------------------------------------------------------------------------
+
+export const insuranceAdminService = {
+  async providers(): Promise<InsuranceProvider[]> {
+    return delay(insuranceService.providers());
+  },
+
+  async listPlans(params: ListParams = {}): Promise<Paginated<InsurancePlan>> {
+    return delay(
+      queryList(insuranceService.allPlans(), {
+        params,
+        searchFields: (r) => [r.name, r.providerName, r.summary],
+        sortValue: (row, field) =>
+          (row as unknown as Record<string, string | number>)[field],
+        filterPredicates: {
+          status: (row, value) => row.status === value,
+          tier: (row, value) => row.tier === value,
+          providerId: (row, value) => row.providerId === value,
+        },
+      }),
+    );
+  },
+
+  async listPolicies(params: ListParams = {}): Promise<Paginated<InsurancePolicy>> {
+    return delay(
+      queryList(insuranceService.policies(), {
+        params,
+        searchFields: (r) => [r.reference, r.bookingRef, r.customerName, r.planName],
+        sortValue: (row, field) =>
+          field === "purchasedAt"
+            ? new Date(row.purchasedAt).getTime()
+            : (row as unknown as Record<string, string | number>)[field],
+        filterPredicates: {
+          status: (row, value) => row.status === value,
+          tier: (row, value) => row.tier === value,
+          planId: (row, value) => row.planId === value,
+          providerId: (row, value) => row.providerId === value,
+        },
+        defaultSort: (a, b) => b.purchasedAt.localeCompare(a.purchasedAt),
+      }),
+    );
+  },
+
+  async createPlan(
+    input: InsurancePlanInput,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<InsurancePlan> {
+    const plan = insurancePlanStore.create(input);
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "insurance_plan",
+      entityId: plan.id,
+      entityLabel: plan.name,
+      summary: `Created insurance plan ${plan.name} (${plan.providerName})`,
+      to: `${plan.commissionValue}${plan.commissionType === "percent" ? "%" : " USD"}`,
+    });
+    return delay(plan);
+  },
+
+  async updatePlan(
+    id: string,
+    patch: Partial<InsurancePlanInput>,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<InsurancePlan> {
+    const result = insurancePlanStore.update(id, patch);
+    if (!result) notFound("Insurance plan");
+    const term = (p: InsurancePlan) =>
+      `${p.price}${p.pricingModel === "percent_of_trip" ? "%" : " USD"} · commission ${p.commissionValue}${p.commissionType === "percent" ? "%" : " USD"}`;
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "insurance_plan",
+      entityId: id,
+      entityLabel: result.after.name,
+      summary: `Changed insurance plan ${result.after.name}`,
+      from: term(result.before),
+      to: term(result.after),
+    });
+    notify({
+      category: "insurance",
+      audience: ["admin"],
+      title: "Insurance plan changed",
+      body: `${result.after.name}: ${term(result.before)} → ${term(result.after)}`,
+      href: "/dashboard/finance/insurance",
+      tone: "warning",
+    });
+    return delay(result.after);
+  },
+
+  /** Roll-up plus the attach rate, which needs the booking count. */
+  async summary(scope: DomainScope = SCOPE_NONE) {
+    const base = insuranceService.summary();
+    const bookings = getState().bookings.filter(
+      (b) => inScope(scope, b) && b.status !== "failed",
+    );
+    const withPolicy = bookings.filter((b) => b.insurancePolicyId).length;
+    const policies = insuranceService.policies();
+    return delay({
+      ...base,
+      attachRate: bookings.length > 0 ? withPolicy / bookings.length : 0,
+      byPlan: groupSum(
+        policies,
+        (p) => p.planId,
+        (p) => money(p.platformRevenue - p.revenueReversed),
+        (p) => p.planName,
+      ),
+      byProvider: groupSum(
+        policies,
+        (p) => p.providerId,
+        (p) => money(p.platformRevenue - p.revenueReversed),
+        (p) => p.providerName,
+      ),
+      byTier: groupSum(
+        policies,
+        (p) => p.tier,
+        (p) => money(p.platformRevenue - p.revenueReversed),
+      ),
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Membership
+// ---------------------------------------------------------------------------
+
+export const membershipAdminService = {
+  async plans(): Promise<MembershipPlan[]> {
+    return delay(membershipService.plans());
+  },
+
+  async listSubscriptions(
+    params: ListParams = {},
+  ): Promise<Paginated<MembershipSubscription>> {
+    return delay(
+      queryList(membershipService.subscriptions(), {
+        params,
+        searchFields: (r) => [r.reference, r.customerName, r.customerEmail, r.planName],
+        sortValue: (row, field) =>
+          field === "startAt" || field === "renewsAt"
+            ? new Date(row[field]).getTime()
+            : (row as unknown as Record<string, string | number>)[field],
+        filterPredicates: {
+          status: (row, value) => row.status === value,
+          planCode: (row, value) => row.planCode === value,
+          billingPeriod: (row, value) => row.billingPeriod === value,
+        },
+        defaultSort: (a, b) => b.startAt.localeCompare(a.startAt),
+      }),
+    );
+  },
+
+  async summary() {
+    return delay(membershipService.summary());
+  },
+
+  async updatePlan(
+    id: string,
+    patch: Partial<MembershipPlanInput>,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<MembershipPlan> {
+    const result = membershipPlanStore.update(id, patch);
+    if (!result) notFound("Membership plan");
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "membership_plan",
+      entityId: id,
+      entityLabel: result.after.name,
+      summary: `Changed membership plan ${result.after.name}`,
+      from: `$${result.before.price} ${result.before.billingPeriod}`,
+      to: `$${result.after.price} ${result.after.billingPeriod}`,
+    });
+    notify({
+      category: "membership",
+      audience: ["admin"],
+      title: "Membership plan changed",
+      body: `${result.after.name}: $${result.before.price} → $${result.after.price}`,
+      href: "/dashboard/membership",
+      tone: "warning",
+    });
+    return delay(result.after);
+  },
+
+  /**
+   * Sell a membership. Writes the subscription *and* the revenue entry — this
+   * is the one place membership revenue is recognised.
+   */
+  async subscribe(
+    input: { customerEmail: string; customerName: string; planId: string; autoRenew?: boolean },
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<MembershipSubscription> {
+    const plan = membershipService.plan(input.planId) ?? notFound("Membership plan");
+    if (plan.status !== "active") {
+      throw new ApiError({ kind: "validation", message: `${plan.name} is not on sale.` });
+    }
+    const sub = membershipService.subscribe(input);
+    if (plan.price > 0) {
+      recordRevenue({
+        at: sub.startAt,
+        source: "membership",
+        status: "finalized",
+        currency: sub.currency,
+        label: `${plan.name} — ${plan.billingPeriod === "annual" ? "annual" : "monthly"} subscription`,
+        grossValue: plan.price,
+        partnerShare: 0,
+        amount: plan.price,
+        customerEmail: sub.customerEmail,
+        customerName: sub.customerName,
+        planId: plan.id,
+      });
+    }
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "membership",
+      entityId: sub.id,
+      entityLabel: sub.reference,
+      summary: `${sub.customerName} subscribed to ${plan.name} (${sub.currency} ${plan.price})`,
+      to: "active",
+    });
+    notify({
+      category: "membership",
+      audience: ["admin"],
+      title: "New member",
+      body: `${sub.customerName} · ${plan.name} · ${sub.currency} ${plan.price.toFixed(2)}`,
+      href: "/dashboard/membership",
+      tone: "success",
+    });
+    return delay(sub);
+  },
+
+  async cancel(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<MembershipSubscription> {
+    const sub = membershipService.cancel(id);
+    if (!sub) notFound("Membership");
+    recordAudit({
+      actor,
+      action: "cancel",
+      entity: "membership",
+      entityId: id,
+      entityLabel: sub.reference,
+      summary: `Cancelled ${sub.planName} for ${sub.customerName} — benefits run to ${sub.renewsAt.slice(0, 10)}`,
+      to: "cancelled",
+    });
+    return delay(sub);
+  },
+
+  /** Simulated renewal — no real recurring billing exists in the prototype. */
+  async renew(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<MembershipSubscription> {
+    const sub = membershipService.renew(id);
+    if (!sub) notFound("Membership");
+    if (sub.price > 0) {
+      recordRevenue({
+        at: new Date().toISOString(),
+        source: "membership",
+        status: "finalized",
+        currency: sub.currency,
+        label: `${sub.planName} — simulated renewal`,
+        grossValue: sub.price,
+        partnerShare: 0,
+        amount: sub.price,
+        customerEmail: sub.customerEmail,
+        customerName: sub.customerName,
+        planId: sub.planId,
+        note: "Simulated renewal — the prototype has no recurring billing.",
+      });
+    }
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "membership",
+      entityId: id,
+      entityLabel: sub.reference,
+      summary: `Renewed ${sub.planName} for ${sub.customerName} to ${sub.renewsAt.slice(0, 10)}`,
+      to: "active",
+    });
+    return delay(sub);
+  },
+
+  async refund(
+    id: string,
+    amount: number | undefined,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<MembershipSubscription> {
+    const result = membershipService.refund(id, amount);
+    if (!result) notFound("Membership");
+    // Reverse the most recent revenue entry for this subscriber's plan.
+    const candidates = storedEntriesFor({
+      planId: result.subscription.planId,
+      customerEmail: result.subscription.customerEmail,
+    })
+      .filter((e) => e.source === "membership" && e.net > 0)
+      .sort((a, b) => b.at.localeCompare(a.at));
+    if (candidates[0]) {
+      reverseRevenue(candidates[0].id, result.refunded, "Membership refunded.");
+    }
+    recordAudit({
+      actor,
+      action: "refund",
+      entity: "membership",
+      entityId: id,
+      entityLabel: result.subscription.reference,
+      summary: `Refunded ${result.subscription.currency} ${result.refunded.toFixed(2)} of ${result.subscription.planName}`,
+      to: "cancelled",
+    });
+    return delay(result.subscription);
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Advertising
+// ---------------------------------------------------------------------------
+
+export const advertisingService = {
+  async advertisers(): Promise<Advertiser[]> {
+    return delay(adService.advertisers());
+  },
+
+  async listCampaigns(params: ListParams = {}): Promise<Paginated<AdCampaign>> {
+    return delay(
+      queryList(adService.campaigns(), {
+        params,
+        searchFields: (r) => [r.name, r.reference, r.advertiserName, r.creativeHeadline],
+        sortValue: (row, field) =>
+          field === "startAt" || field === "endAt"
+            ? new Date(row[field]).getTime()
+            : field === "spend"
+              ? campaignSpend(row)
+              : (row as unknown as Record<string, string | number>)[field],
+        filterPredicates: {
+          status: (row, value) => row.status === value,
+          placement: (row, value) => row.placement === value,
+          pricingModel: (row, value) => row.pricingModel === value,
+          advertiserId: (row, value) => row.advertiserId === value,
+        },
+        defaultSort: (a, b) => b.startAt.localeCompare(a.startAt),
+      }),
+    );
+  },
+
+  async get(id: string): Promise<AdCampaign> {
+    return delay(adService.campaign(id) ?? notFound("Campaign"));
+  },
+
+  async performance(id: string) {
+    const campaign = adService.campaign(id) ?? notFound("Campaign");
+    return delay({ campaign, ...campaignPerformance(campaign) });
+  },
+
+  async create(input: AdCampaignInput, actor: DomainActor = SYSTEM_ACTOR): Promise<AdCampaign> {
+    const campaign = adService.create(input);
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "ad_campaign",
+      entityId: campaign.id,
+      entityLabel: campaign.name,
+      summary: `Created campaign ${campaign.name} — ${campaign.pricingModel.toUpperCase()} $${campaign.rate}, budget $${campaign.budget}`,
+      to: campaign.status,
+    });
+    return delay(campaign);
+  },
+
+  async update(
+    id: string,
+    patch: Partial<AdCampaignInput>,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<AdCampaign> {
+    const result = adService.update(id, patch);
+    if (!result) notFound("Campaign");
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "ad_campaign",
+      entityId: id,
+      entityLabel: result.after.name,
+      summary: `Updated campaign ${result.after.name}`,
+      from: `$${result.before.budget} budget · ${result.before.status}`,
+      to: `$${result.after.budget} budget · ${result.after.status}`,
+    });
+    return delay(result.after);
+  },
+
+  async setStatus(
+    id: string,
+    status: CampaignStatus,
+    options: { actor?: DomainActor; note?: string } = {},
+  ): Promise<AdCampaign> {
+    const actor = options.actor ?? SYSTEM_ACTOR;
+    const before = adService.campaign(id) ?? notFound("Campaign");
+    const campaign = adService.setStatus(id, status, { by: actor.name, note: options.note });
+    if (!campaign) notFound("Campaign");
+    recordAudit({
+      actor,
+      action:
+        status === "active" ? "approve" : status === "rejected" ? "reject" : "status_change",
+      entity: "ad_campaign",
+      entityId: id,
+      entityLabel: campaign.name,
+      summary: `Campaign ${campaign.name} → ${CAMPAIGN_STATUS_LABELS[status]}`,
+      from: before.status,
+      to: status,
+    });
+    if (status === "active" || status === "rejected") {
+      notify({
+        category: "advertising",
+        audience: ["admin", "merchant"],
+        title: status === "active" ? "Campaign approved" : "Campaign rejected",
+        body: `${campaign.name} · ${campaign.advertiserName}`,
+        href: "/dashboard/advertising",
+        tone: status === "active" ? "success" : "danger",
+        merchantId: adService.advertiser(campaign.advertiserId)?.merchantId,
+      });
+    }
+    return delay(campaign);
+  },
+
+  /** Record delivery from a storefront placement. */
+  async recordEvent(
+    id: string,
+    event: "impression" | "click" | "conversion",
+    payload: { value?: number; count?: number } = {},
+  ): Promise<AdCampaign | undefined> {
+    return adService.recordEvent(id, event, payload);
+  },
+
+  /** Recognise unbilled spend as advertising revenue. */
+  async bill(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<{ campaign: AdCampaign; amount: number }> {
+    const result = adService.bill(id);
+    if (!result) notFound("Campaign");
+    if (result.amount <= 0) {
+      throw new ApiError({
+        kind: "validation",
+        message: "This campaign has no unbilled spend.",
+      });
+    }
+    recordRevenue({
+      at: new Date().toISOString(),
+      source: "advertising",
+      status: result.campaign.status === "completed" ? "finalized" : "accrued",
+      currency: result.campaign.currency,
+      label: `${result.campaign.name} — ${result.campaign.pricingModel.toUpperCase()} billing`,
+      grossValue: result.amount,
+      partnerShare: 0,
+      amount: result.amount,
+      campaignId: result.campaign.id,
+      advertiserId: result.campaign.advertiserId,
+      merchantId: adService.advertiser(result.campaign.advertiserId)?.merchantId,
+      note: spendExplanation(result.campaign),
+    });
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "ad_campaign",
+      entityId: id,
+      entityLabel: result.campaign.name,
+      summary: `Billed ${result.campaign.currency} ${result.amount.toFixed(2)} on ${result.campaign.name} — ${spendExplanation(result.campaign)}`,
+      to: result.amount.toFixed(2),
+    });
+    return delay(result);
+  },
+
+  async summary() {
+    const base = adService.summary();
+    const campaigns = adService.campaigns();
+    return delay({
+      ...base,
+      byPlacement: groupSum(
+        campaigns,
+        (c) => c.placement,
+        (c) => campaignSpend(c),
+        (c) => PLACEMENT_LABELS[c.placement],
+      ),
+      byModel: groupSum(
+        campaigns,
+        (c) => c.pricingModel,
+        (c) => campaignSpend(c),
+        (c) => PRICING_MODEL_LABELS[c.pricingModel],
+      ),
+      byAdvertiser: groupSum(
+        campaigns,
+        (c) => c.advertiserId,
+        (c) => campaignSpend(c),
+        (c) => c.advertiserName,
+      ),
+    });
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Revenue management
+// ---------------------------------------------------------------------------
+
+export const revenueManagementService = {
+  async rules(scope: { propertyId?: string } = {}): Promise<PricingRule[]> {
+    return delay(pricingRuleStore.list(scope));
+  },
+
+  async createRule(
+    input: PricingRuleInput,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<PricingRule> {
+    const rule = pricingRuleStore.create(input, actor.name);
+    recordAudit({
+      actor,
+      action: "create",
+      entity: "pricing_rule",
+      entityId: rule.id,
+      entityLabel: rule.name,
+      summary: `Created pricing rule ${rule.name} (${RULE_KIND_LABELS[rule.kind]})`,
+      to: `${rule.adjustmentPercent}%`,
+    });
+    return delay(rule);
+  },
+
+  async updateRule(
+    id: string,
+    patch: Partial<PricingRuleInput>,
+    actor: DomainActor = SYSTEM_ACTOR,
+  ): Promise<PricingRule> {
+    const result = pricingRuleStore.update(id, patch, actor.name);
+    if (!result) notFound("Pricing rule");
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "pricing_rule",
+      entityId: id,
+      entityLabel: result.after.name,
+      summary: `Changed pricing rule ${result.after.name}`,
+      from: `${result.before.adjustmentPercent}% @ ${Math.round(result.before.threshold * 100)}%`,
+      to: `${result.after.adjustmentPercent}% @ ${Math.round(result.after.threshold * 100)}%`,
+    });
+    return delay(result.after);
+  },
+
+  async removeRule(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<void> {
+    const removed = pricingRuleStore.remove(id);
+    if (!removed) notFound("Pricing rule");
+    recordAudit({
+      actor,
+      action: "delete",
+      entity: "pricing_rule",
+      entityId: id,
+      entityLabel: removed.name,
+      summary: `Deleted pricing rule ${removed.name}`,
+    });
+  },
+
+  /**
+   * Apply a recommendation. It writes an inventory override, so the change is
+   * live for the very next quote — and it is audited like any rate change.
+   */
+  async apply(rec: Recommendation, actor: DomainActor = SYSTEM_ACTOR): Promise<number> {
+    const days = applyRecommendation(rec, actor.name);
+    recordAudit({
+      actor,
+      action: "update",
+      entity: "rate",
+      entityId: `${rec.roomTypeId}:${rec.date}`,
+      entityLabel: `${rec.roomTypeName} · ${rec.date}`,
+      summary: `Applied revenue-management recommendation — ${rec.message}`,
+      to: rec.action.price ? `$${rec.action.price.toFixed(2)}` : RECOMMENDATION_LABELS[rec.kind],
+    });
+    notify({
+      category: "revenue",
+      audience: ["admin", "merchant"],
+      title: "Rate updated by recommendation",
+      body: rec.message,
+      href: "/dashboard/catalog/revenue-management",
+      tone: "success",
+    });
+    return delay(days, 120);
+  },
+
+  /** Booking pace, scoped to the caller. */
+  async pace(filter: { merchantId?: string; listingId?: string } = {}) {
+    return delay(bookingPace(filter));
+  },
+
+  async performance(filter: { merchantId?: string; listingId?: string } = {}) {
+    return delay(bookingPerformance(filter));
   },
 };
 

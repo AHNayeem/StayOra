@@ -23,6 +23,8 @@ import { AirlineLogoStack } from "../airline-logo";
 import { EmissionsBadge, FlightBadges } from "./flight-badges";
 import { SliceSummary } from "./slice-summary";
 import { SegmentTimeline } from "./segment-timeline";
+import { FlightCompareToggle } from "./flight-compare-toggle";
+import { offerLabel } from "./offer-label";
 
 interface FlightCardProps {
   offer: FlightOffer;
@@ -177,6 +179,10 @@ export function FlightCard({ offer, href, className }: FlightCardProps) {
                 aria-hidden="true"
               />
             </Button>
+            {/* Compare sits with the other actions rather than as an overlay on
+                the card: there is no media here to overlay, and a traveller
+                weighing four fares is already looking at this column. */}
+            <FlightCompareToggle offerId={offer.id} label={offerLabel(offer)} />
           </div>
         </div>
       </div>

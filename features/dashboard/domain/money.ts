@@ -12,21 +12,27 @@
  * -----------------
  *   netSale         = base + markup − discount
  *   taxes           = netSale × taxRate
- *   fees            = netSale × platformFeeRate
- *   customerTotal   = netSale + taxes + fees
- *   commission      = netSale × commissionRate
- *   merchantEarning = netSale − commission
- *   platformRevenue = commission + fees
+ *   fees            = netSale × platformFeeRate      (waivable by membership)
+ *   customerTotal   = netSale + taxes + fees + insurance
+ *   commissionBase  = netSale + platformFundedDiscount | base + markup
+ *   commission      = commissionBase × rate + fixed  (clamped to min/max)
+ *   merchantEarning = netSale − commission + platformFundedDiscount
+ *   platformRevenue = commission + fees + insuranceRevenue − platformFundedDiscount
  *   netSettlement   = merchantEarning − refundAdjustment
+ *
+ * Tax is never platform revenue, and the merchant's earning is never counted as
+ * platform revenue — see {@link platformFinancials}.
  */
 
 import { getCancellationPolicy } from "./lifecycle";
 import type {
   AppliedDiscount,
+  B2BCommercialModel,
   Booking,
   BookingMoney,
   BookingSegment,
   CancellationPolicyId,
+  CommissionBasis,
   ComboOffer,
   CustomerEligibility,
   Offer,
@@ -47,6 +53,15 @@ export const PRICING_CONFIG = {
   platformFeeRate: 0.02,
   /** Fallback commission when a merchant has no negotiated rate. */
   defaultCommissionRate: 12,
+  /**
+   * The platform's administration share of a cancellation fee.
+   *
+   * The rest of the fee stays with the merchant, who lost the night. This share
+   * is deducted from the merchant's settlement and recognised as platform
+   * revenue, so the "Cancellation & amendment fees" line in the Revenue Center
+   * is a real transfer rather than a second view of retained commission.
+   */
+  cancellationAdminShare: 0.2,
   /** Commission rates per product kind, percent. */
   commissionByProduct: {
     hotels: 12,
@@ -85,13 +100,33 @@ export interface PriceBookingInput {
   /** Agency/corporate markup — B2B only. */
   markup?: number;
   discount?: number;
+  /** The slice of `discount` the platform funds (a promotional subsidy). */
+  platformFundedDiscount?: number;
   commissionRate: number;
+  /** What the rate is measured against. Defaults to the discounted net sale. */
+  commissionBasis?: CommissionBasis;
+  /**
+   * Commission decided by the rule engine, in currency. When supplied it wins
+   * over `commissionRate × basis` — the rate is then only a display figure.
+   */
+  commissionAmount?: number;
+  /** Rule that produced the commission, recorded for the audit trail. */
+  commissionRuleId?: string;
   currency?: string;
   taxRate?: number;
   platformFeeRate?: number;
+  /** Absolute service fee, e.g. 0 when a membership waives it. */
+  feeOverride?: number;
+  /** Insurance premium charged on top of the sale. Not commissionable. */
+  insurance?: number;
+  /** Of `insurance`, the demo provider's share. */
+  insuranceProviderShare?: number;
+  /** The platform's administration share of a cancellation fee charged so far. */
+  platformCancellationFee?: number;
   /** Already-refunded amount, when re-pricing an existing booking. */
   refunded?: number;
   commissionReversed?: number;
+  insuranceRevenueReversed?: number;
 }
 
 /**
@@ -102,22 +137,54 @@ export function priceBooking({
   base,
   markup = 0,
   discount = 0,
+  platformFundedDiscount = 0,
   commissionRate,
+  commissionBasis = "net",
+  commissionAmount,
+  commissionRuleId,
   currency = PRICING_CONFIG.currency,
   taxRate = PRICING_CONFIG.taxRate,
   platformFeeRate = PRICING_CONFIG.platformFeeRate,
+  feeOverride,
+  insurance = 0,
+  insuranceProviderShare = 0,
+  platformCancellationFee = 0,
   refunded = 0,
   commissionReversed = 0,
+  insuranceRevenueReversed = 0,
 }: PriceBookingInput): BookingMoney {
   const netSale = money(Math.max(0, base + markup - discount));
   const taxes = money(netSale * taxRate);
-  const fees = money(netSale * platformFeeRate);
-  const total = money(netSale + taxes + fees);
-  const commission = money(netSale * (commissionRate / 100));
-  const merchantEarning = money(netSale - commission);
-  const platformRevenue = money(commission + fees);
+  const fees = money(feeOverride ?? netSale * platformFeeRate);
+  const insurancePremium = money(Math.max(0, insurance));
+  const providerShare = money(Math.min(insurancePremium, Math.max(0, insuranceProviderShare)));
+  const insuranceRevenue = money(insurancePremium - providerShare);
+  const total = money(netSale + taxes + fees + insurancePremium);
+
+  // A platform-funded discount is not a price cut by the merchant: they sold at
+  // full value and the platform paid the difference. So it never reduces the
+  // commission base — otherwise the platform would pay the subsidy *and* give
+  // up commission on it, and the merchant would end up better off than if the
+  // promotion had never run.
+  const subsidyForBase = money(Math.min(platformFundedDiscount, discount));
+  const commissionBase =
+    commissionBasis === "gross"
+      ? money(base + markup)
+      : commissionBasis === "fixed"
+        ? 0
+        : money(netSale + subsidyForBase);
+  const commission = money(
+    commissionAmount ?? commissionBase * (commissionRate / 100),
+  );
+  // The platform reimburses the merchant for a discount it funded itself.
+  const subsidy = subsidyForBase;
+  const adminFee = money(Math.max(0, platformCancellationFee));
+  const merchantEarning = money(netSale - commission + subsidy);
+  const platformRevenue = money(
+    commission + fees + insuranceRevenue - subsidy + adminFee,
+  );
   const netSettlement = money(
-    merchantEarning - Math.max(0, refunded - commissionReversed),
+    merchantEarning - Math.max(0, refunded - commissionReversed) - adminFee,
   );
 
   return {
@@ -125,16 +192,25 @@ export function priceBooking({
     base: money(base),
     markup: money(markup),
     discount: money(discount),
+    platformFundedDiscount: subsidy,
     netSale,
     taxes,
     fees,
+    insurance: insurancePremium,
+    insuranceProviderShare: providerShare,
+    insuranceRevenue,
     total,
+    platformCancellationFee: adminFee,
     commissionRate,
+    commissionBasis,
+    commissionBase,
+    commissionRuleId,
     commission,
     merchantEarning,
     platformRevenue,
     refunded: money(refunded),
     commissionReversed: money(commissionReversed),
+    insuranceRevenueReversed: money(insuranceRevenueReversed),
     netSettlement,
   };
 }
@@ -144,17 +220,28 @@ export function applyRefundToMoney(
   current: BookingMoney,
   refundAmount: number,
   commissionReversed: number,
+  insuranceRevenueReversed = 0,
+  platformCancellationFee = 0,
 ): BookingMoney {
   return priceBooking({
     base: current.base,
     markup: current.markup,
     discount: current.discount,
+    platformFundedDiscount: current.platformFundedDiscount,
     commissionRate: current.commissionRate,
+    commissionBasis: current.commissionBasis,
+    commissionAmount: current.commission,
+    commissionRuleId: current.commissionRuleId,
     currency: current.currency,
     taxRate: current.taxes / (current.netSale || 1),
-    platformFeeRate: current.fees / (current.netSale || 1),
+    feeOverride: current.fees,
+    insurance: current.insurance,
+    insuranceProviderShare: current.insuranceProviderShare,
+    platformCancellationFee: current.platformCancellationFee + platformCancellationFee,
     refunded: current.refunded + refundAmount,
     commissionReversed: current.commissionReversed + commissionReversed,
+    insuranceRevenueReversed:
+      current.insuranceRevenueReversed + insuranceRevenueReversed,
   });
 }
 
@@ -169,38 +256,93 @@ export interface B2BPricingInput {
   netRateDiscount: number;
   /** Markup the agency adds when reselling, percent. */
   markupRate: number;
+  /** Which of the three commercial structures applies. */
+  model?: B2BCommercialModel;
+  /** Commission paid back to the agency out of the sale, percent. */
+  agencyCommissionRate?: number;
 }
 
 export interface B2BPricing {
+  model: B2BCommercialModel;
   publicRate: number;
   /** What the agency is charged before markup. */
   netRate: number;
-  /** The agency's gross margin. */
+  /** The agency's gross margin from re-pricing. */
   markup: number;
+  /** Commission the platform pays back to the agency. */
+  agencyCommission: number;
+  /** Everything the agency keeps — markup plus commission. */
+  agencyEarning: number;
   /** What the agency's own customer pays. */
   sellRate: number;
   /** Saving versus booking at the public rate. */
   agencySaving: number;
+  /** The amount the platform books as its sale (net rate + markup). */
+  transactionValue: number;
+  /** Human-readable build-up, rendered verbatim in the admin UI. */
+  lines: { label: string; amount: number; tone?: "positive" | "negative" }[];
 }
 
 /**
- * B2B rate build-up. Agencies buy at a net rate (public rate less their
- * negotiated discount) and resell at net + markup; the platform still earns
- * commission on the net rate.
+ * B2B rate build-up, for all three commercial structures.
+ *
+ * `markup` — the agency buys at a net rate and keeps whatever it adds.
+ * `agency_commission` — the agency sells at the public rate and is paid a
+ *   commission out of it, so the platform's sale value is the full public rate.
+ * `commission_plus_markup` — both, which is what consolidators actually run.
+ *
+ * In every case the platform's own commission is calculated afterwards, by the
+ * commission-rule engine, against the resulting sale value — never here.
  */
 export function priceB2B({
   publicRate,
   netRateDiscount,
   markupRate,
+  model = "markup",
+  agencyCommissionRate = 0,
 }: B2BPricingInput): B2BPricing {
-  const netRate = money(publicRate * (1 - netRateDiscount / 100));
-  const markup = money(netRate * (markupRate / 100));
+  const gross = money(publicRate);
+  const usesNetRate = model !== "agency_commission";
+  const netRate = usesNetRate ? money(gross * (1 - netRateDiscount / 100)) : gross;
+  const markup = usesNetRate ? money(netRate * (markupRate / 100)) : 0;
+  const agencyCommission =
+    model === "markup" ? 0 : money(gross * (agencyCommissionRate / 100));
+  const sellRate = money(netRate + markup);
+
+  const lines: B2BPricing["lines"] = [
+    { label: "Supplier / public rate", amount: gross },
+  ];
+  if (usesNetRate && netRate !== gross) {
+    lines.push({
+      label: `Net-rate discount (${netRateDiscount}%)`,
+      amount: money(gross - netRate),
+      tone: "negative",
+    });
+    lines.push({ label: "Agency net rate", amount: netRate });
+  }
+  if (markup > 0) {
+    lines.push({ label: `Agency markup (${markupRate}%)`, amount: markup, tone: "positive" });
+  }
+  if (agencyCommission > 0) {
+    lines.push({
+      label: `Agency commission (${agencyCommissionRate}%)`,
+      amount: agencyCommission,
+      tone: "negative",
+    });
+  }
+  lines.push({ label: "Agency sells at", amount: sellRate });
+
   return {
-    publicRate: money(publicRate),
+    model,
+    publicRate: gross,
     netRate,
     markup,
-    sellRate: money(netRate + markup),
-    agencySaving: money(publicRate - netRate),
+    agencyCommission,
+    agencyEarning: money(markup + agencyCommission),
+    sellRate,
+    agencySaving: money(gross - netRate),
+    transactionValue: sellRate,
+    lines,
   };
 }
 
@@ -427,9 +569,22 @@ export function quoteRefund({
   const cancellationFee = money(m.netSale * feePercent);
   // Taxes and platform fees follow the refunded share of the sale.
   const taxAdjustment = money((m.taxes + m.fees) * refundPercent);
-  const refundAmount = money(Math.max(0, refundableNet + taxAdjustment));
+  // The demo insurance premium follows the same share; the provider's cut and
+  // the platform's cut of it are both unwound proportionally.
+  const insuranceRefund = money((m.insurance ?? 0) * refundPercent);
+  const insuranceRevenueReversed = money((m.insuranceRevenue ?? 0) * refundPercent);
+  const refundAmount = money(
+    Math.max(0, refundableNet + taxAdjustment + insuranceRefund),
+  );
   const commissionReversed = money(m.commission * refundPercent);
-  const merchantDeduction = money(refundableNet - commissionReversed);
+  // The platform takes an administration share of the fee; the merchant keeps
+  // the rest and is deducted the platform's share at settlement.
+  const platformCancellationFee = money(
+    cancellationFee * PRICING_CONFIG.cancellationAdminShare,
+  );
+  const merchantDeduction = money(
+    refundableNet - commissionReversed + platformCancellationFee,
+  );
 
   const alreadyRefunded = m.refunded > 0;
   const eligible = refundAmount > 0 && !alreadyRefunded;
@@ -441,6 +596,9 @@ export function quoteRefund({
     { label: `Refundable (${Math.round(refundPercent * 100)}% of net sale)`, amount: refundableNet, tone: "positive" },
     { label: "Tax & fee adjustment", amount: taxAdjustment, tone: "positive" },
   ];
+  if (insuranceRefund > 0) {
+    lines.push({ label: "Insurance premium returned", amount: insuranceRefund, tone: "positive" });
+  }
   if (cancellationFee > 0) {
     lines.push({ label: "Cancellation fee", amount: cancellationFee, tone: "negative" });
   }
@@ -467,6 +625,9 @@ export function quoteRefund({
     taxAdjustment,
     refundAmount,
     commissionReversed,
+    insuranceRefund,
+    insuranceRevenueReversed,
+    platformCancellationFee,
     merchantDeduction,
     reason: quoteReason,
     lines,
@@ -593,10 +754,23 @@ export interface PlatformFinancials {
   gmv: number;
   netSales: number;
   discounts: number;
+  /** Of `discounts`, what the platform funded rather than the merchant. */
+  platformFundedDiscounts: number;
+  /** The platform's administration share of cancellation fees. */
+  cancellationFees: number;
   taxes: number;
   fees: number;
   commission: number;
   commissionReversed: number;
+  /** Insurance revenue attached to these bookings, net of reversals. */
+  insuranceRevenue: number;
+  /** Insurance premium collected on behalf of the demo providers. */
+  insuranceProviderShare: number;
+  /**
+   * Booking-side platform revenue only: commission + service fees + insurance
+   * margin − platform-funded discounts. Membership, advertising and B2B
+   * subscription revenue live in the revenue ledger, not here.
+   */
   platformRevenue: number;
   merchantEarnings: number;
   refunds: number;
@@ -616,40 +790,70 @@ export function platformFinancials(
   let gmv = 0;
   let netSales = 0;
   let discounts = 0;
+  let platformFundedDiscounts = 0;
+  let cancellationFees = 0;
   let taxes = 0;
   let fees = 0;
   let commission = 0;
   let commissionReversed = 0;
+  let insuranceRevenue = 0;
+  let insuranceReversed = 0;
+  let insuranceProviderShare = 0;
   let merchantEarnings = 0;
   let refunds = 0;
   let failedCount = 0;
   let refundedCount = 0;
 
   for (const b of bookings) {
+    if (b.status === "failed") {
+      // A failed booking was never delivered: the customer holds no booking and
+      // any captured payment is refunded. It contributes to the *count* so the
+      // failure rate is visible, but never to a revenue figure — which is what
+      // makes these totals reconcile with the revenue ledger.
+      failedCount += 1;
+      continue;
+    }
     gmv = money(gmv + b.money.total);
     netSales = money(netSales + b.money.netSale);
     discounts = money(discounts + b.money.discount);
+    platformFundedDiscounts = money(
+      platformFundedDiscounts + (b.money.platformFundedDiscount ?? 0),
+    );
+    cancellationFees = money(cancellationFees + (b.money.platformCancellationFee ?? 0));
     taxes = money(taxes + b.money.taxes);
     fees = money(fees + b.money.fees);
     commission = money(commission + b.money.commission);
     commissionReversed = money(commissionReversed + b.money.commissionReversed);
+    insuranceRevenue = money(insuranceRevenue + (b.money.insuranceRevenue ?? 0));
+    insuranceReversed = money(
+      insuranceReversed + (b.money.insuranceRevenueReversed ?? 0),
+    );
+    insuranceProviderShare = money(
+      insuranceProviderShare + (b.money.insuranceProviderShare ?? 0),
+    );
     merchantEarnings = money(merchantEarnings + b.money.netSettlement);
     refunds = money(refunds + b.money.refunded);
-    if (b.status === "failed") failedCount += 1;
     if (b.status === "refunded") refundedCount += 1;
   }
 
   const netCommission = money(commission - commissionReversed);
+  const netInsurance = money(insuranceRevenue - insuranceReversed);
   return {
     currency,
     gmv,
     netSales,
     discounts,
+    platformFundedDiscounts,
+    cancellationFees,
     taxes,
     fees,
     commission: netCommission,
     commissionReversed,
-    platformRevenue: money(netCommission + fees),
+    insuranceRevenue: netInsurance,
+    insuranceProviderShare,
+    platformRevenue: money(
+      netCommission + fees + netInsurance + cancellationFees - platformFundedDiscounts,
+    ),
     merchantEarnings,
     refunds,
     pendingSettlements: money(

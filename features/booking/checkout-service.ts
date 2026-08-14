@@ -36,15 +36,17 @@ import {
   DEMO_CUSTOMER_PHONE,
   HOLD_MINUTES,
   InventoryError,
+  PRICING_CONFIG,
   authorize,
+  benefitsFor,
   bookingService,
-  commissionRateFor,
   complete3DS,
   couponService,
   evaluateOffer,
   getRatePlan,
   getState,
   holdInventory,
+  insuranceService,
   isPerNight,
   linkAttemptToBooking,
   loyaltyService,
@@ -54,7 +56,13 @@ import {
   priceBooking,
   quoteStay,
   releaseHold,
+  resolveCommission,
   track,
+} from "@/features/dashboard/domain";
+import type {
+  InsuranceQuote,
+  MembershipBenefits,
+  MembershipCode,
 } from "@/features/dashboard/domain";
 import { merchantForListing, toListingRef, toPropertyRef } from "./property";
 
@@ -79,6 +87,8 @@ export interface CheckoutSelection {
   promoCode?: string;
   pointsToRedeem?: number;
   customerEmail: string;
+  /** Demo insurance plan the traveller selected, if any. */
+  insurancePlanId?: string;
 }
 
 export interface DiscountRejection {
@@ -96,6 +106,14 @@ export interface CheckoutQuote {
   rejected: DiscountRejection[];
   /** The authoritative money split. Components display this; never their own. */
   money: BookingMoney;
+  /** Every insurance plan offerable for this trip, already priced. */
+  insuranceOffers: InsuranceQuote[];
+  /** The plan the traveller chose, if any. */
+  insurance: InsuranceQuote | null;
+  /** The traveller's membership benefits, applied above. */
+  membership: MembershipBenefits & { code: MembershipCode; planName: string };
+  /** Service fee the traveller would have paid without a membership. */
+  feeWithoutMembership: number;
   cancellationPolicyId: CancellationPolicyId;
   refundable: boolean;
   /** Points this booking will earn once it completes. */
@@ -189,11 +207,67 @@ export function quoteCheckout(selection: CheckoutSelection): CheckoutQuote {
     }
   }
 
+  // --- membership ---------------------------------------------------------
+  // A member discount is funded by the platform, not the merchant, so it is
+  // tracked separately and comes out of platform revenue.
+  const membership = benefitsFor(selection.customerEmail);
+  let platformFundedDiscount = 0;
+  if (membership.memberDiscountPercent > 0) {
+    const raw = money(base * (membership.memberDiscountPercent / 100));
+    platformFundedDiscount = money(
+      membership.memberDiscountCap > 0
+        ? Math.min(raw, membership.memberDiscountCap)
+        : raw,
+    );
+    if (platformFundedDiscount > 0) {
+      discounts.push({
+        kind: "offer",
+        ref: `membership:${membership.code}`,
+        label: `${membership.planName} member discount`,
+        amount: platformFundedDiscount,
+      });
+    }
+  }
+
   const discountTotal = money(discounts.reduce((sum, d) => sum + d.amount, 0));
+  const netSale = money(Math.max(0, base - Math.min(discountTotal, base)));
+
+  // --- insurance ----------------------------------------------------------
+  // Priced alongside the sale, never inside the commissionable base — the
+  // premium is the provider's product, not the merchant's.
+  const insuranceOffers = insuranceService.offers(selection.listing.vertical, {
+    travelers: Math.max(1, selection.guests),
+    tripValue: netSale,
+    discountPercent: membership.insuranceDiscountPercent,
+  });
+  const insurance =
+    insuranceOffers.find((offer) => offer.plan.id === selection.insurancePlanId) ?? null;
+
+  // --- commission ----------------------------------------------------------
+  const resolution = resolveCommission({
+    productKind: selection.listing.vertical,
+    merchantId: merchant.id,
+    productId: selection.listing.id,
+    ratePlanId: selection.ratePlanId,
+    gross: base,
+    // The platform-funded member discount doesn't reduce the commission base —
+    // the merchant sold at full value and the platform paid the difference.
+    net: money(netSale + platformFundedDiscount),
+    merchantRate: merchant.commissionRate,
+  });
+
+  const feeWithoutMembership = money(netSale * PRICING_CONFIG.platformFeeRate);
   const priced = priceBooking({
     base,
     discount: Math.min(discountTotal, base),
-    commissionRate: commissionRateFor(selection.listing.vertical, merchant.commissionRate),
+    platformFundedDiscount,
+    commissionRate: resolution.rate,
+    commissionBasis: resolution.basis,
+    commissionAmount: resolution.commission,
+    commissionRuleId: resolution.ruleId,
+    feeOverride: money(feeWithoutMembership * (1 - membership.serviceFeeWaiver)),
+    insurance: insurance?.premium ?? 0,
+    insuranceProviderShare: insurance?.providerShare ?? 0,
   });
 
   return {
@@ -203,6 +277,10 @@ export function quoteCheckout(selection: CheckoutSelection): CheckoutQuote {
     discounts,
     rejected,
     money: priced,
+    insuranceOffers,
+    insurance,
+    membership,
+    feeWithoutMembership,
     cancellationPolicyId: plan.cancellationPolicyId,
     refundable: plan.refundable,
     pointsEarned: loyaltyService.previewEarn(selection.customerEmail, priced.netSale),
@@ -350,6 +428,7 @@ export async function confirmBooking(input: ConfirmInput): Promise<Booking> {
       pointsRedeemed: quote.pointsRedeemed,
       cancellationPolicyId: plan.cancellationPolicyId,
       listing: toListingRef(listing),
+      insurancePlanId: selection.insurancePlanId,
       holdId: hold?.id,
       fx: input.fx,
       paymentPlan: input.paymentPlan,

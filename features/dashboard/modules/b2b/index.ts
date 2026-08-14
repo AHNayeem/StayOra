@@ -22,3 +22,4 @@ export { B2BOverview } from "./overview";
 export { B2BAccountsList } from "./accounts-list";
 export { B2BBookingsList } from "./bookings-list";
 export { B2BInvoicesList } from "./invoices-list";
+export { B2BStatements } from "./statements";

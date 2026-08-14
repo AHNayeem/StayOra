@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { searchListings } from "@/services/search";
+import { SponsoredRail } from "@/components/sections/sponsored-rail";
+import type { ProductKind } from "@/features/dashboard/domain";
 import { SearchResults } from "./search-results";
 
 /** searchParams is a Promise in the App Router — always awaited. */
@@ -33,6 +35,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   return (
     <main className="flex-1">
       <SearchResults query={q.trim()} results={results} initialType={type} />
+      {/* Sponsored results sit below the organic list and are labelled, so the
+          ranking a traveller sees is never quietly paid for. */}
+      <SponsoredRail
+        placement="search_sponsored"
+        title="Sponsored results"
+        vertical={type as ProductKind | undefined}
+      />
     </main>
   );
 }

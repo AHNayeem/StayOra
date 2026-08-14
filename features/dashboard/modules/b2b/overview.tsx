@@ -86,10 +86,14 @@ export function B2BOverview() {
           hint="Partner margin on resale"
         />
         <StatCard
-          label="Platform commission"
+          label="Platform B2B margin"
           icon="Percent"
-          value={s ? formatCurrency(s.commission, currency) : "—"}
-          hint="Charged on the net rate"
+          value={s ? formatCurrency(s.platformMargin, currency) : "—"}
+          hint={
+            s
+              ? `${formatCurrency(s.subscriptionRevenue, currency)} B2B subscriptions · ${formatNumber(s.subscribedAccounts)} paid tiers`
+              : "Commission net of reversals"
+          }
         />
       </div>
 

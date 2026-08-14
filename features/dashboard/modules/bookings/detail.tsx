@@ -50,6 +50,7 @@ import {
   refundIsOwed,
 } from "../../domain/lifecycle";
 import type { BookingActionDef } from "../../domain/lifecycle";
+import { CommissionLifecycle } from "../commission/lifecycle-panel";
 import { useBooking, useCancellationQuote, useBookingTransition } from "./hooks";
 import { PRODUCT_KIND_LABELS, SEGMENT_LABELS } from "./types";
 
@@ -443,6 +444,10 @@ export function BookingDetail({ id }: { id: string }) {
         </div>
 
         <aside className="flex flex-col gap-4">
+          {/* The commission's own lifecycle — accrued, finalised, settled,
+              reversed — with the rule that decided the rate. */}
+          <CommissionLifecycle booking={booking} />
+
           <Panel flush>
             <PanelHeader title="Money breakdown" description="Single source: the commission engine." />
             <PanelBody className="pt-3">
@@ -468,6 +473,14 @@ export function BookingDetail({ id }: { id: string }) {
                   <MoneyRow label="Net sale" amount={m.netSale} currency={m.currency} />
                   <MoneyRow label="Taxes" amount={m.taxes} currency={m.currency} />
                   <MoneyRow label="Platform fee" amount={m.fees} currency={m.currency} />
+                  {m.insurance > 0 && (
+                    <MoneyRow
+                      label="Travel insurance"
+                      amount={m.insurance}
+                      currency={m.currency}
+                      hint="Demo policy — not commissionable"
+                    />
+                  )}
                 </div>
                 <div className="py-2">
                   <MoneyRow
@@ -482,7 +495,37 @@ export function BookingDetail({ id }: { id: string }) {
                     label="Platform commission"
                     amount={m.commission}
                     currency={m.currency}
-                    hint={`${m.commissionRate}%`}
+                    hint={`${m.commissionRate}% of ${m.commissionBasis === "gross" ? "gross" : "net"} sale`}
+                  />
+                  {m.insuranceRevenue > 0 && (
+                    <MoneyRow
+                      label="Insurance commission"
+                      amount={m.insuranceRevenue}
+                      currency={m.currency}
+                      hint={`${formatCurrency(m.insuranceProviderShare, m.currency)} to the provider`}
+                    />
+                  )}
+                  {m.platformCancellationFee > 0 && (
+                    <MoneyRow
+                      label="Cancellation admin fee"
+                      amount={m.platformCancellationFee}
+                      currency={m.currency}
+                    />
+                  )}
+                  {m.platformFundedDiscount > 0 && (
+                    <MoneyRow
+                      label="Platform-funded discount"
+                      amount={m.platformFundedDiscount}
+                      currency={m.currency}
+                      tone="negative"
+                      hint="Merchant made whole"
+                    />
+                  )}
+                  <MoneyRow
+                    label="Platform revenue"
+                    amount={m.platformRevenue}
+                    currency={m.currency}
+                    hint="Commission + fees + insurance − subsidies"
                   />
                   <MoneyRow
                     label="Merchant earning"

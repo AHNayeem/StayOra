@@ -102,6 +102,18 @@ export const HOME_SECTIONS = {
     title: "Flash deals",
     description: "Deep discounts on a handful of listings — once they're gone, they're gone.",
   },
+  offers: {
+    eyebrow: "Running now",
+    title: "Offers & promo codes",
+    description:
+      "Live campaigns straight from our promotions desk — copy the code and it's applied at checkout.",
+  },
+  combos: {
+    eyebrow: "Bundle & save",
+    title: "Combo offers",
+    description:
+      "Flights, stays, transfers and tours packaged together for one price — always cheaper than booking them apart.",
+  },
   inspiration: {
     eyebrow: "Find your vibe",
     title: "Travel inspiration",

@@ -1,6 +1,13 @@
 import {
   Activity,
   ArrowLeftRight,
+  BedDouble,
+  ChartNoAxesCombined,
+  Crown,
+  Megaphone,
+  ShieldPlus,
+  Sunrise,
+  Target,
   BadgePercent,
   Ban,
   BanknoteArrowDown,
@@ -146,6 +153,13 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Handshake,
   BanknoteArrowDown,
   PackagePlus,
+  BedDouble,
+  ChartNoAxesCombined,
+  Crown,
+  Megaphone,
+  ShieldPlus,
+  Sunrise,
+  Target,
 };
 
 interface DashboardIconProps extends LucideProps {

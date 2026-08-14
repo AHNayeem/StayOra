@@ -13,6 +13,10 @@ import { CompareDialog } from "./compare-dialog";
  * that needs the catalogue index. Loaded on demand, so a visitor reading the
  * privacy policy never downloads the listing catalogue to render a bar they
  * haven't opened.
+ *
+ * Renders an in-flow bar, not a fixed one: the layout docks the compare trays as
+ * one stacking column, so the stay tray and the flight tray sit above each other
+ * instead of on top of each other.
  */
 export function CompareTrayBody({ ids }: { ids: string[] }) {
   const listings = listingsByIds(ids);
@@ -25,7 +29,7 @@ export function CompareTrayBody({ ids }: { ids: string[] }) {
       <div
         role="region"
         aria-label="Compare tray"
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-surface/95 shadow-menu backdrop-blur print:hidden"
+        className="border-t border-line bg-surface/95 shadow-menu backdrop-blur"
       >
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:gap-4">
           <p aria-live="polite" className="text-sm font-medium text-ink">
