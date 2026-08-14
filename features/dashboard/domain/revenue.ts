@@ -1,5 +1,5 @@
 /**
- * The platform revenue ledger — the one answer to "where does StayOra make
+ * The platform revenue ledger — the one answer to "where does Otithee make
  * money?".
  *
  * Design decision worth knowing before you change anything here: revenue is

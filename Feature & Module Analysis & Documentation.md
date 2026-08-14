@@ -1,18 +1,18 @@
-# StayOra — Complete Product, Feature & Module Analysis & Documentation
+# Otithee — Complete Product, Feature & Module Analysis & Documentation
 
 You are acting as a **Senior Product Architect, Business Analyst, Technical Architect, and Documentation Specialist**.
 
-Your task is to perform a **complete analysis of the existing StayOra project/repository** and create a professional, manager-ready documentation package explaining:
+Your task is to perform a **complete analysis of the existing Otithee project/repository** and create a professional, manager-ready documentation package explaining:
 
-1. What StayOra currently contains
+1. What Otithee currently contains
 2. What features and modules are already implemented
 3. How each module works
 4. Why each module exists from a business/product perspective
 5. How different modules are connected
 6. Which features are partially implemented
 7. Which important features/modules are missing
-8. What should be implemented next to make StayOra a complete, production-ready travel/hospitality ecosystem
-9. How StayOra can generate revenue from its different modules
+8. What should be implemented next to make Otithee a complete, production-ready travel/hospitality ecosystem
+9. How Otithee can generate revenue from its different modules
 10. Any architectural, UX, business-logic, security, scalability, or operational gaps you discover
 
 ---
@@ -93,11 +93,11 @@ Do not rely only on the main dashboard or visible pages.
 
 # PART 1 — PROJECT OVERVIEW
 
-Create a clear executive overview of StayOra.
+Create a clear executive overview of Otithee.
 
 Explain:
 
-* What StayOra is
+* What Otithee is
 * What problem it solves
 * Who the primary users are
 * What type of platform it is
@@ -194,7 +194,7 @@ Explain what happens after the user completes the workflow.
 Explain why this module is important.
 
 **Revenue opportunity:**
-Explain whether StayOra can make money from it and how.
+Explain whether Otithee can make money from it and how.
 
 **Current limitations:**
 Explain what is missing or incomplete.
@@ -205,7 +205,7 @@ Explain what is missing or incomplete.
 
 Perform a dedicated audit of every booking/product category.
 
-From the existing StayOra project, verify whether these exist:
+From the existing Otithee project, verify whether these exist:
 
 * Hotel
 * Apartment
@@ -251,13 +251,13 @@ Clearly identify which parts are implemented and which are missing.
 
 # PART 5 — UNIFIED BOOKING / TRAVEL ECOSYSTEM
 
-Analyze whether StayOra currently supports or partially supports a **unified travel booking experience**.
+Analyze whether Otithee currently supports or partially supports a **unified travel booking experience**.
 
 Example:
 
 A customer books a flight to a destination.
 
-StayOra should potentially recommend:
+Otithee should potentially recommend:
 
 * Airport transfer
 * Hotel
@@ -290,7 +290,7 @@ Explain:
 * Cancellation handling
 * Refund orchestration
 
-Also explain how this can increase StayOra's revenue.
+Also explain how this can increase Otithee's revenue.
 
 ---
 
@@ -398,7 +398,7 @@ Then design/document the missing financial architecture required for a real mark
 
 This is extremely important.
 
-Analyze how StayOra can make money.
+Analyze how Otithee can make money.
 
 Identify existing and potential revenue streams, including where relevant:
 
@@ -476,7 +476,7 @@ Potential third-party partner commissions.
 
 ### Cross-selling / Upselling
 
-Explain how StayOra can monetize:
+Explain how Otithee can monetize:
 
 Flight → Hotel
 Hotel → Transport
@@ -488,7 +488,7 @@ etc.
 
 Create a clear revenue model showing:
 
-**Revenue Source → Payer → Trigger → Commission/Fee → StayOra Revenue**
+**Revenue Source → Payer → Trigger → Commission/Fee → Otithee Revenue**
 
 Clearly separate:
 
@@ -586,7 +586,7 @@ Document exactly what exists.
 
 # PART 12 — REVENUE MANAGEMENT
 
-Determine whether StayOra currently has a Revenue Management system.
+Determine whether Otithee currently has a Revenue Management system.
 
 If it exists, explain it.
 
@@ -643,7 +643,7 @@ Include:
 * Ad approval
 * Fraud prevention
 
-Explain how StayOra could monetize this.
+Explain how Otithee could monetize this.
 
 ---
 
@@ -690,7 +690,7 @@ Explain the business model.
 
 # PART 16 — B2B PLATFORM
 
-Analyze whether StayOra currently supports B2B.
+Analyze whether Otithee currently supports B2B.
 
 If not, document a future B2B ecosystem.
 
@@ -752,7 +752,7 @@ Identify gaps.
 
 # PART 18 — LOYALTY & REWARDS
 
-Check whether StayOra has:
+Check whether Otithee has:
 
 * Points
 * Rewards
@@ -1201,11 +1201,11 @@ At the beginning of the final documentation, create a concise executive summary 
 It should answer:
 
 1. What has already been built?
-2. What are the strongest parts of the current StayOra project?
+2. What are the strongest parts of the current Otithee project?
 3. What is incomplete?
 4. What important features are missing?
 5. What business opportunities exist?
-6. How can StayOra generate revenue?
+6. How can Otithee generate revenue?
 7. What are the biggest risks/gaps?
 8. What should be done next?
 
@@ -1333,7 +1333,7 @@ Recommended implementation roadmap.
 
 ### 16-complete-stayora-ecosystem.md
 
-The overall target StayOra ecosystem and how all modules connect.
+The overall target Otithee ecosystem and how all modules connect.
 
 ### 17-feature-status-matrix.md
 

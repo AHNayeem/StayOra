@@ -1,5 +1,5 @@
 /**
- * Membership module — the paid StayOra subscription.
+ * Membership module — the paid Otithee subscription.
  *
  * Distinct from loyalty tiers (earned by spending): membership is bought, has a
  * price and an expiry, and is a platform revenue source. Its benefits are

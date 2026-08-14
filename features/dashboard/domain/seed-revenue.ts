@@ -458,7 +458,7 @@ function membershipPlansSeed(): MembershipPlan[] {
     {
       id: "mpl_free",
       code: "free",
-      name: "StayOra Free",
+      name: "Otithee Free",
       tagline: "Everything you need to book and manage a trip.",
       price: 0,
       billingPeriod: "monthly",
@@ -481,7 +481,7 @@ function membershipPlansSeed(): MembershipPlan[] {
     {
       id: "mpl_plus",
       code: "plus",
-      name: "StayOra Plus",
+      name: "Otithee Plus",
       tagline: "Member rates and no service fee on every booking.",
       price: 9.99,
       billingPeriod: "monthly",
@@ -511,7 +511,7 @@ function membershipPlansSeed(): MembershipPlan[] {
     {
       id: "mpl_premium",
       code: "premium",
-      name: "StayOra Premium",
+      name: "Otithee Premium",
       tagline: "Deeper member rates, free cancellation and priority support.",
       price: 149,
       billingPeriod: "annual",

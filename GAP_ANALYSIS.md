@@ -1,4 +1,4 @@
-# StayOra / Otithee — Booking Ecosystem Gap Analysis
+# Otithee / Otithee — Booking Ecosystem Gap Analysis
 
 **Date:** 2026-08-13
 **Scope:** Customer-facing journey (`app/(marketing)`, `app/(auth)`) + administrative dashboard (`app/dashboard`)

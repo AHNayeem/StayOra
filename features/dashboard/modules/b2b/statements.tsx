@@ -339,7 +339,7 @@ export function B2BStatements() {
             {terms.data && (
               <p className="mt-3 text-xs text-muted">
                 {terms.data.resolution.explanation} The agency keeps{" "}
-                {formatCurrency(terms.data.pricing.agencyEarning, currency)}; StayOra keeps{" "}
+                {formatCurrency(terms.data.pricing.agencyEarning, currency)}; Otithee keeps{" "}
                 {formatCurrency(terms.data.platformMargin, currency)}.
               </p>
             )}

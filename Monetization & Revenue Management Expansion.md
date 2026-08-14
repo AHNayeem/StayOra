@@ -1,6 +1,6 @@
-# StayOra / Otithee — Monetization & Revenue Management Expansion
+# Otithee / Otithee — Monetization & Revenue Management Expansion
 
-You are continuing work on the existing StayOra / Otithee booking-platform frontend prototype.
+You are continuing work on the existing Otithee / Otithee booking-platform frontend prototype.
 
 The project has already gone through a major gap-closure implementation and now has a strong mock/domain architecture.
 
@@ -8,7 +8,7 @@ The current prototype already includes many booking, inventory, payment, loyalty
 
 ## IMPORTANT
 
-This task is specifically about expanding StayOra into a **complete multi-sided booking business with multiple platform revenue streams**.
+This task is specifically about expanding Otithee into a **complete multi-sided booking business with multiple platform revenue streams**.
 
 Do NOT immediately start creating screens.
 
@@ -112,7 +112,7 @@ Use the existing feature if it already satisfies the requirement.
 
 Before implementing UI, establish a coherent prototype-level revenue model.
 
-StayOra should be able to represent multiple platform revenue sources.
+Otithee should be able to represent multiple platform revenue sources.
 
 At minimum evaluate and implement:
 
@@ -236,14 +236,14 @@ Insurance must appear in:
 
 # C. Premium Membership
 
-Implement a StayOra premium membership system.
+Implement a Otithee premium membership system.
 
 Example prototype plans:
 
 ```text
-StayOra Free
-StayOra Plus
-StayOra Premium
+Otithee Free
+Otithee Plus
+Otithee Premium
 ```
 
 Do not assume these exact names are final; use existing branding conventions if present.
@@ -295,7 +295,7 @@ Do not implement real recurring billing.
 
 # D. Advertising Revenue
 
-StayOra should have a prototype advertising/merchant promotion system.
+Otithee should have a prototype advertising/merchant promotion system.
 
 Potential advertisers:
 
@@ -401,7 +401,7 @@ Analyze the existing B2B functionality first.
 
 If B2B pricing/credit concepts already exist, extend them instead of rebuilding.
 
-StayOra should support B2B customers such as:
+Otithee should support B2B customers such as:
 
 * travel agencies
 * corporate accounts
@@ -436,7 +436,7 @@ Support different models:
 ```text
 Supplier price
 ↓
-StayOra
+Otithee
 ↓
 Agency commission
 ↓
@@ -448,7 +448,7 @@ Example:
 ```text
 Supplier price = $100
 Agency commission = $8
-StayOra revenue = $12
+Otithee revenue = $12
 Customer/agency transaction value = $120
 ```
 
@@ -638,14 +638,14 @@ Keep the logic deterministic and transparent.
 
 # PHASE 3 — PLATFORM REVENUE CENTER
 
-Create a central admin dashboard for StayOra's own revenue.
+Create a central admin dashboard for Otithee's own revenue.
 
 This is extremely important.
 
 Admin should be able to understand:
 
 ```text
-Where does StayOra make money?
+Where does Otithee make money?
 ```
 
 Build a **Revenue Center / Platform Revenue** module if one does not already exist.
@@ -1004,7 +1004,7 @@ Extend analytics to answer:
 
 ## Platform
 
-* How much did StayOra earn?
+* How much did Otithee earn?
 * From which revenue source?
 * Which vertical is most profitable?
 * Which merchant generates the most platform revenue?
@@ -1307,7 +1307,7 @@ Net Revenue
 
 The finished dashboard should allow a Super Admin to answer:
 
-### "How does StayOra make money?"
+### "How does Otithee make money?"
 
 with a clear view of:
 

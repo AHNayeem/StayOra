@@ -203,7 +203,7 @@ export function AnalyticsDashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard
           title="Platform revenue by source"
-          description="Where StayOra's own revenue comes from"
+          description="Where Otithee's own revenue comes from"
           loading={revenueAnalytics.isLoading}
           empty={revenueAnalytics.isSuccess && (ra?.bySource.length ?? 0) === 0}
         >

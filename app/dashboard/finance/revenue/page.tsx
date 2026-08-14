@@ -18,7 +18,7 @@ export default function Page() {
     <PermissionGuard anyPermission={["finance:read"]} fallback={<PermissionDenied />}>
       <PageHeader
         title="Revenue Center"
-        description="How StayOra makes money — commission, fees, insurance, membership, advertising and B2B margin."
+        description="How Otithee makes money — commission, fees, insurance, membership, advertising and B2B margin."
       />
       <RevenueCenter />
     </PermissionGuard>

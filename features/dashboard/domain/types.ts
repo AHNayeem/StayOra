@@ -133,7 +133,7 @@ export type CommissionBasis = "net" | "gross" | "fixed";
  *
  * The three revenue pots are kept strictly apart: `merchantEarning` is the
  * merchant's, `taxes` belongs to the tax authority, and only
- * `platformRevenue` is StayOra's.
+ * `platformRevenue` is Otithee's.
  */
 export interface BookingMoney {
   currency: string;

@@ -6,7 +6,7 @@ import { MembershipAdmin } from "@/features/dashboard/modules/membership";
 
 export const metadata: Metadata = { title: "Membership" };
 
-/** Paid StayOra membership — plans, subscribers and subscription revenue. */
+/** Paid Otithee membership — plans, subscribers and subscription revenue. */
 export default function Page() {
   return (
     <PermissionGuard anyPermission={["finance:read", "customers:read"]} fallback={<PermissionDenied />}>

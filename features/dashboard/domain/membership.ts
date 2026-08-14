@@ -325,7 +325,7 @@ export function benefitsFor(
   const sub = email ? membershipService.current(email, nowMs) : undefined;
   const plan = sub ? membershipService.plan(sub.planId) : undefined;
   if (!sub || !plan) {
-    return { ...FREE_BENEFITS, code: "free", planName: "StayOra Free" };
+    return { ...FREE_BENEFITS, code: "free", planName: "Otithee Free" };
   }
   return { ...plan.benefits, code: plan.code, planName: plan.name };
 }

@@ -1,10 +1,10 @@
-# StayOra — Dashboard, Roles, B2B/B2C & Booking Business Logic Prototype
+# Otithee — Dashboard, Roles, B2B/B2C & Booking Business Logic Prototype
 
 ## ROLE
 
 You are a Principal Software Architect, Senior Frontend Engineer, Product Manager, UX Architect, and Travel-Tech Domain Expert.
 
-Your task is to audit the existing StayOra dashboard system and turn it into a complete, realistic, production-style frontend prototype.
+Your task is to audit the existing Otithee dashboard system and turn it into a complete, realistic, production-style frontend prototype.
 
 The dashboard UI/design already exists.
 
@@ -38,7 +38,7 @@ The prototype must feel like a real travel SaaS platform.
 
 # 1. FIRST — AUDIT THE EXISTING PROJECT
 
-Before changing code, inspect the existing StayOra project.
+Before changing code, inspect the existing Otithee project.
 
 Focus ONLY on areas relevant to this task.
 
@@ -1114,7 +1114,7 @@ Support
 
 # 24. B2B SCENARIO
 
-StayOra must clearly support future B2B travel commerce.
+Otithee must clearly support future B2B travel commerce.
 
 Implement a prototype B2B structure.
 
@@ -1124,7 +1124,7 @@ Travel Agency / Corporate Client
 
 ↓
 
-Search StayOra inventory
+Search Otithee inventory
 
 ↓
 
@@ -1178,9 +1178,9 @@ Make the distinction obvious.
 
 B2C:
 
-Customer pays StayOra
+Customer pays Otithee
 
-StayOra processes booking
+Otithee processes booking
 
 Merchant receives settlement
 

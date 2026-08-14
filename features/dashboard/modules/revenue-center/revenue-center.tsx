@@ -134,7 +134,7 @@ const ledgerColumns: ColumnDef<RevenueEntry>[] = [
 ];
 
 /**
- * The Revenue Center — the answer to "how does StayOra make money?".
+ * The Revenue Center — the answer to "how does Otithee make money?".
  *
  * Every figure comes from the revenue ledger, which derives booking commission,
  * service fees, the insurance margin and cancellation fees from the booking
@@ -217,7 +217,7 @@ export function RevenueCenter() {
       {(isMerchant || isAgency) && (
         <Alert tone="info" title="Scoped to your own account">
           You&rsquo;re seeing platform revenue attributable to your own bookings. Platform-wide
-          totals are visible to StayOra finance roles only.
+          totals are visible to Otithee finance roles only.
         </Alert>
       )}
 
@@ -366,11 +366,11 @@ export function RevenueCenter() {
         </PanelBody>
       </Panel>
 
-      {/* ---- "how does StayOra make money?" ------------------------------ */}
+      {/* ---- "how does Otithee make money?" ------------------------------ */}
       <div className="grid gap-4 lg:grid-cols-5">
         <Panel flush className="lg:col-span-2">
           <PanelHeader
-            title="How StayOra makes money"
+            title="How Otithee makes money"
             description="Every platform revenue source, net of reversals."
           />
           <PanelBody>
@@ -542,7 +542,7 @@ export function RevenueCenter() {
           <p className="mt-4 text-xs text-muted">
             Tax is collected on behalf of the authority and is never platform revenue.
             Merchant earnings are the merchant&rsquo;s. Only the platform revenue line
-            belongs to StayOra.
+            belongs to Otithee.
           </p>
         </PanelBody>
       </Panel>

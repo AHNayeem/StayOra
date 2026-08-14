@@ -1,6 +1,6 @@
-# StayOra / Otithee — Complete Prototype Gap Closure
+# Otithee / Otithee — Complete Prototype Gap Closure
 
-You are working on the existing StayOra / Otithee booking-platform prototype.
+You are working on the existing Otithee / Otithee booking-platform prototype.
 
 ## Context
 

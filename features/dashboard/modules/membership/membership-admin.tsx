@@ -251,8 +251,8 @@ export function MembershipAdmin() {
               onChange={(e) => list.setFilter("planCode", e.target.value)}
               options={[
                 { value: "", label: "All plans" },
-                { value: "plus", label: "StayOra Plus" },
-                { value: "premium", label: "StayOra Premium" },
+                { value: "plus", label: "Otithee Plus" },
+                { value: "premium", label: "Otithee Premium" },
               ]}
               wrapperClassName="w-44"
             />

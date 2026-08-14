@@ -570,7 +570,7 @@ export function CheckoutFlow({
 
               {quote.membership.code === "free" && (
                 <Section
-                  title="StayOra membership"
+                  title="Otithee membership"
                   hint="Member rates and no service fee — optional, and never applied without a purchase."
                 >
                   <MembershipUpsell

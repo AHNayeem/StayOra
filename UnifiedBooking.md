@@ -1,14 +1,14 @@
-# StayOra — Unified Booking & Contextual Travel Recommendations
+# Otithee — Unified Booking & Contextual Travel Recommendations
 
 ## ROLE
 
 You are a Principal Frontend Architect, Senior Product Engineer, UX Architect, and Travel-Tech Domain Expert.
 
-Your task is to improve the existing StayOra booking experience by introducing a **Unified Booking / Contextual Travel Recommendation system**.
+Your task is to improve the existing Otithee booking experience by introducing a **Unified Booking / Contextual Travel Recommendation system**.
 
 The goal is NOT to rebuild the existing booking system.
 
-The goal is to make StayOra understand the user's travel context and appropriately suggest related products that can be booked together.
+The goal is to make Otithee understand the user's travel context and appropriately suggest related products that can be booked together.
 
 ---
 
@@ -100,7 +100,7 @@ User searches:
 
 Dhaka → Dubai flight
 
-StayOra should understand:
+Otithee should understand:
 
 Destination = Dubai
 
@@ -300,7 +300,7 @@ User selects:
 
 ✈️ Dhaka → Bangkok
 
-StayOra immediately updates the trip context.
+Otithee immediately updates the trip context.
 
 Then show:
 

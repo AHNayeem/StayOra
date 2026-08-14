@@ -121,7 +121,7 @@ export function MembershipView() {
         </section>
       ) : (
         <p className="mt-6 text-sm text-body">
-          You&rsquo;re on <strong>StayOra Free</strong>. Membership is optional — your
+          You&rsquo;re on <strong>Otithee Free</strong>. Membership is optional — your
           bookings, loyalty points and coupons all work without it.
         </p>
       )}

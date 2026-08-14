@@ -2924,7 +2924,7 @@ function revenueScopeFor(scope: DomainScope): RevenueScope {
 
 /**
  * The Revenue Center's data source. Every figure comes from
- * {@link revenueLedger}, so the answer to "where does StayOra make money?" has
+ * {@link revenueLedger}, so the answer to "where does Otithee make money?" has
  * exactly one definition.
  */
 export const revenueService = {
