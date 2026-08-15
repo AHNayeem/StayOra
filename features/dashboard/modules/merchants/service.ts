@@ -1,33 +1,18 @@
-import { createStubService } from "../../crud";
-import type { CreateMerchantInput, Merchant } from "./types";
-import { MERCHANTS_SEED } from "./data";
+/**
+ * Merchants module data access — query keys only.
+ *
+ * The service itself is the domain's {@link merchantService}; this module used
+ * to own an in-memory stub with its own ids and a ratio commission rate, which
+ * is exactly the contradiction the merchant model now resolves.
+ */
 
-/** Merchants data source (in-memory stub; repository-ready). */
-export const merchantsService = createStubService<Merchant, CreateMerchantInput>({
-  seed: MERCHANTS_SEED,
-  getId: (row) => row.id,
-  searchFields: ["name", "email", "contactName", "country"],
-  idPrefix: "mch",
-  applyCreate: (input, id) => ({
-    id,
-    name: input.name,
-    email: input.email,
-    contactName: input.contactName,
-    category: input.category,
-    country: input.country,
-    properties: 0,
-    commissionRate: input.commissionRate,
-    revenue: 0,
-    currency: "USD",
-    status: "pending",
-    joinedAt: new Date(Date.UTC(2026, 6, 22)).toISOString(),
-  }),
-});
+export { merchantService } from "@/features/dashboard/domain";
 
 export const merchantKeys = {
   all: ["merchants"] as const,
   list: () => ["merchants", "list"] as const,
   detail: (id: string) => ["merchants", "detail", id] as const,
-  /** Full profile (KYC/wallet/settlement/audit) — distinct shape from `detail`. */
-  fullDetail: (id: string) => ["merchants", "detail", id, "full"] as const,
+  progress: (id: string) => ["merchants", "detail", id, "progress"] as const,
+  performance: (id: string) => ["merchants", "detail", id, "performance"] as const,
+  catalogue: (id: string) => ["merchants", "detail", id, "catalogue"] as const,
 };

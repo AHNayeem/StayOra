@@ -18,6 +18,12 @@ import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
 import { SETTLEMENT_STATUSES } from "../../domain/lifecycle";
 import { MERCHANTS } from "../../domain/seed";
+import {
+  PAYOUT_METHOD_LABELS,
+  PAYOUT_SCHEDULE_LABELS,
+  nextPayoutDate,
+} from "../../domain";
+import { useMerchant } from "../merchants/hooks";
 import { settlementService } from "../../domain/services";
 import { useRbac } from "../../rbac/rbac-provider";
 import { useRoleView } from "../../domain/use-domain";
@@ -78,6 +84,14 @@ export function MerchantEarnings() {
   }));
   const latestSettlement = payouts.data?.[0];
 
+  // The payout instructions the merchant set up during onboarding — the same
+  // record the Payouts screen pays against, so the two can't disagree.
+  const profile = useMerchant(merchantId).data;
+  const bank = profile?.bank;
+  const nextPayout = latestSettlement
+    ? nextPayoutDate(bank?.schedule ?? "monthly", new Date(latestSettlement.scheduledFor))
+    : null;
+
   return (
     <div className="flex flex-col gap-5">
       {!isMerchant && (
@@ -114,6 +128,84 @@ export function MerchantEarnings() {
           hint={f ? `${formatCurrency(f.paidOut, currency)} already paid` : undefined}
         />
       </div>
+
+      {profile && (
+        <Panel flush>
+          <PanelHeader
+            title="Payout schedule"
+            description="How and when your settlements are paid"
+            actions={
+              isMerchant ? (
+                <Link
+                  href="/dashboard/onboarding?step=bank"
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Update details
+                </Link>
+              ) : undefined
+            }
+          />
+          <PanelBody>
+            {bank?.status !== "verified" && (
+              <Alert tone="warning" title="Payouts are on hold" className="mb-4">
+                {bank
+                  ? "Your payout account has not been verified yet, so settlements can't be released."
+                  : "You haven't added a payout account yet, so settlements can't be released."}
+              </Alert>
+            )}
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <dt className="text-xs text-muted">Schedule</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {PAYOUT_SCHEDULE_LABELS[bank?.schedule ?? "monthly"]}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Terms</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {profile.contract.payoutTermDays} days after period close
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Method</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {bank ? PAYOUT_METHOD_LABELS[bank.method] : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Destination</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {bank ? `${bank.bankName} ${bank.accountNumberMasked}` : "Not set"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Last settlement</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {latestSettlement ? formatDate(latestSettlement.scheduledFor) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Next expected</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {nextPayout ? formatDate(nextPayout.toISOString()) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Commission</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {profile.commissionRate}% of {profile.commissionBasis} sale
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Awaiting payout</dt>
+                <dd className="mt-0.5 text-sm font-medium text-ink">
+                  {f ? formatCurrency(f.pendingSettlement, currency) : "—"}
+                </dd>
+              </div>
+            </dl>
+          </PanelBody>
+        </Panel>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Panel flush className="lg:col-span-1">

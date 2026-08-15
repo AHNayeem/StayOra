@@ -67,7 +67,10 @@ export function formatNumber(value: number, locale?: string): string {
 }
 
 /** Format an ISO date string as a short date (e.g. "22 Jul 2026"). */
-export function formatDate(iso: string, locale?: string): string {
+export function formatDate(iso: string | undefined, locale?: string): string {
+  // Optional timestamps are everywhere in the domain (reviewedAt, acceptedAt,
+  // paidAt…); an em dash beats every caller writing the same guard.
+  if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return dateFormatter(locale, {
@@ -78,7 +81,8 @@ export function formatDate(iso: string, locale?: string): string {
 }
 
 /** Format an ISO date string as date + time. */
-export function formatDateTime(iso: string, locale?: string): string {
+export function formatDateTime(iso: string | undefined, locale?: string): string {
+  if (!iso) return "—";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return dateFormatter(locale, {

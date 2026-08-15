@@ -51,6 +51,8 @@ import type {
   Settlement,
   Traveler,
 } from "./types";
+import { canTrade, toMerchantRef } from "./merchants";
+import { DEMO_MERCHANT_ID, MERCHANTS_SEED } from "./seed-merchants";
 
 // ---------------------------------------------------------------------------
 // Deterministic helpers
@@ -93,21 +95,14 @@ function pad(n: number, width = 5): string {
 // Reference data
 // ---------------------------------------------------------------------------
 
-export const MERCHANTS: MerchantRef[] = [
-  { id: "mrc_azure", name: "Azure Bay Hospitality", commissionRate: 12 },
-  { id: "mrc_highline", name: "Highline Hotel Group", commissionRate: 14 },
-  { id: "mrc_marina", name: "Marina Living Apartments", commissionRate: 15 },
-  { id: "mrc_cedar", name: "Cedarwood Stays", commissionRate: 11 },
-  { id: "mrc_sunset", name: "Sunset Collective", commissionRate: 13 },
-  { id: "mrc_palm", name: "Palm Grove Resorts", commissionRate: 12.5 },
-  { id: "mrc_desert", name: "Desert Trails Tours", commissionRate: 18 },
-  { id: "mrc_transit", name: "MetroTransit Rides", commissionRate: 16 },
-  { id: "mrc_skyfare", name: "SkyFare Consolidator", commissionRate: 5 },
-  { id: "mrc_visahub", name: "VisaHub Services", commissionRate: 8 },
-];
+/**
+ * The merchants a booking can be taken against — **derived** from the canonical
+ * merchant records, never hand-maintained. Only merchants that can trade appear
+ * here, so a pending application can never end up on a booking.
+ */
+export const MERCHANTS: MerchantRef[] = MERCHANTS_SEED.filter(canTrade).map(toMerchantRef);
 
-/** The merchant the demo merchant account signs in as. */
-export const DEMO_MERCHANT_ID = "mrc_azure";
+export { DEMO_MERCHANT_ID };
 
 const DESTINATIONS = [
   "Dubai",

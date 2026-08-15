@@ -60,6 +60,7 @@ export const PRIMARY_NAV: NavItem[] = [
       {
         heading: "Company",
         links: [
+          { label: "Become a Partner", href: "/partner" },
           { label: "FAQs", href: "/faqs" },
           { label: "Terms & Conditions", href: "/terms-and-conditions" },
           { label: "Contact Us", href: "/contact-us" },
@@ -74,6 +75,7 @@ export const PRIMARY_NAV: NavItem[] = [
 /** Footer quick links. */
 export const FOOTER_QUICK_LINKS: NavLink[] = [
   { label: "About Us", href: "/about-us" },
+  { label: "Become a Partner", href: "/partner" },
   { label: "Flights", href: VERTICALS.flights.href },
   { label: "Tours", href: VERTICALS.tours.href },
   { label: "All Visa", href: VERTICALS.visa.href },

@@ -50,6 +50,7 @@ const SOURCE_COLORS: Record<RevenueSource, string> = {
   insurance: CHART_COLORS.info,
   service_fee: CHART_COLORS.primary700,
   b2b_subscription: CHART_COLORS.accent600,
+  merchant_subscription: CHART_COLORS.teal,
   cancellation_fee: CHART_COLORS.rose,
   promotional_subsidy: CHART_COLORS.rose,
   adjustment: CHART_COLORS.rose,

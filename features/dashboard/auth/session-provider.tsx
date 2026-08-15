@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { setAuthTokenProvider } from "../data/http-client";
-import type { CurrentUser, RoleId } from "../rbac/types";
+import type { CurrentUser, MerchantStaffRoleId, RoleId } from "../rbac/types";
 import {
   clearSessionCookie,
   readSessionCookie,
@@ -27,7 +27,14 @@ interface SessionValue {
    * reloads so the server re-resolves the principal — exactly the path a real
    * impersonation feature would take, minus the backend token exchange.
    */
-  viewAsRole: (role: RoleId, options?: { merchantId?: string; organizationId?: string }) => void;
+  viewAsRole: (
+    role: RoleId,
+    options?: {
+      merchantId?: string;
+      merchantRole?: MerchantStaffRoleId;
+      organizationId?: string;
+    },
+  ) => void;
 }
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -73,6 +80,7 @@ export function SessionProvider({
       accountRole: current?.accountRole,
       role,
       merchantId: options?.merchantId,
+      merchantRole: options?.merchantRole,
       organizationId: options?.organizationId,
     });
     window.location.reload();

@@ -155,6 +155,7 @@ export function persistSession(session: AuthSession | null): void {
     email: user.email,
     role: user.dashboardRole,
     merchantId: user.merchantId,
+    merchantRole: user.merchantRole,
     organizationId: user.organizationId,
     accountRole: user.role,
     exp: session.expiresAt,

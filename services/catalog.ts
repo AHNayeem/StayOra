@@ -30,6 +30,7 @@ import {
   TRANSPORT,
   VISAS,
 } from "@/constants/listings";
+import { filterLive, isListingLive } from "@/features/dashboard/domain/catalogue-service";
 import { mockDelay, paginate, type Paginated } from "./http";
 
 /**
@@ -41,7 +42,7 @@ import { mockDelay, paginate, type Paginated } from "./http";
  * the record stays exhaustive and every getter here degrades to an empty result
  * rather than throwing on an undefined lookup.
  */
-const BY_VERTICAL: Record<BookingVertical, Listing[]> = {
+const REGISTRY: Record<BookingVertical, Listing[]> = {
   hotels: HOTELS,
   apartments: APARTMENTS,
   resorts: RESORTS,
@@ -54,9 +55,21 @@ const BY_VERTICAL: Record<BookingVertical, Listing[]> = {
   visa: VISAS,
 };
 
+/**
+ * The listings customers may actually see, for one vertical.
+ *
+ * Every storefront read goes through here, so the catalogue approval workflow
+ * (`domain/catalogue-service`) is what decides what is on sale: an unpublished
+ * or rejected listing disappears from search, rails and detail pages without a
+ * single component knowing the workflow exists.
+ */
+function live(vertical: BookingVertical): Listing[] {
+  return filterLive(REGISTRY[vertical]);
+}
+
 /** Every listing for one vertical — the listing template filters/paginates client-side. */
 export function getAllListings(vertical: BookingVertical): Promise<Listing[]> {
-  return mockDelay(BY_VERTICAL[vertical]);
+  return mockDelay(live(vertical));
 }
 
 /** Paginated listings for one vertical (used by listing templates). */
@@ -65,7 +78,7 @@ export function getListings(
   page = 1,
   pageSize = 6,
 ): Promise<Paginated<Listing>> {
-  return mockDelay(paginate(BY_VERTICAL[vertical], page, pageSize));
+  return mockDelay(paginate(live(vertical), page, pageSize));
 }
 
 /**
@@ -75,7 +88,7 @@ export function getListings(
  * featured.
  */
 export function getFeatured(vertical: BookingVertical, limit = 6): Promise<Listing[]> {
-  const all = BY_VERTICAL[vertical];
+  const all = live(vertical);
   const pool = [...all.filter((l) => l.featured), ...all.filter((l) => !l.featured)];
   return mockDelay(pool.slice(0, limit));
 }
@@ -85,7 +98,8 @@ export function getListingBySlug(
   vertical: BookingVertical,
   slug: string,
 ): Promise<Listing | undefined> {
-  return mockDelay(BY_VERTICAL[vertical].find((l) => l.slug === slug));
+  const match = REGISTRY[vertical].find((l) => l.slug === slug);
+  return mockDelay(match && isListingLive(match.id) ? match : undefined);
 }
 
 /**
@@ -98,8 +112,9 @@ export async function getListingDetail(
   vertical: BookingVertical,
   slug: string,
 ): Promise<ListingDetail | undefined> {
-  const listing = BY_VERTICAL[vertical].find((l) => l.slug === slug);
-  return mockDelay(listing ? buildListingDetail(listing) : undefined);
+  const listing = REGISTRY[vertical].find((l) => l.slug === slug);
+  const visible = listing && isListingLive(listing.id) ? listing : undefined;
+  return mockDelay(visible ? buildListingDetail(visible) : undefined);
 }
 
 /** Other listings in the same vertical (excluding `slug`) for the "related" rail. */
@@ -108,18 +123,18 @@ export function getRelatedListings(
   slug: string,
   limit = 3,
 ): Promise<Listing[]> {
-  const related = BY_VERTICAL[vertical].filter((l) => l.slug !== slug).slice(0, limit);
+  const related = live(vertical).filter((l) => l.slug !== slug).slice(0, limit);
   return mockDelay(related);
 }
 
 // Typed convenience getters for callers that want a concrete shape.
-export const getHotels = (): Promise<Hotel[]> => mockDelay(HOTELS);
-export const getApartments = (): Promise<Apartment[]> => mockDelay(APARTMENTS);
-export const getResorts = (): Promise<Resort[]> => mockDelay(RESORTS);
-export const getSharedRooms = (): Promise<SharedRoom[]> => mockDelay(SHARED_ROOMS);
+export const getHotels = (): Promise<Hotel[]> => mockDelay(filterLive(HOTELS));
+export const getApartments = (): Promise<Apartment[]> => mockDelay(filterLive(APARTMENTS));
+export const getResorts = (): Promise<Resort[]> => mockDelay(filterLive(RESORTS));
+export const getSharedRooms = (): Promise<SharedRoom[]> => mockDelay(filterLive(SHARED_ROOMS));
 export const getConventionHalls = (): Promise<ConventionHall[]> =>
-  mockDelay(CONVENTION_HALLS);
-export const getTransport = (): Promise<Transport[]> => mockDelay(TRANSPORT);
-export const getTours = (): Promise<Tour[]> => mockDelay(TOURS);
-export const getActivities = (): Promise<Activity[]> => mockDelay(ACTIVITIES);
-export const getVisas = (): Promise<Visa[]> => mockDelay(VISAS);
+  mockDelay(filterLive(CONVENTION_HALLS));
+export const getTransport = (): Promise<Transport[]> => mockDelay(filterLive(TRANSPORT));
+export const getTours = (): Promise<Tour[]> => mockDelay(filterLive(TOURS));
+export const getActivities = (): Promise<Activity[]> => mockDelay(filterLive(ACTIVITIES));
+export const getVisas = (): Promise<Visa[]> => mockDelay(filterLive(VISAS));

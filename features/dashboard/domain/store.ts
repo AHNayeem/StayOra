@@ -50,10 +50,16 @@ import type { InsurancePlan, InsurancePolicy, InsuranceProvider } from "./insura
 import type { MembershipPlan, MembershipSubscription } from "./membership";
 import type { AdCampaign, Advertiser } from "./advertising";
 import type { PricingRule } from "./revenue-management";
+import type { Merchant } from "./merchants";
+import type { CatalogueStatic, CatalogueWorkflow } from "./catalogue";
+import type { Dispute } from "./disputes";
+import { buildDisputes } from "./seed-disputes";
+import { MERCHANTS_SEED } from "./seed-merchants";
+import { seedCatalogueDrafts, seedCatalogueWorkflow } from "./seed-catalogue";
 import { buildMonetization } from "./seed-revenue";
 
 /** Bump when a shape changes so stale persisted state is discarded. */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 const STORAGE_KEY = `otithee:domain:v${SCHEMA_VERSION}`;
 
 export interface DomainState {
@@ -104,6 +110,23 @@ export interface DomainState {
   /** Named users who book under a B2B account. */
   b2bSubUsers: B2BSubUser[];
 
+  // --- merchant ecosystem -------------------------------------------------
+  /**
+   * The one merchant table. Bookings carry a denormalized `MerchantRef`
+   * snapshot; every *current* fact about a merchant lives here.
+   */
+  merchants: Merchant[];
+  /**
+   * Review state for catalogue items that ship with the prototype, keyed by
+   * listing id. The products themselves stay in `constants/listings` — only
+   * their workflow is stored, so the marketing catalogue is never duplicated.
+   */
+  catalogueWorkflow: Record<string, CatalogueWorkflow>;
+  /** Products created in the dashboard, static half included. */
+  catalogueDrafts: (CatalogueStatic & CatalogueWorkflow)[];
+  /** Chargeback cases, keyed to real bookings and merchants. */
+  disputes: Dispute[];
+
   /** Monotonic counter for generated ids/references. */
   sequence: number;
 }
@@ -151,6 +174,10 @@ function freshState(): DomainState {
     adCampaigns: monetization.adCampaigns,
     pricingRules: monetization.pricingRules,
     b2bSubUsers: monetization.b2bSubUsers,
+    merchants: structuredClone(MERCHANTS_SEED),
+    catalogueWorkflow: seedCatalogueWorkflow(),
+    catalogueDrafts: seedCatalogueDrafts(),
+    disputes: buildDisputes(bookings),
     sequence: 1,
   };
 }

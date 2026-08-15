@@ -8,7 +8,10 @@
  * is why an account can now carry the dashboard role it maps to.
  */
 
-import type { RoleId as DashboardRoleId } from "@/features/dashboard/rbac/types";
+import type {
+  MerchantStaffRoleId,
+  RoleId as DashboardRoleId,
+} from "@/features/dashboard/rbac/types";
 
 export type { DashboardRoleId };
 
@@ -38,6 +41,11 @@ export interface AuthUser {
   dashboardRole?: DashboardRoleId;
   /** Merchant this user works for — scopes every merchant-facing query. */
   merchantId?: string;
+  /**
+   * Their job inside that merchant account (owner, manager, front desk…).
+   * Narrows the merchant role's grants — see `rbac/current-user`.
+   */
+  merchantRole?: MerchantStaffRoleId;
   /** B2B account this user books for — scopes agency queries. */
   organizationId?: string;
   phone?: string;

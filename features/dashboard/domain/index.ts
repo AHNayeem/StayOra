@@ -28,6 +28,10 @@
  */
 
 export * from "./types";
+export * from "./merchants";
+export * from "./catalogue";
+export * from "./disputes";
+export * from "./payouts";
 export * from "./lifecycle";
 export * from "./money";
 export * from "./commission-rules";
@@ -72,6 +76,40 @@ export {
 } from "./seed";
 export { getRevision, getState, resetState, subscribe } from "./store";
 export type { DomainState } from "./store";
+export {
+  getMerchant,
+  merchantRef,
+  merchantService,
+  tradingMerchants,
+} from "./merchant-service";
+export type {
+  BankDetailsInput,
+  MerchantProfileInput,
+  PropertyInput,
+  RegisterMerchantInput,
+  StaffInput,
+  UploadDocumentInput,
+} from "./merchant-service";
+export {
+  AD_RATE_CARD,
+  ASSUMED_CTR,
+  MERCHANT_PLACEMENTS,
+  advertiserForMerchant,
+  campaignsForMerchant,
+  estimateSpend,
+  merchantAdvertisingService,
+} from "./merchant-advertising";
+export type { MerchantCampaignInput, SpendEstimate } from "./merchant-advertising";
+export { disputeService } from "./dispute-service";
+export { payoutService } from "./payout-service";
+export {
+  allCatalogueItems,
+  catalogueForMerchant,
+  catalogueService,
+  filterLive,
+  getCatalogueItem,
+  isListingLive,
+} from "./catalogue-service";
 export {
   SYSTEM_ACTOR,
   advertisingService,

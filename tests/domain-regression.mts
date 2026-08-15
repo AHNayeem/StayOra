@@ -46,8 +46,29 @@ import {
   summarizeRevenue,
   supportService,
   sweepExpiredHolds,
+  // --- merchant ecosystem ---
+  AD_RATE_CARD,
+  MERCHANTS,
+  REQUIRED_DOCUMENT_TYPES,
+  campaignsForMerchant,
+  canTrade,
+  catalogueForMerchant,
+  catalogueService,
+  disputeService,
+  estimateSpend,
+  getMerchant,
+  isListingLive,
+  merchantAdvertisingService,
+  merchantRef,
+  merchantRoleCan,
+  merchantService,
+  onboardingProgress,
+  payoutService,
+  planAllows,
+  publishBlockers,
   type PropertyRef,
 } from "@/features/dashboard/domain";
+import { resolveCurrentUser } from "@/features/dashboard/rbac/current-user";
 import { HOTELS } from "@/constants/listings";
 import { toPropertyRef } from "@/features/booking/property";
 import { combineBookings, toUnifiedFromStay } from "@/features/booking/unified";
@@ -929,6 +950,480 @@ const ruleAudit = getState().auditLog[0];
 check("a commission change is audited", getState().auditLog.length > ruleBefore);
 check("the audit records the before and after", ruleAudit.from !== ruleAudit.to, `${ruleAudit.from} → ${ruleAudit.to}`);
 check("the audit names the entity", ruleAudit.entity === "commission_rule", ruleAudit.entity);
+
+// ---------------------------------------------------------------------------
+section("Merchant — one model, one commission unit");
+// ---------------------------------------------------------------------------
+
+const azureMerchant = getMerchant("mrc_azure")!;
+check("the merchant table is the booking roster's source", Boolean(azureMerchant), azureMerchant?.name);
+check(
+  "commission is a percentage, not a ratio",
+  azureMerchant.commissionRate > 1 && azureMerchant.commissionRate <= 60,
+  `${azureMerchant.commissionRate}`,
+);
+check(
+  "the contract and the headline rate agree",
+  azureMerchant.contract.commissionRate === azureMerchant.commissionRate,
+  `${azureMerchant.contract.commissionRate} vs ${azureMerchant.commissionRate}`,
+);
+const azureRef = merchantRef("mrc_azure")!;
+check(
+  "a booking's merchant snapshot is projected from the merchant record",
+  azureRef.commissionRate === azureMerchant.commissionRate && azureRef.name === azureMerchant.name,
+);
+const bookedMerchant = getState().bookings.find((b) => b.merchant.id === "mrc_azure")!.merchant;
+check(
+  "bookings and the merchant screen quote the same rate",
+  bookedMerchant.commissionRate === azureMerchant.commissionRate,
+  `${bookedMerchant.commissionRate} vs ${azureMerchant.commissionRate}`,
+);
+check(
+  "only tradeable merchants can be booked against",
+  MERCHANTS.every((m) => getMerchant(m.id)?.status === "approved"),
+);
+
+// ---------------------------------------------------------------------------
+section("Merchant onboarding — registration to approval");
+// ---------------------------------------------------------------------------
+
+const applicant = await merchantService.register(
+  {
+    name: "Test Harbour Stays",
+    legalName: "Test Harbour Stays Ltd.",
+    email: "hello@testharbour.test",
+    phone: "+44 20 7000 0000",
+    contactName: "Test Owner",
+    country: "United Kingdom",
+    city: "Bristol",
+    verticals: ["hotels"],
+  },
+  ACTOR,
+);
+check("registration creates a draft merchant", applicant.status === "draft", applicant.status);
+check("a new merchant cannot trade", !canTrade(applicant));
+
+const emptyProgress = onboardingProgress(applicant);
+check(
+  "a fresh application is not submittable",
+  !emptyProgress.readyToSubmit && emptyProgress.percent < 50,
+  `${emptyProgress.percent}%`,
+);
+check("the checklist names a next action", Boolean(emptyProgress.nextAction), emptyProgress.nextAction?.label);
+
+let submitRejected = false;
+try {
+  await merchantService.submitApplication(applicant.id, ACTOR);
+} catch {
+  submitRejected = true;
+}
+check("an incomplete application is rejected by the service, not just the button", submitRejected);
+
+await merchantService.updateProfile(
+  applicant.id,
+  {
+    registrationNo: "REG-TEST-1",
+    taxId: "TAX-GB-TEST-1",
+    addressLine: "1 Harbour Road",
+    postalCode: "BS1 1AA",
+    description:
+      "A small harbourside hotel with twenty rooms, a cafe and a rooftop terrace overlooking the marina.",
+  },
+  ACTOR,
+);
+for (const type of REQUIRED_DOCUMENT_TYPES) {
+  await merchantService.uploadDocument(applicant.id, { type, fileName: `${type}.pdf` }, ACTOR);
+}
+const withDocs = await merchantService.get(applicant.id);
+for (const doc of withDocs.documents) {
+  await merchantService.reviewDocument(applicant.id, doc.id, { status: "approved" }, ACTOR);
+}
+await merchantService.submitKyc(
+  applicant.id,
+  [
+    {
+      fullName: "Test Owner",
+      role: "Director",
+      ownershipPercent: 100,
+      nationality: "United Kingdom",
+      idNumberMasked: "•••• 4321",
+    },
+  ],
+  ACTOR,
+);
+await merchantService.decideKyc(applicant.id, { status: "verified" }, ACTOR);
+await merchantService.acceptContract(applicant.id, { acceptedBy: "Test Owner" }, ACTOR);
+await merchantService.saveBankDetails(
+  applicant.id,
+  {
+    accountHolder: "Test Harbour Stays Ltd.",
+    bankName: "Test Bank",
+    accountNumber: "12345678",
+    country: "United Kingdom",
+    currency: "USD",
+    method: "bank_transfer",
+    schedule: "monthly",
+  },
+  ACTOR,
+);
+const beforeVerify = await merchantService.get(applicant.id);
+check(
+  "a submitted bank account starts unverified",
+  beforeVerify.bank?.status === "pending",
+  beforeVerify.bank?.status,
+);
+check(
+  "only the last four digits are stored",
+  beforeVerify.bank?.accountNumberMasked.endsWith("5678") === true &&
+    !beforeVerify.bank?.accountNumberMasked.includes("1234"),
+  beforeVerify.bank?.accountNumberMasked,
+);
+await merchantService.decideBank(applicant.id, { status: "verified" }, ACTOR);
+
+const ready = await merchantService.get(applicant.id);
+check("the checklist is complete", onboardingProgress(ready).readyToSubmit);
+const submitted = await merchantService.submitApplication(applicant.id, ACTOR);
+check("the application submits", submitted.status === "submitted", submitted.status);
+
+let illegalMove = false;
+try {
+  await merchantService.setStatus(applicant.id, "suspended", { note: "nope" }, ACTOR);
+} catch {
+  illegalMove = true;
+}
+check("an illegal lifecycle move is refused", illegalMove);
+
+await merchantService.setStatus(applicant.id, "under_review", {}, ACTOR);
+const approvedMerchant = await merchantService.setStatus(applicant.id, "approved", {}, ACTOR);
+check("approval lands", approvedMerchant.status === "approved", approvedMerchant.status);
+check("an approved merchant can trade", canTrade(approvedMerchant));
+check("nothing blocks publishing", publishBlockers(approvedMerchant).length === 0, publishBlockers(approvedMerchant).join(" "));
+check(
+  "the merchant is notified of the decision",
+  getState().notifications.some(
+    (n) => n.merchantId === applicant.id && n.title.toLowerCase().includes("approved"),
+  ),
+);
+
+// ---------------------------------------------------------------------------
+section("Catalogue — draft to published, and back off sale");
+// ---------------------------------------------------------------------------
+
+const listingDraft = await catalogueService.create(
+  applicant.id,
+  {
+    title: "Harbour View Double",
+    vertical: "hotels",
+    summary: "A double room overlooking the marina, with breakfast and late checkout included.",
+    city: "Bristol",
+    country: "United Kingdom",
+    basePrice: 140,
+  },
+  ACTOR,
+);
+check("a listing starts as a draft", listingDraft.status === "draft", listingDraft.status);
+check("a draft is not public", !isListingLive(listingDraft.id));
+
+const sent = await catalogueService.submit(listingDraft.id, ACTOR);
+check("a draft can be submitted", sent.status === "submitted", sent.status);
+
+let publishTooEarly = false;
+try {
+  await catalogueService.publish(listingDraft.id, ACTOR);
+} catch {
+  publishTooEarly = true;
+}
+check("a listing cannot be published before it is approved", publishTooEarly);
+
+const sentBack = await catalogueService.review(
+  listingDraft.id,
+  { to: "action_required", note: "Add photographs of the actual room." },
+  ACTOR,
+);
+check("a reviewer can request changes", sentBack.status === "action_required", sentBack.status);
+check("the reason reaches the record", Boolean(sentBack.reviewNote), sentBack.reviewNote);
+
+const resubmitted = await catalogueService.submit(listingDraft.id, ACTOR);
+check("a sent-back listing can be resubmitted", resubmitted.status === "submitted");
+check("resubmission bumps the version", resubmitted.version === 2, `v${resubmitted.version}`);
+
+const okayed = await catalogueService.review(listingDraft.id, { to: "approved" }, ACTOR);
+check("approval does not publish on its own", okayed.status === "approved", okayed.status);
+check("an approved-but-unpublished listing is still not public", !isListingLive(listingDraft.id));
+
+const wentLive = await catalogueService.publish(listingDraft.id, ACTOR);
+check("publishing lands", wentLive.status === "published", wentLive.status);
+check("a published listing is public", isListingLive(listingDraft.id));
+
+const merchantCatalogue = catalogueForMerchant(applicant.id);
+check("the listing belongs to its merchant", merchantCatalogue.some((c) => c.id === listingDraft.id));
+
+await catalogueService.unpublish(listingDraft.id, "Closed for refurbishment", ACTOR);
+check("unpublishing removes it from the storefront", !isListingLive(listingDraft.id));
+
+// A launch listing can be taken down the same way — the marketing catalogue and
+// the workflow are one system, not two.
+const seededHotel = HOTELS[0];
+check("a launch listing is public by default", isListingLive(seededHotel.id));
+await catalogueService.unpublish(seededHotel.id, "Test takedown", ACTOR);
+check("a launch listing can be taken off sale", !isListingLive(seededHotel.id));
+await catalogueService.submit(seededHotel.id, ACTOR);
+await catalogueService.review(seededHotel.id, { to: "approved", publish: true }, ACTOR);
+check("and put back on sale", isListingLive(seededHotel.id));
+
+// ---------------------------------------------------------------------------
+section("Merchant staff — a job title is not owner access");
+// ---------------------------------------------------------------------------
+
+check("an owner holds every capability", merchantRoleCan("owner", "payout.manage"));
+check("front desk cannot touch payouts", !merchantRoleCan("front_desk", "payout.manage"));
+check("front desk cannot manage staff", !merchantRoleCan("front_desk", "staff.manage"));
+check("front desk cannot see the money", !merchantRoleCan("front_desk", "finance.view"));
+check("front desk can still work arrivals", merchantRoleCan("front_desk", "bookings.view"));
+check("a manager cannot change payout details", !merchantRoleCan("manager", "payout.manage"));
+check("finance can", merchantRoleCan("finance", "payout.manage"));
+
+const ownerPrincipal = resolveCurrentUser({
+  id: "usr_owner",
+  name: "Owner",
+  email: "owner@test",
+  roleId: "merchant",
+  merchantId: "mrc_azure",
+  merchantRole: "owner",
+});
+const deskPrincipal = resolveCurrentUser({
+  id: "usr_desk",
+  name: "Desk",
+  email: "desk@test",
+  roleId: "merchant",
+  merchantId: "mrc_azure",
+  merchantRole: "front_desk",
+});
+check(
+  "an owner principal keeps the merchant role's grants",
+  ownerPrincipal.permissions.includes("catalog:*"),
+);
+check(
+  "a front-desk principal loses catalogue writes",
+  !deskPrincipal.permissions.includes("catalog:*") &&
+    !deskPrincipal.permissions.includes("catalog:update"),
+);
+check(
+  "a front-desk principal loses finance access",
+  !deskPrincipal.permissions.includes("finance:read"),
+);
+check(
+  "a front-desk principal keeps what the job needs",
+  deskPrincipal.permissions.includes("bookings:read"),
+);
+check(
+  "narrowing can only remove, never add",
+  deskPrincipal.permissions.every((p) => ownerPrincipal.permissions.includes(p)),
+);
+
+// ---------------------------------------------------------------------------
+section("Subscription — plans change limits, never commission");
+// ---------------------------------------------------------------------------
+
+const rateBefore = (await merchantService.get(applicant.id)).commissionRate;
+const upgraded = await merchantService.changePlan(applicant.id, "professional", ACTOR);
+check("the plan changes", upgraded.subscription.planId === "professional");
+check("commission does not", upgraded.commissionRate === rateBefore, `${upgraded.commissionRate}`);
+check("payout terms follow the plan", upgraded.contract.payoutTermDays === 14, `${upgraded.contract.payoutTermDays}`);
+check(
+  "the subscription fee reaches the revenue ledger",
+  getState().revenueEntries.some(
+    (e) => e.source === "merchant_subscription" && e.merchantId === applicant.id,
+  ),
+);
+check("a paid plan unlocks channel connections", planAllows(upgraded, "channel_manager"));
+check("the free plan does not", !planAllows({ subscription: { ...upgraded.subscription, planId: "basic" } }, "channel_manager"));
+
+let planDowngradeBlocked = false;
+try {
+  // Basic allows one property; add two so the downgrade must be refused.
+  await merchantService.addProperty(
+    applicant.id,
+    { name: "Harbour Annexe", vertical: "hotels", city: "Bristol", country: "United Kingdom", addressLine: "2 Harbour Road", units: 12 },
+    ACTOR,
+  );
+  await merchantService.addProperty(
+    applicant.id,
+    { name: "Harbour Mews", vertical: "hotels", city: "Bristol", country: "United Kingdom", addressLine: "3 Harbour Road", units: 8 },
+    ACTOR,
+  );
+  await merchantService.changePlan(applicant.id, "basic", ACTOR);
+} catch {
+  planDowngradeBlocked = true;
+}
+check("a downgrade that would break the limits is refused", planDowngradeBlocked);
+
+// ---------------------------------------------------------------------------
+section("Payouts — one record, two screens");
+// ---------------------------------------------------------------------------
+
+const payoutPage = await payoutService.list({ pageSize: 200 });
+check("payouts exist", payoutPage.items.length > 0, `${payoutPage.items.length}`);
+const settlementCount = getState().settlements.length;
+check(
+  "there is exactly one payout per settlement",
+  payoutPage.items.length === settlementCount,
+  `${payoutPage.items.length} vs ${settlementCount}`,
+);
+const samplePayout = payoutPage.items.find((p) => p.status === "pending" && !p.blocked);
+if (samplePayout) {
+  const before = getState().settlements.find((s) => s.id === samplePayout.settlementId)!.status;
+  await payoutService.advance(samplePayout.id, "scheduled", { actor: ACTOR });
+  const after = getState().settlements.find((s) => s.id === samplePayout.settlementId)!.status;
+  check("advancing a payout advances its settlement", before !== after && after === "scheduled", after);
+} else {
+  check("advancing a payout advances its settlement", true, "no pending payout to move");
+}
+
+// ---------------------------------------------------------------------------
+section("Disputes — the merchant participates, the platform decides");
+// ---------------------------------------------------------------------------
+
+const merchantScope = { merchantId: "mrc_azure" };
+const allDisputes = await disputeService.list({ pageSize: 100 });
+const ownDisputes = await disputeService.list({ pageSize: 100 }, merchantScope);
+check("disputes exist", allDisputes.items.length > 0, `${allDisputes.items.length}`);
+check(
+  "a merchant sees only their own cases",
+  ownDisputes.items.every((d) => d.merchantId === "mrc_azure"),
+);
+check(
+  "every dispute points at a real booking",
+  allDisputes.items.every((d) => getState().bookings.some((b) => b.id === d.bookingId)),
+);
+
+const openCase = allDisputes.items.find((d) => d.status === "needs_response");
+if (openCase) {
+  const merchantActor = { id: "usr_m", name: "Merchant", role: "merchant" };
+  const scope = { merchantId: openCase.merchantId };
+
+  let tooShort = false;
+  try {
+    await disputeService.respond(openCase.id, { response: "no" }, merchantActor, scope);
+  } catch {
+    tooShort = true;
+  }
+  check("an empty response is refused", tooShort);
+
+  const answered = await disputeService.respond(
+    openCase.id,
+    {
+      response: "The guest checked in and stayed the full booking; folio and key records attached.",
+      evidence: [{ label: "Folio", fileName: "folio.pdf" }],
+    },
+    merchantActor,
+    scope,
+  );
+  check("the merchant can respond", answered.status === "merchant_responded", answered.status);
+  check("evidence lands on the case", answered.evidence.length > 0);
+
+  let merchantCantDecide = false;
+  try {
+    await disputeService.respond(openCase.id, { response: "Trying to answer twice, at length." }, merchantActor, scope);
+  } catch {
+    merchantCantDecide = true;
+  }
+  check("a merchant cannot answer a case twice", merchantCantDecide);
+
+  const decided = await disputeService.decide(openCase.id, "won", "Evidence accepted by the issuer.", ACTOR);
+  check("the platform decides the outcome", decided.status === "won", decided.status);
+  check(
+    "the merchant is told",
+    getState().notifications.some(
+      (n) => n.merchantId === openCase.merchantId && n.title === "Dispute won",
+    ),
+  );
+} else {
+  check("the merchant can respond", false, "no open dispute in the seed");
+}
+
+// ---------------------------------------------------------------------------
+section("Merchant advertising — self-serve, platform-reviewed");
+// ---------------------------------------------------------------------------
+
+const adMerchant = await merchantService.get(applicant.id);
+const eligibility = merchantAdvertisingService.eligibility(adMerchant);
+check("a Professional merchant may advertise", eligibility.allowed, eligibility.reason);
+
+const estimate = estimateSpend("cpc", 500);
+check("the estimate is arithmetic on the rate card", estimate.units > 0, estimate.explanation);
+check(
+  "the estimate never promises more than the budget buys",
+  estimate.units * AD_RATE_CARD.cpc.rate <= 500 + AD_RATE_CARD.cpc.rate,
+);
+
+let underMinimum = false;
+try {
+  await merchantAdvertisingService.create(
+    applicant.id,
+    {
+      name: "Too small",
+      placement: "search_sponsored",
+      pricingModel: "cpc",
+      budget: 5,
+      startAt: new Date().toISOString(),
+      endAt: new Date(Date.now() + 86_400_000).toISOString(),
+      creativeHeadline: "Stay by the harbour",
+      creativeBody: "Rooms from $140 a night.",
+    },
+    ACTOR,
+  );
+} catch {
+  underMinimum = true;
+}
+check("a budget below the minimum is refused", underMinimum);
+
+const merchantCampaign = await merchantAdvertisingService.create(
+  applicant.id,
+  {
+    name: "Harbour launch",
+    placement: "search_sponsored",
+    pricingModel: "cpc",
+    budget: 300,
+    startAt: new Date().toISOString(),
+    endAt: new Date(Date.now() + 14 * 86_400_000).toISOString(),
+    creativeHeadline: "Stay by the harbour",
+    creativeBody: "Rooms from $140 a night, breakfast included.",
+  },
+  ACTOR,
+);
+check(
+  "a merchant cannot self-approve a campaign",
+  merchantCampaign.status === "pending_review",
+  merchantCampaign.status,
+);
+check("the campaign is attributed to the merchant", campaignsForMerchant(applicant.id).length === 1);
+
+// ---------------------------------------------------------------------------
+section("Scope — a merchant cannot reach another merchant");
+// ---------------------------------------------------------------------------
+
+let crossMerchant = false;
+try {
+  await merchantService.updateProfile(
+    "mrc_azure",
+    { description: "Trying to edit somebody else's business from my own session." },
+    ACTOR,
+    { merchantId: applicant.id },
+  );
+} catch {
+  crossMerchant = true;
+}
+check("a merchant cannot edit another merchant's profile", crossMerchant);
+
+let crossCatalogue = false;
+try {
+  const someoneElse = catalogueForMerchant("mrc_palm")[0];
+  await catalogueService.submit(someoneElse.id, ACTOR, { merchantId: applicant.id });
+} catch {
+  crossCatalogue = true;
+}
+check("a merchant cannot submit another merchant's listing", crossCatalogue);
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

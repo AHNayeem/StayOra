@@ -33,6 +33,7 @@ export const getServerSession = cache(async (): Promise<Session | null> => {
     email: payload.email,
     roleId: payload.role,
     merchantId: payload.merchantId,
+    merchantRole: payload.merchantRole,
     organizationId: payload.organizationId,
   });
 

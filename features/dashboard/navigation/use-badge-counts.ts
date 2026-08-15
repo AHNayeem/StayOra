@@ -2,6 +2,7 @@
 
 import { useQuery } from "../data";
 import { bookingService, refundService } from "../domain/services";
+import { allCatalogueItems, catalogueForMerchant } from "../domain/catalogue-service";
 import { getState } from "../domain/store";
 import { useDomainScope } from "../domain/use-domain";
 
@@ -24,14 +25,29 @@ export function useBadgeCounts(): Record<string, number> {
         refundService.summary(scope),
       ]);
       const state = getState();
+      // Merchants and catalogue items are only "awaiting review" for the
+      // platform; a merchant's own sidebar should not badge their own queue.
+      const platformScope = !scope.merchantId;
+      const merchantsAwaiting = platformScope
+        ? state.merchants.filter(
+            (m) => m.status === "submitted" || m.status === "under_review",
+          ).length
+        : 0;
+      const catalogueAwaiting = platformScope
+        ? allCatalogueItems().filter(
+            (c) => c.status === "submitted" || c.status === "under_review",
+          ).length
+        : catalogueForMerchant(scope.merchantId!).filter(
+            (c) => c.status === "action_required" || c.status === "rejected",
+          ).length;
+
       return {
         "bookings.pending":
           counts.pending + counts.failed + counts.cancellationRequested,
         "flights.pendingRefunds": counts.refundPending,
         "finance.refundsAwaiting": refunds.requested,
-        "merchants.pendingApproval": state.b2bAccounts.filter(
-          (a) => a.status === "pending",
-        ).length,
+        "merchants.pendingApproval": merchantsAwaiting,
+        "catalog.awaitingReview": catalogueAwaiting,
         "b2b.pendingAccounts": state.b2bAccounts.filter((a) => a.status === "pending")
           .length,
         "reviews.pending": 0,

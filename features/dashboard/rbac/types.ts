@@ -59,7 +59,30 @@ export interface CurrentUser {
    * every merchant-facing query is scoped by it (see `DomainScope`).
    */
   merchantId?: string;
+  /**
+   * The user's role *inside* that merchant account.
+   *
+   * Platform role says "this is a merchant principal"; this says which job they
+   * do there. Grants are the intersection of the two, so a Front Desk account
+   * can never reach payouts however the merchant role is defined.
+   */
+  merchantRole?: MerchantStaffRoleId;
 }
+
+/**
+ * Merchant-side roles, mirrored from `domain/merchants`.
+ *
+ * Duplicated as a string union rather than imported so the RBAC layer stays
+ * free of domain imports; {@link import("../domain/merchants").MERCHANT_ROLE_IDS}
+ * is the source of truth and a mismatch fails to compile in `current-user.ts`.
+ */
+export type MerchantStaffRoleId =
+  | "owner"
+  | "manager"
+  | "reservations"
+  | "front_desk"
+  | "revenue_manager"
+  | "finance";
 
 /** Shape exposed by the RBAC context. */
 export interface RbacContextValue {

@@ -14,17 +14,34 @@
  * {@link "@/services/flight.service"}) and contributes no {@link BookableBase}
  * entities to the catalog.
  */
-export type BookingVertical =
-  | "hotels"
-  | "apartments"
-  | "resorts"
-  | "shared-rooms"
-  | "convention-hall"
-  | "flights"
-  | "transport"
-  | "tours"
-  | "activities"
-  | "visa";
+export const BOOKING_VERTICALS = [
+  "hotels",
+  "apartments",
+  "resorts",
+  "shared-rooms",
+  "convention-hall",
+  "flights",
+  "transport",
+  "tours",
+  "activities",
+  "visa",
+] as const;
+
+export type BookingVertical = (typeof BOOKING_VERTICALS)[number];
+
+/** Human labels for the verticals — used by every merchant/catalogue picker. */
+export const VERTICAL_LABELS: Record<BookingVertical, string> = {
+  hotels: "Hotels",
+  apartments: "Apartments",
+  resorts: "Resorts",
+  "shared-rooms": "Shared rooms",
+  "convention-hall": "Convention halls",
+  flights: "Flights",
+  transport: "Transport",
+  tours: "Tours",
+  activities: "Activities",
+  visa: "Visa services",
+};
 
 /**
  * Verticals backed by catalog listings — everything except flights. Use this

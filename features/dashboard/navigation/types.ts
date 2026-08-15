@@ -1,4 +1,4 @@
-import type { FeatureFlag, Permission } from "../rbac/types";
+import type { FeatureFlag, Permission, RoleId } from "../rbac/types";
 
 /**
  * Menu domain types.
@@ -39,6 +39,16 @@ export interface MenuNode {
   anyPermission?: Permission[];
   /** Requires this feature flag to be enabled. */
   featureFlag?: FeatureFlag;
+  /**
+   * Restricts the item to these roles.
+   *
+   * Permissions answer "may they do this"; some items are a question of *whose
+   * screen it is* instead — a merchant's own staff and subscription pages are
+   * meaningless to an admin, who manages every merchant from `/merchants`.
+   */
+  roles?: RoleId[];
+  /** Hides the item from these roles. */
+  excludeRoles?: RoleId[];
 
   /** Marks external links (open in new tab, no active matching). */
   external?: boolean;

@@ -1,15 +1,14 @@
-import { createStubService } from "../../crud";
-import type { Payout } from "./types";
-import { PAYOUTS_SEED } from "./data";
+/**
+ * Payouts module data access — query keys only.
+ *
+ * The service is the domain's {@link payoutService}, which projects settlements
+ * into payouts and delegates every move back to the settlement machine — so
+ * this screen and Settlements can never disagree about a merchant's money.
+ */
 
-/** Payouts data source (in-memory stub; repository-ready). */
-export const payoutsService = createStubService<Payout>({
-  seed: PAYOUTS_SEED,
-  getId: (row) => row.id,
-  searchFields: ["reference", "merchant"],
-  idPrefix: "pyt",
-});
+export { payoutService } from "@/features/dashboard/domain/payout-service";
 
 export const payoutKeys = {
   all: ["finance", "payouts"] as const,
+  summary: ["finance", "payouts", "summary"] as const,
 };

@@ -54,6 +54,49 @@ export const SEED_ACCOUNTS: MockAccount[] = [
     points: 12040,
     createdAt: "2024-11-02T14:05:00.000Z",
   },
+  /**
+   * Two merchant staff accounts under the *same* merchant as the owner above.
+   *
+   * They exist so the merchant-side role boundary is demonstrable rather than
+   * merely designed: signing in as either shows the same merchant's data with
+   * strictly less access than Marco's owner account.
+   */
+  {
+    id: "usr_merchant_manager_demo",
+    name: "Lina Haddad",
+    email: "manager@otithee.com",
+    password: DEMO_PASSWORD,
+    role: "merchant",
+    dashboardRole: "merchant",
+    merchantId: DEMO_MERCHANT_ID,
+    merchantRole: "manager",
+    avatar: "https://i.pravatar.cc/160?img=26",
+    phone: "+971 4 555 0188",
+    country: "AE",
+    emailVerified: true,
+    profileComplete: true,
+    loyaltyTier: "gold",
+    points: 0,
+    createdAt: "2025-02-04T09:00:00.000Z",
+  },
+  {
+    id: "usr_merchant_frontdesk_demo",
+    name: "Yusuf Ali",
+    email: "frontdesk@otithee.com",
+    password: DEMO_PASSWORD,
+    role: "merchant",
+    dashboardRole: "merchant",
+    merchantId: DEMO_MERCHANT_ID,
+    merchantRole: "front_desk",
+    avatar: "https://i.pravatar.cc/160?img=59",
+    phone: "+971 4 555 0199",
+    country: "AE",
+    emailVerified: true,
+    profileComplete: true,
+    loyaltyTier: "bronze",
+    points: 0,
+    createdAt: "2025-06-18T09:00:00.000Z",
+  },
   {
     id: "usr_admin_demo",
     name: "Sana Rahman",
@@ -155,6 +198,12 @@ export const DEMO_ACCOUNT_HINTS: {
     email: "merchant@otithee.com",
     lands: "/dashboard",
     note: "Own inventory, bookings & earnings",
+  },
+  {
+    label: "Merchant staff",
+    email: "frontdesk@otithee.com",
+    lands: "/dashboard",
+    note: "Same merchant, front-desk access only",
   },
   {
     label: "Admin",

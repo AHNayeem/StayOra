@@ -43,6 +43,8 @@ function nodeVisible(node: MenuNode, rbac: RbacContextValue): boolean {
   if (node.featureFlag && !rbac.hasFeature(node.featureFlag)) return false;
   if (node.permissions && !rbac.canAll(node.permissions)) return false;
   if (node.anyPermission && !rbac.canAny(node.anyPermission)) return false;
+  if (node.roles && !node.roles.some((role) => rbac.hasRole(role))) return false;
+  if (node.excludeRoles?.some((role) => rbac.hasRole(role))) return false;
   return true;
 }
 

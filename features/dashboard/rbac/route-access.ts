@@ -67,6 +67,13 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: "/dashboard/notifications", anyPermission: ["notifications:read"] },
   { prefix: "/dashboard/support", anyPermission: ["support:read"] },
 
+  // The merchant's own workspace. Payout and subscription are money decisions,
+  // so they need `finance:read`; the rest only needs a dashboard session, which
+  // is what lets an unapproved merchant finish onboarding at all.
+  { prefix: "/dashboard/merchant/subscription", anyPermission: ["dashboard:read"] },
+  { prefix: "/dashboard/merchant", anyPermission: ["dashboard:read"] },
+  { prefix: "/dashboard/onboarding", anyPermission: ["dashboard:read"] },
+
   // Always-available surfaces
   { prefix: "/dashboard/profile", anyPermission: ["profile:read"] },
   { prefix: "/dashboard/help", anyPermission: ["dashboard:read"] },

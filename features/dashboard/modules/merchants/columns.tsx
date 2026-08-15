@@ -1,11 +1,14 @@
 import type { ColumnDef } from "../../crud";
-import { StatusBadge } from "../../ui";
-import { formatCurrency, formatNumber, formatPercent } from "../../lib/format";
+import { StatusBadge, Tag } from "../../ui";
+import { formatDate, formatNumber, formatPercent } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
-import { MERCHANT_STATUSES, type Merchant } from "./types";
+import { KYC_STATUSES, MERCHANT_STATUSES, type Merchant } from "./types";
+import { MERCHANT_PLANS } from "@/features/dashboard/domain";
 
 const statusTone = toneMap(MERCHANT_STATUSES);
 const statusLabel = labelMap(MERCHANT_STATUSES);
+const kycTone = toneMap(KYC_STATUSES);
+const kycLabel = labelMap(KYC_STATUSES);
 
 export const merchantColumns: ColumnDef<Merchant>[] = [
   {
@@ -21,10 +24,21 @@ export const merchantColumns: ColumnDef<Merchant>[] = [
     ),
   },
   {
-    accessorKey: "category",
-    header: "Category",
-    meta: { label: "Category" },
-    cell: ({ row }) => <span className="text-body">{row.original.category}</span>,
+    accessorKey: "verticals",
+    header: "Supplies",
+    meta: { label: "Supplies" },
+    cell: ({ row }) => (
+      <div className="flex flex-wrap gap-1">
+        {row.original.verticals.slice(0, 2).map((v) => (
+          <Tag key={v} variant="soft">
+            {v}
+          </Tag>
+        ))}
+        {row.original.verticals.length > 2 && (
+          <Tag variant="soft">+{row.original.verticals.length - 2}</Tag>
+        )}
+      </div>
+    ),
   },
   {
     accessorKey: "country",
@@ -37,25 +51,36 @@ export const merchantColumns: ColumnDef<Merchant>[] = [
     header: "Properties",
     meta: { label: "Properties", align: "right" },
     cell: ({ row }) => (
-      <span className="tabular-nums">{formatNumber(row.original.properties)}</span>
+      <span className="tabular-nums">{formatNumber(row.original.properties.length)}</span>
     ),
   },
   {
     accessorKey: "commissionRate",
     header: "Commission",
     meta: { label: "Commission", align: "right" },
+    // Percent, e.g. 12 → "12%". The domain stores one unit everywhere.
     cell: ({ row }) => (
-      <span className="tabular-nums">{formatPercent(row.original.commissionRate)}</span>
+      <span className="tabular-nums">
+        {formatPercent(row.original.commissionRate, { fromRatio: false })}
+      </span>
     ),
   },
   {
-    accessorKey: "revenue",
-    header: "Revenue",
-    meta: { label: "Revenue", align: "right" },
+    id: "plan",
+    header: "Plan",
+    meta: { label: "Plan" },
     cell: ({ row }) => (
-      <span className="font-medium tabular-nums text-ink">
-        {formatCurrency(row.original.revenue, row.original.currency)}
-      </span>
+      <span className="text-body">{MERCHANT_PLANS[row.original.subscription.planId].name}</span>
+    ),
+  },
+  {
+    id: "kyc",
+    header: "KYC",
+    meta: { label: "KYC" },
+    cell: ({ row }) => (
+      <StatusBadge tone={kycTone[row.original.kyc.status]}>
+        {kycLabel[row.original.kyc.status]}
+      </StatusBadge>
     ),
   },
   {
@@ -67,5 +92,11 @@ export const merchantColumns: ColumnDef<Merchant>[] = [
         {statusLabel[row.original.status]}
       </StatusBadge>
     ),
+  },
+  {
+    accessorKey: "createdAt",
+    header: "Applied",
+    meta: { label: "Applied" },
+    cell: ({ row }) => <span className="text-muted">{formatDate(row.original.createdAt)}</span>,
   },
 ];

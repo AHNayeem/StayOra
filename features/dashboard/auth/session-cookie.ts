@@ -14,7 +14,7 @@
  * {@link decodeSessionCookie} keeps working.
  */
 
-import type { RoleId } from "../rbac/types";
+import type { MerchantStaffRoleId, RoleId } from "../rbac/types";
 
 export const DASHBOARD_SESSION_COOKIE = "otithee_session";
 
@@ -30,6 +30,8 @@ export interface SessionCookiePayload {
   role: RoleId;
   /** Merchant the user belongs to (merchant/vendor roles). */
   merchantId?: string;
+  /** The user's job inside that merchant account — narrows their grants. */
+  merchantRole?: MerchantStaffRoleId;
   /** B2B account the user belongs to (agency/corporate roles). */
   organizationId?: string;
   /** Coarse account role from the public session, for post-login routing. */

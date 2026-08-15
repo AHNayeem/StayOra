@@ -8,35 +8,31 @@
  * owns which listing and what its inventory looks like.
  */
 
-import type { BookingVertical, ListingVertical } from "@/types/booking";
+import type { ListingVertical } from "@/types/booking";
 import type { Listing } from "@/types/catalog";
-import { hashString } from "@/lib/random";
-import { MERCHANTS, type MerchantRef, type ProductKind } from "@/features/dashboard/domain";
+import {
+  MERCHANTS,
+  getCatalogueItem,
+  merchantIdForListing,
+  merchantRef,
+  type MerchantRef,
+  type ProductKind,
+} from "@/features/dashboard/domain";
 import type { PropertyRef } from "@/features/dashboard/domain";
 
 /**
- * Which merchants plausibly operate each vertical — mirrors the merchant roster
- * in the domain seed so a hotel is never owned by the visa agency.
+ * The merchant that owns a listing. Stable for a given listing id.
+ *
+ * Ownership is decided by the merchant roster's own `verticals` (see
+ * `domain/catalogue`), and the returned snapshot is read live from the merchant
+ * table — so a commission renegotiated in the dashboard is the rate the next
+ * booking against this listing is priced at.
  */
-const MERCHANTS_BY_VERTICAL: Record<BookingVertical, string[]> = {
-  hotels: ["mrc_azure", "mrc_highline", "mrc_cedar"],
-  resorts: ["mrc_palm", "mrc_azure"],
-  apartments: ["mrc_marina", "mrc_cedar"],
-  "shared-rooms": ["mrc_sunset"],
-  "convention-hall": ["mrc_highline"],
-  tours: ["mrc_desert", "mrc_sunset"],
-  activities: ["mrc_desert", "mrc_sunset"],
-  transport: ["mrc_transit"],
-  visa: ["mrc_visahub"],
-  flights: ["mrc_skyfare"],
-};
-
-/** The merchant that owns a listing. Stable for a given listing id. */
 export function merchantForListing(listing: Pick<Listing, "id" | "vertical">): MerchantRef {
-  const pool = MERCHANTS_BY_VERTICAL[listing.vertical] ?? [];
-  const ids = pool.length ? pool : MERCHANTS.map((m) => m.id);
-  const id = ids[hashString(listing.id) % ids.length];
-  return MERCHANTS.find((m) => m.id === id) ?? MERCHANTS[0];
+  // A merchant-created listing already records its owner; only the marketing
+  // catalogue needs ownership derived from the roster.
+  const id = getCatalogueItem(listing.id)?.merchantId ?? merchantIdForListing(listing);
+  return merchantRef(id) ?? MERCHANTS.find((m) => m.id === id) ?? MERCHANTS[0];
 }
 
 /** The inventory engine's view of a listing. */

@@ -1378,7 +1378,7 @@ Be extremely careful about accuracy.
 
 The Word document is built and verified.
 
-Deliverable: StayOra-Product-Feature-Module-Analysis.docx — 103 KB, 17 sections, 67 tables, 11 diagrams, cover page, auto-updating table of contents, page footers. Generated as raw OOXML via Python stdlib (no pandoc/python-docx available, and nothing added to package.json). Validated: every XML part parses, and it round-trips cleanly through textutil.
+Deliverable: Otithee-Product-Feature-Module-Analysis.docx — 103 KB, 17 sections, 67 tables, 11 diagrams, cover page, auto-updating table of contents, page footers. Generated as raw OOXML via Python stdlib (no pandoc/python-docx available, and nothing added to package.json). Validated: every XML part parses, and it round-trips cleanly through textutil.
 
 The 17 source markdown files are alongside it in docs/stayora-analysis/, matching the filenames the brief specified. No application code was modified.
 

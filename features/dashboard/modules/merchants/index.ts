@@ -1,30 +1,47 @@
-/** Merchants module — feature-first: types, schema, service, columns, hooks, UI. */
+/**
+ * Merchants module — the admin-facing merchant register and review console.
+ *
+ * The entity, its lifecycle and its rules live in the domain
+ * (`@/features/dashboard/domain`); this module is presentation plus the query
+ * bindings. Merchant-facing onboarding lives in `../merchant-onboarding`.
+ */
 export * from "./types";
-export { createMerchantSchema } from "./schemas";
-export type { CreateMerchantValues } from "./schemas";
-export { merchantsService, merchantKeys } from "./service";
-export { getMerchantDetail } from "./detail";
-export type {
-  MerchantDetail,
-  MerchantKyc,
-  MerchantDocument,
-  MerchantWallet,
-  MerchantSettlement,
-  MerchantAuditEntry,
-  KycStatus,
-  DocumentStatus,
-  SettlementStatus,
-} from "./detail";
+export * from "./schemas";
+export { merchantService, merchantKeys } from "./service";
 export { merchantColumns } from "./columns";
 export {
   useMerchants,
   useMerchant,
-  useMerchantDetail,
-  useCreateMerchant,
+  useMerchantCatalogue,
+  useMerchantPerformance,
+  useOnboardingProgress,
+  useRegisterMerchant,
+  useUpdateMerchantProfile,
   useSetMerchantStatus,
-  useUpdateMerchant,
-  useDeleteMerchant,
+  useSetCommission,
+  useUploadDocument,
+  useRemoveDocument,
+  useReviewDocument,
+  useSubmitKyc,
+  useDecideKyc,
+  useAcceptContract,
+  useSaveBankDetails,
+  useDecideBank,
+  useSubmitApplication,
+  useAddStaff,
+  useUpdateStaff,
+  useRemoveStaff,
+  useAddProperty,
+  useUpdateProperty,
+  useRemoveProperty,
+  useConnectChannel,
+  useDisconnectChannel,
+  useCompleteChannelSync,
+  useChangePlan,
+  useCancelSubscription,
 } from "./hooks";
 export { MerchantsList } from "./list";
 export { MerchantDetailView } from "./merchant-detail-view";
 export { MerchantCreateForm, MerchantForm } from "./create-form";
+export { OnboardingChecklist, ProgressBar } from "./onboarding-progress";
+export { ReasonDialog, ConfirmActionDialog } from "./review-dialogs";

@@ -1,16 +1,16 @@
 import type { ColumnDef } from "../../crud";
 import { StatusBadge, Tag } from "../../ui";
 import { formatCurrency, formatDate } from "../../lib/format";
-import { labelMap, toneMap } from "../../lib/status";
 import {
-  DISPUTE_REASONS,
-  DISPUTE_STATUSES,
+  DISPUTE_REASON_LABELS,
+  DISPUTE_STATUS_LABELS,
+  DISPUTE_STATUS_TONES,
   type Dispute,
-} from "./types";
+} from "@/features/dashboard/domain";
 
-const statusTone = toneMap(DISPUTE_STATUSES);
-const statusLabel = labelMap(DISPUTE_STATUSES);
-const reasonLabel = labelMap(DISPUTE_REASONS);
+const statusTone = DISPUTE_STATUS_TONES;
+const statusLabel = DISPUTE_STATUS_LABELS;
+const reasonLabel = DISPUTE_REASON_LABELS;
 
 export const disputeColumns: ColumnDef<Dispute>[] = [
   {
@@ -26,13 +26,13 @@ export const disputeColumns: ColumnDef<Dispute>[] = [
     ),
   },
   {
-    accessorKey: "merchant",
+    accessorKey: "merchantName",
     header: "Merchant",
     meta: { label: "Merchant" },
     cell: ({ row }) => (
       <div className="min-w-0">
-        <p className="truncate text-ink">{row.original.merchant}</p>
-        <p className="truncate text-xs text-muted">{row.original.customer}</p>
+        <p className="truncate text-ink">{row.original.merchantName}</p>
+        <p className="truncate text-xs text-muted">{row.original.customerName}</p>
       </div>
     ),
   },

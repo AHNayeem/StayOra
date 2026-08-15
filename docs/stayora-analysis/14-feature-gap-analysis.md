@@ -15,9 +15,8 @@ These are cases where one part of the product implies something another part doe
 | 7 | **Language switcher over-promises** | Three languages offered; one dictionary exists, covering chrome only. Arabic flips direction but not language. |
 | 8 | **Payouts vs Settlements** | Two finance screens cover overlapping ground; Settlements is domain-backed and real, Payouts is stub-backed. A user cannot tell which is authoritative. |
 | 9 | **`FxSnapshot` defined but unused** | The data model anticipates rate locking; the money path never populates it. |
-| 10 | **Brand name** | Documentation says "Otithee"; code, storage keys, package name, site config and all seed emails say "Otithee". |
-| 11 | **Stub persistence** | 42 modules present full CRUD; state vanishes on reload while 23 domain-backed modules persist. Same UI, different behaviour. |
-| 12 | **Three roles unreachable** | `vendor`, `marketing` and `content_manager` are fully defined but have no seed account, so they cannot be demonstrated. |
+| 10 | **Stub persistence** | 42 modules present full CRUD; state vanishes on reload while 23 domain-backed modules persist. Same UI, different behaviour. |
+| 11 | **Three roles unreachable** | `vendor`, `marketing` and `content_manager` are fully defined but have no seed account, so they cannot be demonstrated. |
 
 ---
 

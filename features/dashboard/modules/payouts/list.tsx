@@ -1,131 +1,135 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   CalendarClock,
   CheckCircle2,
   Download,
-  History,
   PauseCircle,
   PlayCircle,
   Send,
   XCircle,
 } from "lucide-react";
+import { toast } from "@/lib/toast";
+import {
+  PAYOUT_STATUS_LABELS,
+  SETTLEMENT_STATUS_VALUES,
+  SETTLEMENT_TRANSITIONS,
+  type Payout,
+  type PayoutStatus,
+} from "@/features/dashboard/domain";
+import { getErrorMessage } from "../../data";
 import { ResourceListView, RowActions } from "../../crud";
-import { Button, DropdownItem, Modal, Select, Textarea } from "../../ui";
+import { Alert, Button, DropdownItem, Select, StatCard, StatCardSkeleton } from "../../ui";
 import { Can } from "../../rbac/permission-guard";
 import type { ActiveFilter } from "../../ui/filter-bar";
-import { formatCurrency, formatDate, formatDateTime } from "../../lib/format";
-import { labelMap, statusOptions } from "../../lib/status";
+import { useRoleView } from "../../domain/use-domain";
+import { formatCurrency, formatDate } from "../../lib/format";
 import { exportToCsv } from "../../lib/export-csv";
-import { usePayouts, useUpdatePayout } from "./hooks";
-import { PAYOUT_STATUSES, PAYOUT_TRANSITIONS, type Payout, type PayoutStatus } from "./types";
-import { toast } from "@/lib/toast";
+import { ReasonDialog } from "../merchants/review-dialogs";
+import { useAdvancePayout, usePayoutSummary, usePayouts } from "./hooks";
 
-const statusLabel = labelMap(PAYOUT_STATUSES);
+const statusLabel = PAYOUT_STATUS_LABELS;
+const statusSelectOptions = SETTLEMENT_STATUS_VALUES.map((v) => ({
+  value: v,
+  label: statusLabel[v],
+}));
 
 /**
- * Payouts — the merchant settlement queue with the decisions finance actually
- * makes: approve, hold, release, reject, mark paid or failed.
+ * Payouts — the settlement queue as finance works it: approve, hold, release,
+ * mark paid or failed.
  *
- * Moves are validated against {@link PAYOUT_TRANSITIONS} rather than offered
- * blindly, and every one appends to the payout's timeline, so the reason a
- * payout is sitting where it is stays readable afterwards.
+ * Every move is validated against the *settlement* transition table and applied
+ * to the settlement itself, so this screen and Settlements are two views of one
+ * record rather than two competing ledgers. A merchant sees their own payouts
+ * read-only, with the schedule and destination their onboarding set up.
  */
 export function PayoutsList() {
-  const update = useUpdatePayout();
-  const [timelineOf, setTimelineOf] = useState<Payout | null>(null);
+  const { isMerchant } = useRoleView();
+  const advance = useAdvancePayout();
+  const summary = usePayoutSummary();
   const [holding, setHolding] = useState<Payout | null>(null);
 
-  const move = async (
-    row: Payout,
-    status: PayoutStatus,
-    label: string,
-    note?: string,
-  ) => {
-    if (!PAYOUT_TRANSITIONS[row.status].includes(status)) {
+  const move = async (row: Payout, to: PayoutStatus, label: string, note?: string) => {
+    if (!SETTLEMENT_TRANSITIONS[row.status].includes(to)) {
       toast.error("Not allowed", {
-        description: `A ${statusLabel[row.status].toLowerCase()} payout can't move to ${statusLabel[status].toLowerCase()}.`,
+        description: `A ${statusLabel[row.status].toLowerCase()} payout can't move to ${statusLabel[to].toLowerCase()}.`,
       });
       return;
     }
-    await update.mutateAsync({
-      id: row.id,
-      input: {
-        status,
-        holdReason: status === "on_hold" ? note : undefined,
-        timeline: [
-          ...row.timeline,
-          { at: new Date().toISOString(), label, actor: "You", note },
-        ],
-      },
-    });
-    toast.success(`${row.reference} — ${label.toLowerCase()}`);
+    try {
+      await advance.mutateAsync({ id: row.id, to, note });
+      toast.success(label, { description: row.reference });
+    } catch (error) {
+      toast.error("Couldn't update the payout", { description: getErrorMessage(error) });
+    }
   };
 
-  const list = usePayouts((row) => {
-    const next = PAYOUT_TRANSITIONS[row.status];
-    return (
+  const list = usePayouts((row) =>
+    isMerchant ? null : (
       <RowActions
         label={`Actions for ${row.reference}`}
         extra={
-          <>
-            <DropdownItem icon={<History />} onSelect={() => setTimelineOf(row)}>
-              View timeline
-            </DropdownItem>
-            <Can anyPermission={["finance:update"]}>
-              {next.includes("scheduled") && (
-                <DropdownItem
-                  icon={row.status === "on_hold" ? <PlayCircle /> : <CheckCircle2 />}
-                  onSelect={() =>
-                    void move(
-                      row,
-                      "scheduled",
-                      row.status === "on_hold" ? "Released from hold" : "Approved for payout",
-                    )
-                  }
-                >
-                  {row.status === "on_hold" ? "Release hold" : "Approve"}
-                </DropdownItem>
-              )}
-              {next.includes("on_hold") && (
-                <DropdownItem icon={<PauseCircle />} onSelect={() => setHolding(row)}>
-                  Put on hold
-                </DropdownItem>
-              )}
-              {next.includes("processing") && (
-                <DropdownItem
-                  icon={<Send />}
-                  onSelect={() => void move(row, "processing", "Sent to the bank")}
-                >
-                  Send to bank
-                </DropdownItem>
-              )}
-              {next.includes("paid") && (
+          <Can anyPermission={["finance:update", "finance:approve"]}>
+            {row.status === "pending" && (
+              <DropdownItem
+                icon={<CalendarClock />}
+                onSelect={() => move(row, "scheduled", "Payout approved")}
+              >
+                Approve &amp; schedule
+              </DropdownItem>
+            )}
+            {row.status === "scheduled" && (
+              <DropdownItem
+                icon={<Send />}
+                onSelect={() => move(row, "processing", "Payout released")}
+              >
+                Release
+              </DropdownItem>
+            )}
+            {row.status === "processing" && (
+              <>
                 <DropdownItem
                   icon={<CheckCircle2 />}
-                  onSelect={() => void move(row, "paid", "Paid to merchant")}
+                  onSelect={() => move(row, "paid", "Payout marked paid")}
                 >
                   Mark paid
                 </DropdownItem>
-              )}
-              {next.includes("rejected") && (
                 <DropdownItem
                   icon={<XCircle />}
-                  danger
-                  onSelect={() =>
-                    void move(row, "rejected", "Rejected", "Rejected by finance review")
-                  }
+                  onSelect={() => move(row, "failed", "Payout marked failed")}
                 >
-                  Reject
+                  Mark failed
                 </DropdownItem>
-              )}
-            </Can>
-          </>
+              </>
+            )}
+            {row.status === "failed" && (
+              <DropdownItem
+                icon={<PlayCircle />}
+                onSelect={() => move(row, "processing", "Payout retried")}
+              >
+                Retry
+              </DropdownItem>
+            )}
+            {SETTLEMENT_TRANSITIONS[row.status].includes("on_hold") && (
+              <DropdownItem icon={<PauseCircle />} onSelect={() => setHolding(row)}>
+                Put on hold
+              </DropdownItem>
+            )}
+            {row.status === "on_hold" && (
+              <DropdownItem
+                icon={<PlayCircle />}
+                onSelect={() => move(row, "scheduled", "Payout released from hold")}
+              >
+                Release hold
+              </DropdownItem>
+            )}
+          </Can>
         }
       />
-    );
-  });
+    ),
+  );
 
   const status = list.filters.status ?? "";
   const activeFilters: ActiveFilter[] = status
@@ -135,20 +139,66 @@ export function PayoutsList() {
   const handleExport = () => {
     exportToCsv<Payout>("payouts", list.rows, [
       { header: "Reference", value: (r) => r.reference },
-      { header: "Merchant", value: (r) => r.merchant },
+      { header: "Merchant", value: (r) => r.merchantName },
+      { header: "Period", value: (r) => `${formatDate(r.periodStart)} – ${formatDate(r.periodEnd)}` },
+      { header: "Destination", value: (r) => r.destination },
       { header: "Method", value: (r) => r.method },
+      { header: "Schedule", value: (r) => r.scheduleLabel },
       { header: "Amount", value: (r) => formatCurrency(r.amount, r.currency) },
       { header: "Status", value: (r) => statusLabel[r.status] },
-      { header: "Hold reason", value: (r) => r.holdReason ?? "" },
-      { header: "Date", value: (r) => formatDate(r.createdAt) },
+      { header: "Scheduled for", value: (r) => formatDate(r.scheduledFor) },
     ]);
   };
 
+  const s = summary.data;
+
   return (
-    <>
+    <div className="space-y-5">
+      {!isMerchant && s && s.blocked > 0 && (
+        <Alert tone="warning" title="Blocked by unverified payout accounts">
+          {s.blocked} {s.blocked === 1 ? "payout" : "payouts"} worth{" "}
+          {formatCurrency(s.blockedAmount, s.currency)} can&apos;t be released until the merchant&apos;s
+          bank details are verified.{" "}
+          <Link href="/dashboard/merchants" className="font-medium underline">
+            Review merchants
+          </Link>
+        </Alert>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {summary.isLoading || !s ? (
+          Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)
+        ) : (
+          <>
+            <StatCard
+              label="Awaiting approval"
+              value={formatCurrency(s.pendingAmount, s.currency)}
+              icon="Clock"
+              hint={`${s.pending} payouts`}
+            />
+            <StatCard
+              label="Scheduled"
+              value={formatCurrency(s.scheduledAmount, s.currency)}
+              icon="CalendarClock"
+              hint={`${s.scheduled} payouts`}
+            />
+            <StatCard
+              label="On hold"
+              value={formatCurrency(s.onHoldAmount, s.currency)}
+              icon="PauseCircle"
+            />
+            <StatCard
+              label="Paid"
+              value={formatCurrency(s.paidAmount, s.currency)}
+              icon="CircleCheck"
+            />
+          </>
+        )}
+      </div>
+
       <ResourceListView<Payout>
         list={list}
-        searchPlaceholder="Search reference or merchant…"
+        searchPlaceholder="Search reference, merchant or account…"
         activeFilters={activeFilters}
         selectable={false}
         filterControls={
@@ -156,10 +206,7 @@ export function PayoutsList() {
             aria-label="Filter by status"
             value={status}
             onChange={(e) => list.setFilter("status", e.target.value)}
-            options={[
-              { value: "", label: "All statuses" },
-              ...statusOptions(PAYOUT_STATUSES),
-            ]}
+            options={[{ value: "", label: "All statuses" }, ...statusSelectOptions]}
             wrapperClassName="w-48"
           />
         }
@@ -179,98 +226,19 @@ export function PayoutsList() {
         caption="Payouts"
       />
 
-      {timelineOf && (
-        <Modal
-          open
-          onClose={() => setTimelineOf(null)}
-          title={`Payout ${timelineOf.reference}`}
-          description={`${timelineOf.merchant} · ${formatCurrency(timelineOf.amount, timelineOf.currency)}`}
-          footer={
-            <div className="flex justify-end">
-              <Button variant="ghost" onClick={() => setTimelineOf(null)}>
-                Close
-              </Button>
-            </div>
-          }
-        >
-          <ol className="space-y-4">
-            {timelineOf.timeline.map((event, index) => (
-              <li key={index} className="flex gap-3">
-                <span
-                  className="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
-                  aria-hidden="true"
-                />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-ink">{event.label}</p>
-                  {event.note && <p className="text-sm text-body">{event.note}</p>}
-                  <p className="text-xs text-muted">
-                    {formatDateTime(event.at)} · {event.actor}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-          {timelineOf.holdReason && (
-            <p className="mt-4 flex items-start gap-2 rounded-field bg-warning/12 p-3 text-sm text-amber-800">
-              <CalendarClock className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              Currently on hold: {timelineOf.holdReason}
-            </p>
-          )}
-        </Modal>
-      )}
-
-      {holding && (
-        <HoldDialog
-          payout={holding}
-          onClose={() => setHolding(null)}
-          onConfirm={(reason) => {
-            void move(holding, "on_hold", "Placed on hold", reason);
-            setHolding(null);
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function HoldDialog({
-  payout,
-  onClose,
-  onConfirm,
-}: {
-  payout: Payout;
-  onClose: () => void;
-  onConfirm: (reason: string) => void;
-}) {
-  const [reason, setReason] = useState("");
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={`Hold payout ${payout.reference}`}
-      description="The merchant sees that a payout is held, so say why in words they'd understand."
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            disabled={reason.trim().length < 5}
-            onClick={() => onConfirm(reason.trim())}
-          >
-            Put on hold
-          </Button>
-        </div>
-      }
-    >
-      <Textarea
-        label="Reason"
-        rows={4}
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-        placeholder="Refund pending on a booking in this batch, bank details being re-verified…"
+      <ReasonDialog
+        open={Boolean(holding)}
+        title={holding ? `Hold ${holding.reference}` : "Hold payout"}
+        description="Recorded on the settlement so the reason survives after the hold is lifted."
+        confirmLabel="Put on hold"
+        loading={advance.isPending}
+        onClose={() => setHolding(null)}
+        onConfirm={async (note) => {
+          if (!holding) return;
+          await move(holding, "on_hold", "Payout put on hold", note);
+          setHolding(null);
+        }}
       />
-    </Modal>
+    </div>
   );
 }

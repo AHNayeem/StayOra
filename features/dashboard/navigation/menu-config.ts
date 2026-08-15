@@ -45,6 +45,13 @@ export const DASHBOARD_MENU: MenuNode[] = [
     anyPermission: ["catalog:read"],
     children: [
       {
+        id: "catalog-approvals",
+        label: "Listings & approvals",
+        href: "/dashboard/catalog/approvals",
+        anyPermission: ["catalog:read"],
+        badge: { countKey: "catalog.awaitingReview", variant: "danger" },
+      },
+      {
         id: "catalog-rates",
         label: "Rates & availability",
         href: "/dashboard/catalog/rates",
@@ -103,6 +110,40 @@ export const DASHBOARD_MENU: MenuNode[] = [
     href: "/dashboard/merchants",
     anyPermission: ["merchants:read"],
     badge: { countKey: "merchants.pendingApproval", variant: "danger" },
+  },
+
+  /**
+   * The merchant's own workspace. Scoped by role rather than by permission:
+   * these screens are about *this* merchant's account, which is a different
+   * question from whether someone may manage merchants in general.
+   */
+  {
+    id: "merchant-workspace",
+    label: "My business",
+    icon: "Building2",
+    sectionStart: true,
+    sectionLabel: "My business",
+    roles: ["merchant", "vendor"],
+    children: [
+      { id: "merchant-onboarding", label: "Onboarding", href: "/dashboard/onboarding" },
+      { id: "merchant-properties", label: "Properties", href: "/dashboard/merchant/properties" },
+      { id: "merchant-staff", label: "Staff & roles", href: "/dashboard/merchant/staff" },
+      {
+        id: "merchant-performance",
+        label: "Performance",
+        href: "/dashboard/merchant/performance",
+      },
+      {
+        id: "merchant-advertising",
+        label: "Advertising",
+        href: "/dashboard/merchant/advertising",
+      },
+      {
+        id: "merchant-subscription",
+        label: "Subscription",
+        href: "/dashboard/merchant/subscription",
+      },
+    ],
   },
   {
     id: "customers",
