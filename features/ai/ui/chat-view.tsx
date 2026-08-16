@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { RotateCcw, Send, Sparkles, TriangleAlert, User } from "lucide-react";
-import type { AIMessage } from "@/types/ai";
+import type { AIMessage, AIUserAction } from "@/types/ai";
 import { useT } from "@/features/i18n";
 import { cn } from "@/lib/utils";
 import { useAssistant } from "./assistant-provider";
-import { BlockRenderer, AiText } from "./blocks";
+import { BlockRenderer, AiText, ProgressTrail } from "./blocks";
 import { SuggestionChips } from "./suggestion-chips";
 
 /** Prompts shown before the traveller has said anything. */
@@ -35,7 +35,7 @@ export function ChatView({
   contextualPrompts?: string[];
   compact?: boolean;
 }) {
-  const { messages, busy, draft, setDraft, send, retry, page } = useAssistant();
+  const { messages, busy, draft, setDraft, send, submit: submitAction, retry, page } = useAssistant();
   const t = useT();
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -77,6 +77,7 @@ export function ChatView({
                   message={message}
                   onRetry={() => retry(message.id)}
                   onAsk={send}
+                  onAction={submitAction}
                   busy={busy}
                 />
               </li>
@@ -164,11 +165,13 @@ function MessageBubble({
   message,
   onRetry,
   onAsk,
+  onAction,
   busy,
 }: {
   message: AIMessage;
   onRetry: () => void;
   onAsk: (prompt: string) => void;
+  onAction: (action: AIUserAction, label: string) => void;
   busy: boolean;
 }) {
   if (message.role === "user") {
@@ -192,7 +195,16 @@ function MessageBubble({
 
       <div className="min-w-0 flex-1 space-y-3">
         {message.status === "pending" ? (
-          <TypingIndicator />
+          message.steps?.length ? (
+            // Real work, named. A booking that says "Checking availability ✓ /
+            // Checking the latest price…" is a different product from one that
+            // shows three bouncing dots for the same four seconds.
+            <div className="rounded-panel rounded-es-sm bg-surface-muted px-4 py-3">
+              <ProgressTrail steps={message.steps} />
+            </div>
+          ) : (
+            <TypingIndicator />
+          )
         ) : message.status === "error" ? (
           <div className="rounded-panel rounded-es-sm border border-danger/30 bg-danger/5 px-4 py-3">
             <p className="flex items-start gap-2 text-sm text-danger">
@@ -211,6 +223,17 @@ function MessageBubble({
           </div>
         ) : (
           <>
+            {message.steps && message.steps.length > 1 && (
+              <details className="rounded-panel border border-line bg-surface-muted px-4 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-muted">
+                  What I did ({message.steps.filter((step) => step.status === "done").length} steps)
+                </summary>
+                <div className="pt-2">
+                  <ProgressTrail steps={message.steps} />
+                </div>
+              </details>
+            )}
+
             {message.text && (
               <p className="rounded-panel rounded-es-sm bg-surface-muted px-4 py-2.5 text-sm text-ink">
                 <AiText text={message.text} />
@@ -218,7 +241,13 @@ function MessageBubble({
             )}
 
             {message.blocks?.map((block, index) => (
-              <BlockRenderer key={`${message.id}-b${index}`} block={block} onAsk={onAsk} />
+              <BlockRenderer
+                key={`${message.id}-b${index}`}
+                block={block}
+                onAsk={onAsk}
+                onAction={onAction}
+                busy={busy}
+              />
             ))}
 
             {message.suggestions && message.suggestions.length > 0 && (

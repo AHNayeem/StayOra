@@ -9,11 +9,22 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { AIMessage, AIPageContext, AITripContext } from "@/types/ai";
+import type {
+  AIAuthContext,
+  AIBookingState,
+  AIMessage,
+  AIPageContext,
+  AIProgressStep,
+  AITripContext,
+  AIUserAction,
+  AgentEvent,
+} from "@/types/ai";
+import { useAuth } from "@/features/auth";
 import { useLocale } from "@/features/i18n";
 import { toISODate } from "@/lib/date";
 import { toast } from "@/lib/toast";
 import { AIError, askAssistant } from "@/services/ai";
+import { applyEvent } from "./tool-labels";
 
 /**
  * AssistantProvider — the assistant's session state, mounted once by the public
@@ -52,22 +63,48 @@ interface AssistantContextValue {
   openAssistant: (options?: OpenAssistantOptions) => void;
   closeAssistant: () => void;
   send: (text: string) => void;
+  /**
+   * Send a structured action raised by a rich block — a confirmed booking, a
+   * chosen card, a submitted traveller form.
+   *
+   * `label` is what appears in the transcript, so the conversation still reads
+   * as a conversation; the *action* is what the agent acts on, so nothing is
+   * lost to a round trip through English.
+   */
+  submit: (action: AIUserAction, label: string) => void;
   /** Re-run the question that produced a failed answer. */
   retry: (messageId: string) => void;
   /** Clear the conversation and its memory. */
   reset: () => void;
+  /** The booking workflow's current state, when one is in progress. */
+  bookingState?: AIBookingState;
 }
 
 const AssistantContext = createContext<AssistantContextValue | null>(null);
 
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const { country } = useLocale();
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [context, setContext] = useState<AITripContext>({});
   const [page, setPage] = useState<AIPageContext | undefined>(undefined);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Identity is passed *into* the engine rather than read inside it, so the
+  // same request is reproducible in a test and the engine stays free of any
+  // session dependency — which is also what a server-side provider would need.
+  const auth = useMemo<AIAuthContext>(
+    () => ({
+      authenticated: Boolean(user),
+      userId: user?.id,
+      name: user?.name,
+      email: user?.email,
+      phone: user?.phone,
+    }),
+    [user],
+  );
 
   // Monotonic ids — stable across re-renders and free of any random source, so
   // React keys never collide and SSR is never involved.
@@ -86,19 +123,40 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       assistantId: string,
       currentContext: AITripContext,
       currentPage: AIPageContext | undefined,
+      action?: AIUserAction,
     ) => {
       const id = ++turn.current;
       setBusy(true);
+
+      // Live progress. The agent emits an event per tool call, so the traveller
+      // sees "Checking availability ✓ / Checking the latest price…" instead of
+      // a spinner — and the same handler is what a streaming provider will use.
+      let steps: AIProgressStep[] = [];
+      const onEvent = (event: AgentEvent) => {
+        const next = applyEvent(steps, event);
+        if (next === steps || id !== turn.current) return;
+        steps = next;
+        setMessages((prev) =>
+          prev.map((message) => (message.id === assistantId ? { ...message, steps: next } : message)),
+        );
+      };
+
       try {
-        const response = await askAssistant({
-          message: text,
-          context: currentContext,
-          page: currentPage,
-          // Read here (in an event-driven path, never during render) so the
-          // engine stays clock-free and SSR is never involved.
-          today: toISODate(new Date()),
-          countryCode: country?.code,
-        });
+        const response = await askAssistant(
+          {
+            message: text,
+            action,
+            context: currentContext,
+            page: currentPage,
+            auth,
+            // Read here (in an event-driven path, never during render) so the
+            // engine stays clock-free and SSR is never involved.
+            today: toISODate(new Date()),
+            nowMs: Date.now(),
+            countryCode: country?.code,
+          },
+          { onEvent },
+        );
         if (id !== turn.current) return;
 
         setContext(response.contextPatch);
@@ -110,6 +168,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
                   text: response.text,
                   blocks: response.blocks,
                   suggestions: response.suggestions,
+                  steps: response.steps ?? (steps.length > 1 ? steps : undefined),
                   status: "done" as const,
                 }
               : message,
@@ -123,14 +182,16 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
             : "Something went wrong reaching the assistant.";
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId ? { ...m, text: message, status: "error" as const } : m,
+            m.id === assistantId
+              ? { ...m, text: message, steps: undefined, status: "error" as const }
+              : m,
           ),
         );
       } finally {
         if (id === turn.current) setBusy(false);
       }
     },
-    [country],
+    [auth, country],
   );
 
   /**
@@ -141,9 +202,9 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
    * its context straight to the turn instead of racing React state.
    */
   const sendWith = useCallback(
-    (raw: string, pageOverride?: AIPageContext) => {
+    (raw: string, pageOverride?: AIPageContext, action?: AIUserAction) => {
       const text = raw.trim();
-      if (!text) return;
+      if (!text && !action) return;
       // One turn at a time. Without this a second send would supersede the first
       // (the turn guard drops its response) and leave that message stuck on the
       // typing indicator forever. The composer and chips disable while busy, so
@@ -156,19 +217,26 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
         { id: nextId(), role: "user", text, status: "done" },
         { id: assistantId, role: "assistant", text: "", status: "pending", sourceText: text },
       ]);
-      void run(text, assistantId, context, pageOverride ?? page);
+      void run(text, assistantId, context, pageOverride ?? page, action);
     },
     [busy, run, context, page],
   );
 
   const send = useCallback((raw: string) => sendWith(raw), [sendWith]);
 
+  const submit = useCallback(
+    (action: AIUserAction, label: string) => sendWith(label, undefined, action),
+    [sendWith],
+  );
+
   const retry = useCallback(
     (messageId: string) => {
       const target = messages.find((m) => m.id === messageId);
       if (!target?.sourceText) return;
       setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, status: "pending", text: "" } : m)),
+        prev.map((m) =>
+          m.id === messageId ? { ...m, status: "pending", text: "", steps: undefined } : m,
+        ),
       );
       void run(target.sourceText, messageId, context, page);
     },
@@ -210,10 +278,25 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       openAssistant,
       closeAssistant,
       send,
+      submit,
       retry,
       reset,
+      bookingState: context.booking?.state,
     }),
-    [open, messages, busy, context, page, draft, openAssistant, closeAssistant, send, retry, reset],
+    [
+      open,
+      messages,
+      busy,
+      context,
+      page,
+      draft,
+      openAssistant,
+      closeAssistant,
+      send,
+      submit,
+      retry,
+      reset,
+    ],
   );
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;

@@ -12,11 +12,14 @@ export class AnthropicProvider implements AIProvider {
   readonly id = "anthropic";
   readonly label = "Claude";
 
-  async respond(request: AIRequest): Promise<AIResponse> {
+  async respond(request: AIRequest, options?: AIRespondOptions): Promise<AIResponse> {
     // 1. system prompt + TOOL_DESCRIPTORS as tool definitions
     // 2. user message + request.context as structured state
-    // 3. run the tool loop, executing calls against AI_TOOLS
+    // 3. run the tool loop through `ToolRunner` — never AI_TOOLS directly, so the
+    //    model inherits the permission checks, the per-turn budget and the logging
     // 4. map tool results onto AIBlock[]; return text, blocks, suggestions, contextPatch
+    // 5. emit AgentEvents through options.onEvent as they happen (the chat already
+    //    renders them as a live progress trail)
   }
 }
 ```
@@ -87,3 +90,13 @@ transcript memory later, summarise into `AITripContext` rather than appending tu
 - A licensed entry-requirements provider behind `getVisaStatus`. The current answer is
   explicitly prototype data and marked as such in the UI.
 - Logging of `intent` and tool calls for quality review.
+
+
+## The smaller change
+
+A model does not have to take over the whole turn. `agent/planner.ts` is a pure function
+from `(request, parsed, context)` to `AgentAction[]`, and everything downstream — tool
+permissions, the per-turn budget, the booking state machine, revalidation, the rich
+blocks — is written against that union. Replacing only the planner gets you a model's
+understanding while keeping every guarantee the prototype makes about prices, availability
+and confirmations.

@@ -6,28 +6,49 @@ service seam. It adds no data, no second search system and no second booking sys
 ## Data flow
 
 ```
-User message
+User message  (or a structured AIUserAction raised by a rich block)
    ↓
 services/ai.ts            ← service seam (same contract as catalog/search/flight/account)
    ↓
 features/ai/provider      ← AIProvider interface  →  MockAIProvider (today)
    ↓
-features/ai/nlu/parse     ← intent + slot extraction
+features/ai/agent/orchestrator
+   ├── nlu/parse          ← intent, slots, references, confirmations, contact details
+   ├── agent/reference    ← "the second one" → a real entity, from conversation memory
+   ├── agent/planner      ← AgentAction[]   (an LLM would emit this same union)
+   ├── agent/tool-runner  ← permissions · per-turn budget · structured logging
+   ├── agent/actions/*    ← one handler per action; composes the answer
+   └── agent/booking-machine · requirements · guardrails
    ↓
-features/ai/tools         ← the ONLY route to data
+features/ai/tools         ← the ONLY callable surface (AI_TOOLS + TOOL_DESCRIPTORS)
    ↓
-services/{catalog,search,flight.service,account,checkout}
+features/ai/repositories  ← ListingRepository · FlightRepository · BookingRepository
+                             AccountRepository · PaymentRepository · TripRepository
    ↓
-constants/listings · lib/mock/*        (mock data today, real API later)
+services/{catalog,flight.service,account} · features/booking/checkout-service
+   · features/dashboard/domain (inventory, pricing, payments, lifecycle)
    ↓
-Structured tool result
+AIResponse { text, blocks[], suggestions[], contextPatch, actions[], steps[], bookingState }
    ↓
-AIResponse { text, blocks[], suggestions[], contextPatch }
+features/ai/ui            ← chat + block renderers + live AgentEvent progress
    ↓
-features/ai/ui            ← chat + block renderers
-   ↓
-UI action (link, compare, booking draft → /checkout)
+UI action (link, compare, booking review → confirmation)
 ```
+
+## The booking workflow
+
+`"Book this hotel"` is a staged process, not a sentence:
+
+```
+selection → availability_check → pricing_check → collecting_information
+   → review → awaiting_confirmation → processing → confirmed
+```
+
+with `availability_failed · price_changed · validation_failed · payment_failed ·
+booking_failed · cancelled` as the failure states. `agent/booking-machine.ts` owns the
+transition table, so `collecting_information → confirmed` is unrepresentable rather than
+merely unlikely. Availability and price are **revalidated immediately before the charge**,
+and the repository refuses to confirm at a total the traveller didn't agree to.
 
 ## The no-hallucination guarantee
 

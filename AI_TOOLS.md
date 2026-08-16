@@ -1,10 +1,40 @@
 # AI Tools
 
 `features/ai/tools` is the assistant's entire access to data. The engine imports
-`AI_TOOLS` and nothing else from the data side.
+`AI_TOOLS` and nothing else from the data side, and it never calls those functions
+directly — every call goes through `agent/tool-runner.ts`.
 
 `TOOL_DESCRIPTORS` (in `tools/registry.ts`) mirrors this list as data — a real LLM
-provider serialises it into function/tool definitions without touching the tools.
+provider serialises it into function/tool definitions without touching the tools. Each
+descriptor carries a **permission**, which the runner enforces before anything runs:
+
+| Permission | Meaning | Requires |
+| --- | --- | --- |
+| `read` | Changes nothing; safe to call speculatively. | — |
+| `write` | Creates or mutates a record (`confirmBooking`, `saveTripPlan`). | A signed-in traveller. |
+| `destructive` | Irreversible or financially consequential (`cancelBooking`). | Sign-in **and** an explicit confirmation raised in the same turn. |
+
+A tool with no descriptor is treated as `destructive`, so an undeclared tool is
+uncallable rather than silently unguarded (`tests/ai-agent.mts` asserts the two lists
+match).
+
+Tools reach data through `features/ai/repositories`, not through services directly.
+That is the seam a real backend replaces — see the bottom of this file.
+
+## Booking
+
+| Tool | Delegates to | Permission |
+| --- | --- | --- |
+| `checkAvailability` / `getPricing` | inventory engine + checkout pricing | read |
+| `startBooking` | availability + pricing, returns the workflow session | read |
+| `validateBooking` | pure requirement check | read |
+| `revalidateBooking` | re-asks availability and price before the charge | read |
+| `confirmBooking` | hold → payment → booking lifecycle | write |
+| `getBooking` / `listBookingRecords` | booking domain, scoped to the traveller | read |
+| `quoteCancellation` | the booking's own cancellation policy | read |
+| `cancelBooking` | lifecycle transition + refund | destructive |
+| `modifyBooking` | re-prices under new dates/party | read |
+| `getPaymentMethods` | payment provider (display metadata only) | read |
 
 ## Search
 
@@ -71,3 +101,19 @@ flows because they are financially consequential.
 3. Add an entry to `TOOL_DESCRIPTORS`.
 4. If it needs new UI, add an `AIBlock` variant in `types/ai.ts` and one renderer in
    `features/ai/ui/blocks/` — the chat, panel and page don't change.
+
+
+## Repositories — the API cutover
+
+```
+features/ai/repositories/
+  types.ts                 ListingRepository · FlightRepository · BookingRepository
+                           AccountRepository · PaymentRepository · TripRepository
+  mock-*-repository.ts     the implementations shipped today
+  index.ts                 getRepositories() / setRepositories()
+```
+
+Connecting a real backend means constructing an `Api*` bundle and calling
+`setRepositories(...)` once at boot. Nothing above that line changes: not the chat UI,
+the agent core, the tool contracts, the agent actions, the booking state machine, the
+rich blocks, the conversation memory, the guardrails or the error handling.

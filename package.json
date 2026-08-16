@@ -8,7 +8,10 @@
     "start": "next start -p 3004",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test:domain": "bun tests/domain-regression.mts"
+    "test:domain": "bun tests/domain-regression.mts",
+    "test:pricing": "bun tests/pricing-engine.mts",
+    "test:ai": "bun tests/ai-agent.mts",
+    "test": "bun run test:domain && bun run test:pricing && bun run test:ai"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

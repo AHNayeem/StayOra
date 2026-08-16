@@ -11,7 +11,15 @@
  * stays pure and the answer respects the visitor's locale.
  */
 
-import type { AIPageContext, AIRequest, AIResponse, AITripContext } from "@/types/ai";
+import type {
+  AIAuthContext,
+  AIPageContext,
+  AIRequest,
+  AIRespondOptions,
+  AIResponse,
+  AITripContext,
+  AIUserAction,
+} from "@/types/ai";
 import { getAIProvider } from "@/features/ai/provider";
 
 /** Raised when a turn fails, so the chat can offer Retry rather than a dead end. */
@@ -24,10 +32,16 @@ export class AIError extends Error {
 
 export interface AskAssistantInput {
   message: string;
+  /** The structured action behind the message, when a rich block raised one. */
+  action?: AIUserAction;
   context: AITripContext;
   page?: AIPageContext;
   today: string;
   countryCode?: string;
+  /** The signed-in traveller. Booking actions require one. */
+  auth?: AIAuthContext;
+  /** Wall clock at send time — read by the caller, never by the engine. */
+  nowMs?: number;
 }
 
 /**
@@ -37,19 +51,29 @@ export interface AskAssistantInput {
  * which already simulates network latency (a flight search takes ~900 ms), so
  * loading states are exercised by genuine work rather than a `setTimeout`.
  */
-export async function askAssistant(input: AskAssistantInput): Promise<AIResponse> {
+export async function askAssistant(
+  input: AskAssistantInput,
+  options?: AIRespondOptions,
+): Promise<AIResponse> {
   const request: AIRequest = {
     message: input.message.trim(),
+    action: input.action,
     context: input.context,
     page: input.page,
+    auth: input.auth,
     today: input.today,
+    nowMs: input.nowMs,
     countryCode: input.countryCode,
   };
 
-  if (!request.message) throw new AIError("Ask me something about your trip.");
+  // A structured action carries its own meaning, so it doesn't need words with
+  // it — a tapped "Confirm booking" is a complete instruction.
+  if (!request.message && !request.action) {
+    throw new AIError("Ask me something about your trip.");
+  }
 
   try {
-    return await getAIProvider().respond(request);
+    return await getAIProvider().respond(request, options);
   } catch (error) {
     if (process.env.NODE_ENV !== "production") console.error("[ai] respond failed", error);
     throw new AIError();

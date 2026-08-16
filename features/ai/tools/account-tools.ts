@@ -10,8 +10,7 @@
 
 import type { FlightBooking } from "@/types/flight";
 import type { TravelerBooking } from "@/types/traveler";
-import { getBookings } from "@/services/account";
-import { getFlightBookings } from "@/services/flight.service";
+import { getRepositories } from "../repositories";
 import { normalize } from "../lib/text";
 
 export interface AIBookingsResult {
@@ -32,7 +31,11 @@ const LIST_LIMIT = 4;
  * out instead of silently truncating.
  */
 export async function getUserBookings(): Promise<AIBookingsResult> {
-  const [stays, flights] = await Promise.all([getBookings(), getFlightBookings()]);
+  const repos = getRepositories();
+  const [stays, flights] = await Promise.all([
+    repos.account.listStays(),
+    repos.flights.listBookings(),
+  ]);
   return {
     stays: stays.slice(0, LIST_LIMIT),
     flights: flights.slice(0, LIST_LIMIT),

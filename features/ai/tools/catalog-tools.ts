@@ -18,7 +18,7 @@ import type {
   AITripStyle,
 } from "@/types/ai";
 import { listingHref } from "@/constants/verticals";
-import { getAllListings, getListingDetail } from "@/services/catalog";
+import { getRepositories } from "../repositories";
 import { usd } from "../lib/money";
 import { normalize } from "../lib/text";
 import { countryOf, listingMatchesPlace, type AIPlace } from "../lib/places";
@@ -202,7 +202,8 @@ export async function searchHotels(input: StaySearchInput): Promise<AIListingRes
   const requested = input.vertical ? [input.vertical] : STAY_VERTICALS;
   const relaxed: string[] = [];
 
-  const pools = await Promise.all(STAY_VERTICALS.map((v) => getAllListings(v)));
+  const repo = getRepositories().listings;
+  const pools = await Promise.all(STAY_VERTICALS.map((v) => repo.listByVertical(v)));
   const everyStay = pools.flat();
   const inRequestedVertical = everyStay.filter((l) => requested.includes(l.vertical));
 
@@ -306,7 +307,7 @@ async function searchExperience(
   vertical: ListingVertical,
   input: ExperienceSearchInput,
 ): Promise<AIListingResult> {
-  const all = await getAllListings(vertical);
+  const all = await getRepositories().listings.listByVertical(vertical);
   let pool = all;
   const relaxed: string[] = [];
   let widenedTo: string | undefined;
@@ -397,26 +398,12 @@ export function getListingDetails(
   vertical: ListingVertical,
   slug: string,
 ): Promise<ListingDetail | undefined> {
-  return getListingDetail(vertical, slug);
+  return getRepositories().listings.getDetail(vertical, slug);
 }
 
 /** Resolve listing ids back to listings across every stay/experience vertical. */
 export async function resolveListings(ids: string[]): Promise<Listing[]> {
-  if (ids.length === 0) return [];
-  const verticals: ListingVertical[] = [
-    "hotels",
-    "resorts",
-    "apartments",
-    "shared-rooms",
-    "convention-hall",
-    "tours",
-    "activities",
-    "transport",
-    "visa",
-  ];
-  const pools = await Promise.all(verticals.map((v) => getAllListings(v)));
-  const index = new Map(pools.flat().map((l) => [l.id, l]));
-  return ids.map((id) => index.get(id)).filter((l): l is Listing => Boolean(l));
+  return getRepositories().listings.getManyByIds(ids);
 }
 
 /** A comparison table plus the recommendation the numbers support. */
@@ -582,7 +569,7 @@ const REVIEW_THEMES: Array<{ label: string; words: string[] }> = [
  * the mention count is the number of reviews containing them.
  */
 export async function summarizeReviews(vertical: ListingVertical, slug: string) {
-  const detail = await getListingDetail(vertical, slug);
+  const detail = await getRepositories().listings.getDetail(vertical, slug);
   if (!detail) return undefined;
 
   const bodies = detail.reviews.map((r) => normalize(r.body));

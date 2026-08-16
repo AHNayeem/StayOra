@@ -16,6 +16,8 @@ import type { CabinClass, TripType } from "@/types/flight";
 import { addDays } from "@/lib/flight-time";
 import { hasAny, hasPhrase, normalize } from "../lib/text";
 import { findPlace, resolvePlace, type AIPlace } from "../lib/places";
+import { extractContact, hasContactDetails, type ExtractedContact } from "./contact";
+import { detectReference, isAffirmation, isNegation, type AIReference } from "./references";
 
 /** What the assistant should try to include when it answers. */
 export interface AIWants {
@@ -43,6 +45,34 @@ export interface ParsedMessage {
   compareFlights: boolean;
   /** Normalized text, exposed so the engine can do light follow-up checks. */
   text: string;
+
+  /* --- conversational signals ---------------------------------------------- */
+
+  /** How the traveller pointed at something already on screen. */
+  reference?: AIReference;
+  /** A bare "yes" / "confirm" — meaningful only against a pending question. */
+  affirmation: boolean;
+  /** A bare "no" / "stop". */
+  negation: boolean;
+  /** Contact facts stated in the message. */
+  contact: ExtractedContact;
+  /** How the traveller asked to change the previous answer. */
+  refine?: AIRefinement;
+  /** A booking reference the traveller named, e.g. "SO-4KX2P9". */
+  bookingReference?: string;
+  /**
+   * True when the message contains an explicit booking verb. A bare reference
+   * ("the second one") selects; only this starts the booking workflow.
+   */
+  explicitBooking: boolean;
+}
+
+/** A change to the previous answer rather than a fresh request. */
+export interface AIRefinement {
+  /** "cheaper", "show me better options", "something nicer". */
+  direction?: "cheaper" | "better" | "more";
+  /** "remove the hotel" — a component to drop from the current plan. */
+  remove?: "flight" | "stay" | "activity" | "transport";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -340,7 +370,22 @@ const BUDGET_WORDS = [
   "budget", "how much", "total cost", "cost breakdown", "afford", "spend",
   "cheaper", "save money", "over budget", "keep it under", "bring it down",
 ];
-const BOOK_WORDS = ["book this", "book it", "book now", "reserve this", "reserve it", "i want to book", "book the", "make a booking", "booking draft"];
+const BOOK_WORDS = [
+  "book this", "book it", "book now", "reserve this", "reserve it", "i want to book",
+  "book the", "make a booking", "booking draft", "book that", "reserve the", "reserve a",
+  "go ahead with", "ill take", "i will take", "lets book", "let us book", "take this one",
+  "book me", "secure this", "grab this one",
+];
+/** Cancelling something that already exists — never the in-flight booking. */
+const CANCEL_WORDS = [
+  "cancel my booking", "cancel my reservation", "cancel my trip", "cancel booking",
+  "cancel the booking", "i want to cancel", "cancel my stay", "refund my booking",
+];
+/** Changing an existing booking. */
+const MODIFY_WORDS = [
+  "change my booking", "modify my booking", "move my booking", "change my dates",
+  "reschedule", "push my booking", "change the guests on", "amend my booking",
+];
 const RECOMMEND_WORDS = ["recommend", "suggest", "suggestion", "suggestions", "ideas", "inspire", "where should i", "surprise me"];
 const ITINERARY_WORDS = ["itinerary", "day by day", "day-by-day", "schedule", "day plan"];
 
@@ -357,16 +402,45 @@ function classify(
   context: AITripContext,
   rank: ParsedMessage["rank"],
   origin: AIPlace | undefined,
+  signals: {
+    affirmation: boolean;
+    negation: boolean;
+    contact: ExtractedContact;
+    reference?: AIReference;
+    refine?: AIRefinement;
+  },
 ): AIIntent {
   if (!text) return "unknown";
+
+  /* --- a booking in flight owns the conversation --------------------------- */
+  // While a booking is open, short answers mean something specific. Reading
+  // "yes" as a greeting there would be the single most expensive misparse in
+  // the product, so this block is tested before anything else.
+  const booking = context.booking;
+  const bookingActive =
+    booking && booking.state !== "confirmed" && booking.state !== "cancelled";
+
+  if (bookingActive) {
+    if (signals.affirmation) return "confirm-booking";
+    if (signals.negation) return "modify-booking";
+    if (hasContactDetails(signals.contact)) return "provide-info";
+  }
+
   if (hasAny(text, HELP_WORDS)) return "help";
   if (text.split(" ").length <= 3 && hasAny(text, GREETING_WORDS)) return "greet";
 
+  if (hasAny(text, CANCEL_WORDS)) return "cancel-booking";
+  if (hasAny(text, MODIFY_WORDS)) return "modify-booking";
   if (hasAny(text, BOOKINGS_WORDS)) return "my-bookings";
-  if (hasAny(text, BOOK_WORDS)) return "booking-draft";
+  if (hasAny(text, BOOK_WORDS)) return "start-booking";
   if (hasAny(text, REVIEW_WORDS)) return "summarize-reviews";
   if (hasAny(text, COMPARE_WORDS)) return "compare";
   if (hasAny(text, VISA_WORDS)) return "search-visa";
+
+  // "Remove the hotel" names a component, so it reads as a stay search unless
+  // the plan it belongs to is checked first. The plan wins: dropping a piece of
+  // an existing itinerary is an edit, not a new search.
+  if (signals.refine?.remove && context.planId) return "plan-trip";
 
   const wantCount = Object.values(wants).filter(Boolean).length;
   const isPlan =
@@ -391,6 +465,10 @@ function classify(
   // A bare route ("Dhaka to London") is a flight ask even without the word.
   if (origin && destination) return "search-flights";
 
+  // "Show me cheaper ones" / "any better options?" — a change to the last
+  // answer, not a new question. Only meaningful when there *was* a last answer.
+  if (signals.refine && context.lastResults?.items.length) return "refine";
+
   // A bare ranking follow-up ("what's the fastest option?") re-runs the last
   // search rather than dead-ending — the conversation already said what about.
   if (rank) {
@@ -399,6 +477,13 @@ function classify(
   }
 
   if (hasAny(text, RECOMMEND_WORDS)) return "recommend";
+
+  // A bare reference with no verb ("the second one") selects rather than books —
+  // the planner turns this into a selection, and booking stays an explicit act.
+  if (signals.reference && context.lastResults?.items.length) return "start-booking";
+
+  // Contact details offered out of the blue are still worth keeping.
+  if (hasContactDetails(signals.contact)) return "provide-info";
 
   // "I want to visit Dubai" — a destination with no ask is context, not a search.
   if (destination) return "set-context";
@@ -433,7 +518,9 @@ export function parseMessage(raw: string, options: ParseOptions): ParsedMessage 
   const styles = STYLE_WORDS.filter(([, words]) => hasAny(text, words)).map(([style]) => style);
   const amenities = AMENITY_WORDS.filter((word) => hasPhrase(text, word));
 
-  const tripType: TripType | undefined = hasAny(text, ["round trip", "return flight", "returning", "and back"])
+  const tripType: TripType | undefined = hasAny(text, [
+    "round trip", "round-trip", "roundtrip", "return flight", "returning", "and back",
+  ])
     ? "round-trip"
     : hasAny(text, ["one way", "one-way"])
       ? "one-way"
@@ -461,6 +548,15 @@ export function parseMessage(raw: string, options: ParseOptions): ParsedMessage 
   const activityCountMatch = text.match(
     /(\d+|one|two|three|four|five)\s*(?:activit|thing|experience|excursion)/,
   );
+
+  /* --- conversational signals --------------------------------------------- */
+  const reference = detectReference(raw);
+  const contact = extractContact(raw);
+  const affirmation = isAffirmation(raw);
+  const negation = isNegation(raw);
+  const refine = extractRefinement(text);
+  const bookingReference = raw.match(/\b(SO-[A-Z0-9]{4,10})\b/i)?.[1]?.toUpperCase();
+  const explicitBooking = hasAny(text, BOOK_WORDS);
 
   const slots: AITripContext = {
     ...(destination
@@ -490,7 +586,13 @@ export function parseMessage(raw: string, options: ParseOptions): ParsedMessage 
     slots.endDate = addDays(slots.startDate, slots.nights);
   }
 
-  const intent = classify(text, wants, slots, destination, context, rank, origin);
+  const intent = classify(text, wants, slots, destination, context, rank, origin, {
+    affirmation,
+    negation,
+    contact,
+    reference,
+    refine,
+  });
 
   return {
     intent,
@@ -506,5 +608,41 @@ export function parseMessage(raw: string, options: ParseOptions): ParsedMessage 
       wants.flight ||
       (!wants.stay && (context.selectedOfferIds?.length ?? 0) >= 2),
     text,
+    reference,
+    affirmation,
+    negation,
+    contact,
+    refine,
+    bookingReference,
+    explicitBooking,
   };
+}
+
+/**
+ * "Cheaper", "better options", "remove the hotel" — a change to the last answer.
+ *
+ * Only the *direction* is parsed here. What "cheaper" means numerically depends
+ * on what was shown, which is the agent's job with the result set in hand.
+ */
+function extractRefinement(text: string): AIRefinement | undefined {
+  const direction = hasAny(text, ["cheaper", "less expensive", "lower price", "cheapest option"])
+    ? ("cheaper" as const)
+    : hasAny(text, ["better options", "better ones", "nicer", "something nicer", "upgrade", "show me better"])
+      ? ("better" as const)
+      : hasAny(text, ["show more", "more options", "other options", "something else", "different ones", "show me others"])
+        ? ("more" as const)
+        : undefined;
+
+  const remove = hasAny(text, ["remove the hotel", "without the hotel", "no hotel", "drop the hotel"])
+    ? ("stay" as const)
+    : hasAny(text, ["remove the flight", "without flights", "no flight", "drop the flight", "without the flight"])
+      ? ("flight" as const)
+      : hasAny(text, ["remove the activities", "no activities", "without activities", "drop the activities"])
+        ? ("activity" as const)
+        : hasAny(text, ["remove the transfer", "no transfer", "without transfers", "drop the transfer"])
+          ? ("transport" as const)
+          : undefined;
+
+  if (!direction && !remove) return undefined;
+  return { direction, remove };
 }

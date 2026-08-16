@@ -1,11 +1,20 @@
 # Mock AI Provider
 
 `features/ai/provider/mock-provider.ts` is a deterministic engine, not a language model.
-It performs the same three steps a real LLM provider performs, in the same order:
+It is a thin adapter over `features/ai/agent/orchestrator.ts`, which performs the same
+steps a real LLM provider performs, in the same order:
 
-1. **Understand** — `parseMessage` (`features/ai/nlu/parse.ts`)
-2. **Choose and call tools** — `AI_TOOLS`
-3. **Compose** — `text` + `AIBlock[]` + follow-up chips + `contextPatch`
+1. **Understand** — `parseMessage` (`features/ai/nlu/parse.ts`), plus reference
+   resolution against the conversation's memory (`agent/reference.ts`)
+2. **Decide** — `agent/planner.ts` emits `AgentAction[]`. *This is the only function an
+   LLM provider replaces.*
+3. **Act** — `agent/tool-runner.ts` executes tool calls with permissions, a per-turn
+   budget and structured logging
+4. **Compose** — `agent/actions/*` return `text` + `AIBlock[]` + chips + `contextPatch`,
+   plus the progress trail and booking state
+
+Because the guardrails live in the runner and the state machine rather than in prompt
+wording, they hold for whichever provider is plugged in.
 
 ## Parsing
 

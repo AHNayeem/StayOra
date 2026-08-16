@@ -20,14 +20,12 @@ import type {
 import type { AIComparisonRow, AIComparisonSubject, AIFlightRef, AITravelers } from "@/types/ai";
 import {
   AIRLINES_BY_CODE,
-  getOffer,
-  getVisaRequirement,
   normalizeQuery,
-  searchFlights as searchFlightOffers,
   sortOffers,
   totalDuration,
   totalStops,
 } from "@/services/flight.service";
+import { getRepositories } from "../repositories";
 import { searchHref } from "@/features/flights/query-url";
 import { addDays, formatDuration, formatTime } from "@/lib/flight-time";
 import { CABIN_LABEL } from "@/lib/mock/fares";
@@ -133,7 +131,7 @@ function flightReason(offer: FlightOffer): string {
  */
 export async function searchFlights(input: FlightSearchInput): Promise<AIFlightResult> {
   const query = buildFlightQuery(input);
-  const result = await searchFlightOffers(query);
+  const result = await getRepositories().flights.search(query);
   const relaxed: string[] = [];
 
   let offers = result.offers;
@@ -162,7 +160,7 @@ export async function searchFlights(input: FlightSearchInput): Promise<AIFlightR
 
 /** getFlightDetails — rebuild one offer from its id. */
 export async function getFlightDetails(offerId: string): Promise<AIFlightRef | undefined> {
-  const offer = await getOffer(offerId);
+  const offer = await getRepositories().flights.getOffer(offerId);
   if (!offer) return undefined;
   return { offer, href: offerHref(offer), reason: flightReason(offer) };
 }
@@ -172,7 +170,8 @@ export async function getFlightDetails(offerId: string): Promise<AIFlightRef | u
  * trade off. The verdict is computed from the same numbers the table prints.
  */
 export async function compareFlights(offerIds: string[]): Promise<AIComparison | undefined> {
-  const resolved = await Promise.all(offerIds.slice(0, 4).map((id) => getOffer(id)));
+  const flights = getRepositories().flights;
+  const resolved = await Promise.all(offerIds.slice(0, 4).map((id) => flights.getOffer(id)));
   const offers = resolved.filter((o): o is FlightOffer => Boolean(o));
   if (offers.length < 2) return undefined;
 
@@ -277,7 +276,7 @@ export function getVisaStatus(
   destinationCode: string,
   nationality: string,
 ): Promise<VisaRequirement> {
-  return getVisaRequirement(destinationCode, nationality);
+  return getRepositories().flights.getVisaRequirement(destinationCode, nationality);
 }
 
 function minIndex(values: number[]): number {

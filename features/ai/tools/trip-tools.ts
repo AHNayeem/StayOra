@@ -27,11 +27,11 @@ import { listingHref } from "@/constants/verticals";
 import { computeBookingPricing, defaultQuantities, durationBetween, guestsFromSelection } from "@/lib/booking-pricing";
 import { addDays, formatTime } from "@/lib/flight-time";
 import { airportLabel } from "@/lib/mock/airports";
-import { getListingBySlug } from "@/services/catalog";
+import { getRepositories } from "../repositories";
 import { usd } from "../lib/money";
 import { stableId } from "../lib/text";
 import type { AIPlace } from "../lib/places";
-import { searchActivities, searchHotels, searchTransport } from "./catalog-tools";
+import { searchActivities, searchHotels, searchTransport, type AIListingResult } from "./catalog-tools";
 import { searchFlights } from "./flight-tools";
 
 /**
@@ -42,6 +42,9 @@ import { searchFlights } from "./flight-tools";
  * prices found, and {@link calculateTripBudget} re-checks it against the budget.
  */
 const BUDGET_SPLIT = { flight: 0.4, stay: 0.35, activities: 0.15, transport: 0.1 };
+
+/** The shape an excluded component contributes: nothing, and no relaxation. */
+const EMPTY_LISTING_RESULT: AIListingResult = { items: [], total: 0, relaxed: [] };
 
 /** Activities to propose, by trip length — enough to fill days without padding. */
 function activityCount(nights: number): number {
@@ -62,6 +65,11 @@ export interface TripPlanInput {
   styles?: AITripStyle[];
   /** Number of activities to include; defaults by trip length. */
   activities?: number;
+  /**
+   * Components to leave out — "plan it without the hotel". Excluded parts are
+   * skipped entirely rather than searched and hidden, so the total is honest.
+   */
+  exclude?: Array<"flight" | "stay" | "activity" | "transport">;
   today: string;
 }
 
@@ -94,7 +102,9 @@ export async function createTripPlan(input: TripPlanInput): Promise<TripPlanResu
     ? Math.max(15, Math.round((budget * BUDGET_SPLIT.activities) / (wantActivities * partySize)))
     : undefined;
 
-  const canSearchFlights = Boolean(input.originCode && input.place.airportCode);
+  const excluded = new Set(input.exclude ?? []);
+  const canSearchFlights =
+    Boolean(input.originCode && input.place.airportCode) && !excluded.has("flight");
   const startDate = input.startDate;
   const endDate = startDate ? addDays(startDate, nights) : undefined;
 
@@ -114,20 +124,26 @@ export async function createTripPlan(input: TripPlanInput): Promise<TripPlanResu
           today: input.today,
         })
       : Promise.resolve(null),
-    searchHotels({
-      place: input.place,
-      maxNightlyUsd: nightlyCeiling,
-      styles: input.styles,
-      nights,
-      limit: 1,
-    }),
-    searchTransport({ place: input.place, limit: 1 }),
-    searchActivities({
-      place: input.place,
-      maxUsd: activityCeiling,
-      styles: input.styles,
-      limit: wantActivities,
-    }),
+    excluded.has("stay")
+      ? Promise.resolve(EMPTY_LISTING_RESULT)
+      : searchHotels({
+          place: input.place,
+          maxNightlyUsd: nightlyCeiling,
+          styles: input.styles,
+          nights,
+          limit: 1,
+        }),
+    excluded.has("transport")
+      ? Promise.resolve(EMPTY_LISTING_RESULT)
+      : searchTransport({ place: input.place, limit: 1 }),
+    excluded.has("activity")
+      ? Promise.resolve(EMPTY_LISTING_RESULT)
+      : searchActivities({
+          place: input.place,
+          maxUsd: activityCeiling,
+          styles: input.styles,
+          limit: wantActivities,
+        }),
   ]);
 
   /** True when a search had to give up on the destination entirely. */
@@ -195,7 +211,7 @@ export async function createTripPlan(input: TripPlanInput): Promise<TripPlanResu
       totalUsd,
     },
     relaxed: [...new Set(relaxed)],
-    flightUnavailable: !canSearchFlights,
+    flightUnavailable: !canSearchFlights && !excluded.has("flight"),
   };
 }
 
@@ -338,6 +354,11 @@ function buildDays(input: BuildDaysInput): AITripDay[] {
   }
 
   return days;
+}
+
+/** saveTripPlan — persist a plan so a later turn can reopen it by id. */
+export function saveTripPlan(plan: AITripPlan): Promise<AITripPlan> {
+  return getRepositories().trips.save(plan);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -531,7 +552,7 @@ const DEFAULT_DRAFT_LEAD_DAYS = 21;
 export async function createBookingDraft(
   input: BookingDraftInput,
 ): Promise<AIBookingDraft | undefined> {
-  const listing = await getListingBySlug(input.vertical, input.slug);
+  const listing = await getRepositories().listings.getBySlug(input.vertical, input.slug);
   if (!listing) return undefined;
 
   const config = BOOKING_CONFIG[input.vertical];

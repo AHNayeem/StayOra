@@ -20,4 +20,12 @@ export {
   removeSavedTrip,
   type SavedTrip,
 } from "./saved-trips";
-export { TOOL_DESCRIPTORS } from "./tools/registry";
+export { TOOL_DESCRIPTORS, permissionOf, type AIToolPermission } from "./tools/registry";
+/**
+ * The API cutover seam. Constructing an `Api*` bundle and calling
+ * `setRepositories(...)` once at boot is the whole change — no tool, agent
+ * action, block or component knows which implementation is active.
+ */
+export { getRepositories, setRepositories, type Repositories } from "./repositories";
+export { DEFAULT_AGENT_POLICY, type AgentPolicy } from "./agent/policy";
+export { BOOKING_STATE_LABEL } from "./agent/booking-machine";
