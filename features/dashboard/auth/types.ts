@@ -1,4 +1,5 @@
 import type { CurrentUser } from "../rbac/types";
+import type { ImpersonationOrigin } from "./impersonation";
 
 export type AuthStatus = "authenticated" | "unauthenticated";
 
@@ -14,4 +15,9 @@ export interface Session {
   token: string | null;
   /** Epoch ms expiry, when known. */
   expiresAt: number | null;
+  /**
+   * Set while `user` is being impersonated: who is really at the keyboard. The
+   * shell shows a banner whenever this is present.
+   */
+  impersonator?: ImpersonationOrigin | null;
 }

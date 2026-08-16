@@ -11,6 +11,12 @@ import {
 import { setAuthTokenProvider } from "../data/http-client";
 import type { CurrentUser, MerchantStaffRoleId, RoleId } from "../rbac/types";
 import {
+  endImpersonation as endImpersonationSession,
+  startImpersonation as startImpersonationSession,
+  type ImpersonationOrigin,
+  type ImpersonationTarget,
+} from "./impersonation";
+import {
   clearSessionCookie,
   readSessionCookie,
   writeSessionCookie,
@@ -20,8 +26,18 @@ import type { AuthStatus, Session } from "./types";
 interface SessionValue {
   user: CurrentUser;
   status: AuthStatus;
+  /** The operator behind an impersonated session; `null` when not impersonating. */
+  impersonator: ImpersonationOrigin | null;
   /** Sign out: clears the client session + cookie, then returns to sign-in. */
   signOut: () => void;
+  /**
+   * Start viewing the dashboard as another user. Throws
+   * {@link import("./impersonation").ImpersonationError} when refused; reloads
+   * on success so every Server Component re-resolves as the target.
+   */
+  startImpersonation: (target: ImpersonationTarget, reason?: string) => void;
+  /** Leave an impersonated session and restore the operator. */
+  endImpersonation: () => void;
   /**
    * Prototype-only role switch ("view as"). Rewrites the session cookie and
    * reloads so the server re-resolves the principal — exactly the path a real
@@ -86,14 +102,40 @@ export function SessionProvider({
     window.location.reload();
   }, []);
 
+  const startImpersonation = useCallback<SessionValue["startImpersonation"]>(
+    (target, reason) => {
+      startImpersonationSession(session.user, target, { reason });
+      // Full navigation to the dashboard root: the target's role may not have
+      // access to whatever page the operator was on.
+      window.location.href = "/dashboard";
+    },
+    [session.user],
+  );
+
+  const endImpersonation = useCallback(() => {
+    endImpersonationSession();
+    window.location.href = "/dashboard";
+  }, []);
+
   const value = useMemo<SessionValue>(
     () => ({
       user: session.user,
       status: session.status,
+      impersonator: session.impersonator ?? null,
       signOut,
+      startImpersonation,
+      endImpersonation,
       viewAsRole,
     }),
-    [session.user, session.status, signOut, viewAsRole],
+    [
+      session.user,
+      session.status,
+      session.impersonator,
+      signOut,
+      startImpersonation,
+      endImpersonation,
+      viewAsRole,
+    ],
   );
 
   return (

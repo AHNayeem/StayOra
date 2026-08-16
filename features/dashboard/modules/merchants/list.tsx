@@ -12,7 +12,10 @@ import { DropdownItem, DropdownSeparator } from "../../ui/dropdown-menu";
 import { Can } from "../../rbac/permission-guard";
 import type { ActiveFilter } from "../../ui/filter-bar";
 import { labelMap, statusOptions } from "../../lib/status";
+import { ImpersonationDialog } from "../../auth/impersonation-dialog";
+import type { ImpersonationTarget } from "../../auth/impersonation";
 import { useMerchants, useSetMerchantStatus } from "./hooks";
+import { merchantImpersonationTarget } from "./impersonate";
 import { ReasonDialog } from "./review-dialogs";
 import { MERCHANT_STATUSES, type Merchant, type MerchantStatus } from "./types";
 
@@ -32,6 +35,7 @@ export function MerchantsList() {
   const router = useRouter();
   const setStatus = useSetMerchantStatus();
   const [reasonFor, setReasonFor] = useState<{ row: Merchant; status: MerchantStatus } | null>(null);
+  const [impersonating, setImpersonating] = useState<ImpersonationTarget | null>(null);
 
   const apply = async (row: Merchant, status: MerchantStatus, note?: string) => {
     try {
@@ -49,9 +53,7 @@ export function MerchantsList() {
   };
 
   const impersonate = (row: Merchant) =>
-    toast.info("Impersonation session started", {
-      description: `You're now viewing the platform as ${row.name} (demo).`,
-    });
+    setImpersonating(merchantImpersonationTarget(row));
 
   const list = useMerchants((row) => (
     <RowActions
@@ -183,6 +185,11 @@ export function MerchantsList() {
           await apply(reasonFor.row, reasonFor.status, note);
           setReasonFor(null);
         }}
+      />
+
+      <ImpersonationDialog
+        target={impersonating}
+        onClose={() => setImpersonating(null)}
       />
     </>
   );

@@ -7,16 +7,15 @@ These are cases where one part of the product implies something another part doe
 | # | Contradiction | Detail |
 |---|---|---|
 | 1 | **Admin catalogue vs public catalogue** | Dashboard catalog modules (hotels, apartments, resorts, …) are stub-backed and manage a dataset entirely separate from `constants/listings.ts`, which is what the public site renders. Creating a hotel in the dashboard does not create a bookable hotel. |
-| 2 | **Two merchant models** | `MerchantRef` (domain: id, name, commissionRate — used by bookings, commission and settlements) vs `Merchant` (module: 12 fields, stub-backed — used by the admin screen). They share no identity. Commission is a percentage in one (`12`) and a ratio in the other (`0.08`). |
-| 3 | **CMS publishes nothing** | The CMS has a real, tested draft → review → publish workflow. The public site reads static constants. Publishing changes a status and nothing else. |
-| 4 | **Settings are decorative** | The Settings screen implies control over platform economics; commission defaults, tax rate, service fee and cancellation share are constants in `PRICING_CONFIG` in code. |
-| 5 | **System tools have no system** | Cron, queues, cache and storage screens present realistic operational data. There are no cron jobs, no queues, no cache and no storage. Maintenance mode has a page that nothing enforces. |
-| 6 | **Notifications appear delivered** | The delivery report shows queued → sent → delivered. Nothing leaves the browser. |
-| 7 | **Language switcher over-promises** | Three languages offered; one dictionary exists, covering chrome only. Arabic flips direction but not language. |
-| 8 | **Payouts vs Settlements** | Two finance screens cover overlapping ground; Settlements is domain-backed and real, Payouts is stub-backed. A user cannot tell which is authoritative. |
-| 9 | **`FxSnapshot` defined but unused** | The data model anticipates rate locking; the money path never populates it. |
-| 10 | **Stub persistence** | 42 modules present full CRUD; state vanishes on reload while 23 domain-backed modules persist. Same UI, different behaviour. |
-| 11 | **Three roles unreachable** | `vendor`, `marketing` and `content_manager` are fully defined but have no seed account, so they cannot be demonstrated. |
+| 2 | **CMS publishes nothing** | The CMS has a real, tested draft → review → publish workflow. The public site reads static constants. Publishing changes a status and nothing else. |
+| 3 | **Settings are decorative** | The Settings screen implies control over platform economics; commission defaults, tax rate, service fee and cancellation share are constants in `PRICING_CONFIG` in code. |
+| 4 | **System tools have no system** | Cron, queues, cache and storage screens present realistic operational data. There are no cron jobs, no queues, no cache and no storage. Maintenance mode has a page that nothing enforces. |
+| 5 | **Notifications appear delivered** | The delivery report shows queued → sent → delivered. Nothing leaves the browser. |
+| 6 | **Language switcher over-promises** | Three languages offered; one dictionary exists, covering chrome only. Arabic flips direction but not language. |
+| 7 | **Payouts vs Settlements** | Two finance screens cover overlapping ground; Settlements is domain-backed and real, Payouts is stub-backed. A user cannot tell which is authoritative. |
+| 8 | **`FxSnapshot` defined but unused** | The data model anticipates rate locking; the money path never populates it. |
+| 9 | **Stub persistence** | 42 modules present full CRUD; state vanishes on reload while 23 domain-backed modules persist. Same UI, different behaviour. |
+| 10 | **Three roles unreachable** | `vendor`, `marketing` and `content_manager` are fully defined but have no seed account, so they cannot be demonstrated. |
 
 ---
 

@@ -14,6 +14,7 @@ import {
 import type { Listing } from "@/types/catalog";
 import { VERTICALS } from "@/constants/verticals";
 import { useLocale } from "@/features/i18n";
+import { baseCurrency } from "@/features/dashboard/domain/fx";
 import type { CheckoutQuote } from "@/features/booking";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,7 @@ export function OrderSummary({
   units,
   showNightly = true,
 }: OrderSummaryProps) {
-  const { money, date } = useLocale();
+  const { money, date, currency, fx } = useLocale();
   const vertical = VERTICALS[listing.vertical];
   const perNight = quote.nights > 0 && quote.stay.nights.length > 1;
 
@@ -133,6 +134,19 @@ export function OrderSummary({
             <span className="font-semibold text-ink">Total</span>
             <span className="font-bold text-accent-600">{money(quote.money.total)}</span>
           </div>
+
+          {/* What the traveller is charged in is not what the platform stores
+              in: show the rate being held so the number on the card statement
+              is never a surprise. */}
+          {currency.code !== baseCurrency() && (
+            <p className="pt-1 text-xs text-muted">
+              Charged in {currency.code} at 1 {baseCurrency()} = {fx.rate} {currency.code},
+              held for {Math.round(
+                (new Date(fx.expiresAt).getTime() - new Date(fx.quotedAt).getTime()) / 60_000,
+              )}{" "}
+              minutes from checkout.
+            </p>
+          )}
 
           {quote.pointsEarned > 0 && (
             <p className="pt-1 text-xs text-muted">

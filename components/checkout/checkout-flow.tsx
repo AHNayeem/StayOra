@@ -23,6 +23,7 @@ import { RecommendationRail } from "@/features/trip";
 import { useAuth } from "@/features/auth";
 import { useSavedTravelers } from "@/features/account/travelers-store";
 import { useLocale } from "@/features/i18n";
+import { lockFx } from "@/features/dashboard/domain/fx";
 import {
   DEMO_CUSTOMER,
   REDEEM_STEP,
@@ -112,7 +113,7 @@ export function CheckoutFlow({
   intent: CheckoutIntent;
 }) {
   const { user } = useAuth();
-  const { money, date } = useLocale();
+  const { money, date, currency } = useLocale();
   const savedTravelers = useSavedTravelers();
   const config = BOOKING_CONFIG[listing.vertical];
   const noun = unitNoun(listing.vertical);
@@ -330,11 +331,17 @@ export function CheckoutFlow({
 
   const finalize = async (paidWith: PaymentAttempt | null) => {
     try {
+      // Lock the rate the traveller was quoted at. Booking in the base currency
+      // returns `undefined` — there is nothing to hold — so the snapshot only
+      // exists where it means something.
+      const fx = lockFx(currency.code);
+
       const booking = await confirmBooking({
         selection,
         quote,
         hold,
         attempt: paidWith,
+        fx,
         customer: {
           id: user?.id,
           name: lead?.fullName || user?.name || "Guest",

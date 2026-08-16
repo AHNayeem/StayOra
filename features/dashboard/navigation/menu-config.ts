@@ -39,6 +39,14 @@ export const DASHBOARD_MENU: MenuNode[] = [
     badge: { countKey: "bookings.pending", variant: "accent" },
   },
   {
+    id: "supplier-confirmations",
+    label: "Confirmations",
+    icon: "ClipboardCheck",
+    href: "/dashboard/bookings/confirmations",
+    anyPermission: ["bookings:read"],
+    badge: { countKey: "bookings.awaitingSupplier", variant: "accent" },
+  },
+  {
     id: "catalog",
     label: "Catalog",
     icon: "Boxes",
@@ -60,6 +68,13 @@ export const DASHBOARD_MENU: MenuNode[] = [
         id: "catalog-revenue-management",
         label: "Revenue Management",
         href: "/dashboard/catalog/revenue-management",
+        featureFlag: "revenue-management",
+      },
+      {
+        id: "catalog-waitlist",
+        label: "Waitlist",
+        href: "/dashboard/catalog/waitlist",
+        badge: { countKey: "catalog.waitlist", variant: "accent" },
       },
       { id: "catalog-hotels", label: "Hotels", href: "/dashboard/catalog/hotels" },
       { id: "catalog-apartments", label: "Apartments", href: "/dashboard/catalog/apartments" },
@@ -137,6 +152,7 @@ export const DASHBOARD_MENU: MenuNode[] = [
         id: "merchant-advertising",
         label: "Advertising",
         href: "/dashboard/merchant/advertising",
+        featureFlag: "advertising",
       },
       {
         id: "merchant-subscription",
@@ -149,8 +165,11 @@ export const DASHBOARD_MENU: MenuNode[] = [
     id: "customers",
     label: "Customers",
     icon: "Users",
-    href: "/dashboard/customers",
     anyPermission: ["customers:read"],
+    children: [
+      { id: "customers-list", label: "All customers", href: "/dashboard/customers" },
+      { id: "customers-segments", label: "Segments", href: "/dashboard/customers/segments" },
+    ],
   },
 
   {
@@ -181,11 +200,23 @@ export const DASHBOARD_MENU: MenuNode[] = [
       { id: "finance-refunds", label: "Refunds", href: "/dashboard/finance/refunds" },
       { id: "finance-commission", label: "Commission", href: "/dashboard/finance/commission" },
       { id: "finance-commission-rules", label: "Commission Rules", href: "/dashboard/finance/commission/rules" },
+      {
+        id: "finance-commission-approvals",
+        label: "Rate approvals",
+        href: "/dashboard/finance/commission/approvals",
+        badge: { countKey: "finance.commissionApprovals", variant: "danger" },
+      },
       { id: "finance-insurance", label: "Insurance", href: "/dashboard/finance/insurance" },
       { id: "finance-settlements", label: "Settlements", href: "/dashboard/finance/settlements" },
       { id: "finance-tax", label: "Tax", href: "/dashboard/finance/tax" },
+      { id: "finance-periods", label: "Period close", href: "/dashboard/finance/periods" },
       { id: "finance-reconciliation", label: "Reconciliation", href: "/dashboard/finance/reconciliation" },
-      { id: "finance-disputes", label: "Disputes", href: "/dashboard/finance/disputes" },
+      {
+        id: "finance-disputes",
+        label: "Disputes",
+        href: "/dashboard/finance/disputes",
+        featureFlag: "disputes",
+      },
     ],
   },
   {
@@ -198,6 +229,13 @@ export const DASHBOARD_MENU: MenuNode[] = [
       { id: "promotions-combos", label: "Combo Offers", href: "/dashboard/promotions/combos" },
       { id: "promotions-coupons", label: "Coupons", href: "/dashboard/promotions" },
       { id: "promotions-banners", label: "Banners", href: "/dashboard/promotions/banners" },
+      { id: "promotions-campaigns", label: "Campaigns", href: "/dashboard/promotions/campaigns" },
+      {
+        id: "promotions-recovery",
+        label: "Abandoned checkouts",
+        href: "/dashboard/promotions/recovery",
+        badge: { countKey: "promotions.recovery", variant: "accent" },
+      },
     ],
   },
   {
@@ -206,6 +244,7 @@ export const DASHBOARD_MENU: MenuNode[] = [
     icon: "Crown",
     href: "/dashboard/membership",
     anyPermission: ["finance:read", "customers:read"],
+    featureFlag: "membership",
   },
   {
     id: "advertising",
@@ -213,12 +252,14 @@ export const DASHBOARD_MENU: MenuNode[] = [
     icon: "Megaphone",
     href: "/dashboard/advertising",
     anyPermission: ["promotions:read"],
+    featureFlag: "advertising",
   },
   {
     id: "b2b",
     label: "B2B",
     icon: "Building2",
     anyPermission: ["b2b:read"],
+    featureFlag: "b2b",
     children: [
       { id: "b2b-overview", label: "Overview", href: "/dashboard/b2b" },
       { id: "b2b-accounts", label: "Accounts", href: "/dashboard/b2b/accounts" },

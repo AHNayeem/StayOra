@@ -1,6 +1,7 @@
 "use client";
 
-import { Pause, Play, Zap } from "lucide-react";
+import { useState } from "react";
+import { History, Pause, Play, Zap } from "lucide-react";
 import { ResourceListView, RowActions } from "../../crud";
 import { Select, StatCard, StatCardSkeleton } from "../../ui";
 import { DropdownItem } from "../../ui/dropdown-menu";
@@ -10,7 +11,9 @@ import { formatNumber } from "../../lib/format";
 import { labelMap, statusOptions } from "../../lib/status";
 import { toast } from "@/lib/toast";
 import { useCronJobs, useCronSummary, useRunCronJob, useSetCronStatus } from "./hooks";
+import { RunHistoryDrawer } from "./run-history";
 import { CRON_STATUSES, type CronJob } from "./types";
+import { Alert } from "../../ui";
 
 const statusLabel = labelMap(CRON_STATUSES);
 
@@ -19,6 +22,7 @@ export function CronList() {
   const summary = useCronSummary();
   const run = useRunCronJob();
   const setStatus = useSetCronStatus();
+  const [history, setHistory] = useState<CronJob | null>(null);
 
   const list = useCronJobs((row) => {
     const paused = row.status === "paused";
@@ -33,7 +37,11 @@ export function CronList() {
                 onSelect={() =>
                   void run
                     .mutateAsync(row.id)
-                    .then(() => toast.success(`Ran “${row.name}”`))
+                    .then((updated) =>
+                      toast.success(`Ran “${row.name}”`, {
+                        description: updated.lastSummary,
+                      }),
+                    )
                 }
               >
                 Run now
@@ -47,6 +55,9 @@ export function CronList() {
                 }
               >
                 {paused ? "Resume" : "Pause"}
+              </DropdownItem>
+              <DropdownItem icon={<History />} onSelect={() => setHistory(row)}>
+                Run history
               </DropdownItem>
             </>
           }
@@ -62,7 +73,13 @@ export function CronList() {
 
   return (
     <>
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <Alert tone="info" title="Simulated scheduler">
+        These jobs are real: each one runs against the prototype dataset while the dashboard
+        is open, and “Run now” performs the work immediately. There is no server cron — a
+        deployment moves the same handlers behind one.
+      </Alert>
+
+      <div className="mb-6 mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {summary.isLoading || !summary.data ? (
           Array.from({ length: 4 }, (_, i) => <StatCardSkeleton key={i} />)
         ) : (
@@ -91,6 +108,8 @@ export function CronList() {
         }
         caption="Cron jobs"
       />
+
+      <RunHistoryDrawer job={history} onClose={() => setHistory(null)} />
     </>
   );
 }

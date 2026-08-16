@@ -2,12 +2,11 @@ import type { ColumnDef } from "../../crud";
 import { Avatar, StatusBadge, Tag } from "../../ui";
 import { formatDate } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
-import { ROLE_LIST } from "../../rbac/roles";
+import { getRole } from "../../rbac/roles";
 import { USER_STATUSES, type User } from "./types";
 
 const statusTone = toneMap(USER_STATUSES);
 const statusLabel = labelMap(USER_STATUSES);
-const roleLabel = Object.fromEntries(ROLE_LIST.map((r) => [r.id, r.label]));
 
 export const userColumns: ColumnDef<User>[] = [
   {
@@ -29,7 +28,9 @@ export const userColumns: ColumnDef<User>[] = [
     accessorKey: "roleId",
     header: "Role",
     meta: { label: "Role" },
-    cell: ({ row }) => <Tag>{roleLabel[row.original.roleId] ?? row.original.roleId}</Tag>,
+    // Read through the registry so a runtime-created role shows its own label
+    // rather than a raw id.
+    cell: ({ row }) => <Tag>{getRole(row.original.roleId).label}</Tag>,
   },
   {
     accessorKey: "status",

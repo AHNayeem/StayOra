@@ -70,6 +70,8 @@ export const airportService = createStubService<AdminAirport, AirportFormValues,
   getId: (row) => row.id,
   searchFields: ["name", "code", "city", "country"],
   idPrefix: "apt",
+  // "apt" is also the apartments module's prefix — keep the storage namespaces apart.
+  persistKey: "flights-airports",
   applyCreate: (input, id) => ({
     ...input,
     id,

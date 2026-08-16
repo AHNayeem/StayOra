@@ -2,7 +2,7 @@ import type { CurrentUser, MerchantStaffRoleId, Permission, RoleId } from "./typ
 import { expandPermissions, getRole } from "./roles";
 import { merchantRolePermissions } from "../domain/merchants";
 import { permissionMatches } from "./access";
-import { DEFAULT_ENABLED_FLAGS } from "../feature-flags/flags";
+import { resolveEnabledFlags } from "../feature-flags/flag-store";
 
 /** Identity fields a session supplies; the rest is derived from the role. */
 export interface PrincipalInput {
@@ -36,6 +36,26 @@ function intersectWithMerchantRole(
 }
 
 /**
+ * The concrete grants a principal holds: their role's permissions, narrowed by
+ * their merchant-side job when they have one.
+ *
+ * Split out of {@link resolveCurrentUser} because the client needs to redo this
+ * calculation whenever the role registry changes — editing a role's permissions
+ * must take effect without signing out (see `RbacProvider`).
+ */
+export function derivePermissions(
+  roleId: RoleId,
+  merchantRole?: MerchantStaffRoleId,
+): Permission[] {
+  const role = getRole(roleId);
+  const permissions = expandPermissions(role.permissions);
+  // An owner already holds everything the merchant role grants, so the
+  // intersection is a no-op there — skip it and keep the wildcard grants intact.
+  if (!merchantRole || merchantRole === "owner") return permissions;
+  return intersectWithMerchantRole(permissions, merchantRole);
+}
+
+/**
  * Build the RBAC principal from a session identity.
  *
  * Permissions are always derived from the role (never trusted from the client),
@@ -57,15 +77,10 @@ export function resolveCurrentUser(
       : input;
 
   const role = getRole(principal.roleId);
-  let permissions = expandPermissions(role.permissions);
 
   const isMerchantPrincipal = role.id === "merchant" || role.id === "vendor";
   const merchantRole = isMerchantPrincipal ? (principal.merchantRole ?? "owner") : undefined;
-  // An owner already holds everything the merchant role grants, so the
-  // intersection is a no-op there — skip it and keep the wildcard grants intact.
-  if (merchantRole && merchantRole !== "owner") {
-    permissions = intersectWithMerchantRole(permissions, merchantRole);
-  }
+  const permissions = derivePermissions(role.id, merchantRole);
 
   return {
     id: principal.id,
@@ -74,9 +89,9 @@ export function resolveCurrentUser(
     avatarUrl: principal.avatarUrl,
     roleId: role.id,
     permissions,
-    // Feature flags are fetched per tenant/user; seed from the shared default
-    // set so the flag provider and this principal never drift apart.
-    featureFlags: [...DEFAULT_ENABLED_FLAGS],
+    // Feature flags are resolved per tenant *and* role from the same store the
+    // flag provider reads, so the principal and the provider never drift apart.
+    featureFlags: resolveEnabledFlags(role.id),
     organizationId: principal.organizationId ?? "org_stayora",
     merchantId: principal.merchantId,
     merchantRole,

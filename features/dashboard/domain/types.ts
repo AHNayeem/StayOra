@@ -215,9 +215,19 @@ export interface BookingAddOn {
 export interface FxSnapshot {
   /** Currency the customer was quoted in. */
   currency: string;
-  /** Units of `currency` per 1 USD at the time of booking. */
+  /** Units of `currency` per 1 unit of base currency, spread included. */
   rate: number;
   capturedAt: string;
+  /** Currency the platform stores the amounts in (usually USD). */
+  baseCurrency?: string;
+  /** Interbank rate before the platform's margin. */
+  mid?: number;
+  /** Platform FX margin applied to `mid`, percent. */
+  spreadPercent?: number;
+  /** When the lock lapses — after this the checkout re-quotes. */
+  expiresAt?: string;
+  /** Which rate source produced it. `mock-fx` in the prototype. */
+  provider?: string;
 }
 
 /** How the customer is paying: in full now, or a deposit with a balance later. */
@@ -792,7 +802,10 @@ export type AuditAction =
   | "login"
   | "export"
   | "suspend"
-  | "activate";
+  | "activate"
+  /** A support/admin operator started viewing the platform as another user. */
+  | "impersonate"
+  | "impersonation_end";
 
 export interface AuditLogEntry {
   id: string;

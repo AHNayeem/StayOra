@@ -48,7 +48,7 @@ export function TopNav() {
 
       {/* Right cluster */}
       <div className="ml-auto flex items-center gap-1 sm:gap-1.5">
-        <TopSearch />
+        {hasFeature("command-palette") && <TopSearch />}
         <QuickActions />
 
         <span className="mx-1 hidden h-6 w-px bg-line lg:block" aria-hidden="true" />

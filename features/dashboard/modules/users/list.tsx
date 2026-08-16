@@ -1,27 +1,30 @@
 "use client";
 
 import { useState } from "react";
-import { Download, UserPlus } from "lucide-react";
+import { Download, UserCog, UserPlus } from "lucide-react";
 import { ConfirmDialog, ResourceListView, RowActions } from "../../crud";
 import { Button, Drawer, Select } from "../../ui";
+import { DropdownItem } from "../../ui/dropdown-menu";
 import { Can } from "../../rbac/permission-guard";
+import { ImpersonationDialog } from "../../auth/impersonation-dialog";
+import type { ImpersonationTarget } from "../../auth/impersonation";
 import type { ActiveFilter } from "../../ui/filter-bar";
 import { formatDate } from "../../lib/format";
 import { labelMap, statusOptions } from "../../lib/status";
 import { exportToCsv } from "../../lib/export-csv";
-import { ROLE_LIST } from "../../rbac/roles";
+import { getRole } from "../../rbac/roles";
 import { useUsers, useDeleteUser } from "./hooks";
 import { UserForm } from "./form";
 import { USER_STATUSES, type User } from "./types";
 
 const statusLabel = labelMap(USER_STATUSES);
-const roleLabel = Object.fromEntries(ROLE_LIST.map((r) => [r.id, r.label]));
 
 /** Users directory — invite, per-row edit and delete, filter and export. */
 export function UsersList() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [deleting, setDeleting] = useState<User | null>(null);
+  const [impersonating, setImpersonating] = useState<ImpersonationTarget | null>(null);
   const del = useDeleteUser();
 
   const list = useUsers((row) => (
@@ -31,6 +34,28 @@ export function UsersList() {
       onDelete={() => setDeleting(row)}
       editPermission={["users:update"]}
       deletePermission={["users:delete"]}
+      extra={
+        // Impersonation needs the permission *and* the feature flag: support
+        // teams get it, and a workspace can switch it off entirely.
+        <Can anyPermission={["users:impersonate"]} featureFlag="impersonation">
+          {row.status === "active" && (
+            <DropdownItem
+              icon={<UserCog />}
+              onSelect={() =>
+                setImpersonating({
+                  id: row.id,
+                  name: row.name,
+                  email: row.email,
+                  roleId: row.roleId,
+                  kind: "user",
+                })
+              }
+            >
+              Impersonate
+            </DropdownItem>
+          )}
+        </Can>
+      }
     />
   ));
 
@@ -54,7 +79,7 @@ export function UsersList() {
     exportToCsv<User>("users", list.rows, [
       { header: "Name", value: (r) => r.name },
       { header: "Email", value: (r) => r.email },
-      { header: "Role", value: (r) => roleLabel[r.roleId] ?? r.roleId },
+      { header: "Role", value: (r) => getRole(r.roleId).label },
       { header: "Status", value: (r) => statusLabel[r.status] },
       { header: "Last active", value: (r) => formatDate(r.lastActiveAt) },
       { header: "Created", value: (r) => formatDate(r.createdAt) },
@@ -132,6 +157,11 @@ export function UsersList() {
           </>
         }
         confirmLabel="Remove user"
+      />
+
+      <ImpersonationDialog
+        target={impersonating}
+        onClose={() => setImpersonating(null)}
       />
     </>
   );

@@ -16,3 +16,4 @@ export type { TransitionVars } from "./hooks";
 export { BookingsList } from "./list";
 export { BookingDetail } from "./detail";
 export { BookingCreateForm } from "./create-form";
+export { SupplierConfirmationsView } from "./supplier-view";

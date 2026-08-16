@@ -13,12 +13,10 @@ import {
   Select,
 } from "../../ui";
 import { statusOptions } from "../../lib/status";
-import { ROLE_LIST } from "../../rbac/roles";
+import { useRoles } from "../access/hooks";
 import { userSchema } from "./schemas";
 import { useCreateUser, useUpdateUser } from "./hooks";
 import { USER_STATUSES, type User } from "./types";
-
-const ROLE_OPTIONS = ROLE_LIST.map((r) => ({ value: r.id, label: r.label }));
 
 interface UserFormProps {
   /** Present ⇒ edit mode. */
@@ -31,6 +29,9 @@ interface UserFormProps {
 export function UserForm({ initial, onDone, onCancel }: UserFormProps) {
   const create = useCreateUser();
   const update = useUpdateUser();
+  // Live registry: custom roles are assignable the moment they're created.
+  const roles = useRoles();
+  const roleOptions = (roles.data ?? []).map((r) => ({ value: r.id, label: r.label }));
   const [submitError, setSubmitError] = useState<string | null>(null);
   const isEdit = Boolean(initial);
   const pending = create.isPending || update.isPending;
@@ -91,7 +92,9 @@ export function UserForm({ initial, onDone, onCancel }: UserFormProps) {
         <FormGrid cols={2}>
           <Select
             label="Role"
-            options={ROLE_OPTIONS}
+            options={roleOptions}
+            disabled={roles.isLoading}
+            hint={roles.isLoading ? "Loading roles…" : undefined}
             {...form.register("roleId")}
             error={form.formState.errors.roleId?.message}
           />

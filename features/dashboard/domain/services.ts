@@ -126,6 +126,11 @@ import {
   type Recommendation,
 } from "./revenue-management";
 import { messagingService } from "./messaging";
+import { resetRoleRegistry } from "../rbac/role-registry";
+import { resetAllFlags } from "../feature-flags/flag-store";
+import { clearAllModuleState } from "../crud/module-store";
+import { resetPlatformConfig } from "./platform-config";
+import { resetLocaleSettings } from "@/features/i18n/locale-settings";
 import { recordRefund as recordPaymentRefund } from "./payments";
 import { track } from "./telemetry";
 import {
@@ -3536,13 +3541,22 @@ export const platformService = {
   /** Reset the whole demo dataset (Settings action). */
   resetDemoData(actor: DomainActor = SYSTEM_ACTOR) {
     resetState();
+    // Roles, feature flags, module records, platform settings and localization
+    // all live in their own stores, so a reset that left a hand-edited access
+    // model, tax rate or translation behind wouldn't be a reset at all.
+    resetRoleRegistry();
+    resetAllFlags();
+    clearAllModuleState();
+    resetPlatformConfig();
+    resetLocaleSettings();
     recordAudit({
       actor,
       action: "update",
       entity: "system",
       entityId: "demo_data",
       entityLabel: "Demo dataset",
-      summary: "Reset all demo data to the seeded state",
+      summary:
+        "Reset all demo data, roles, feature flags, module records, platform settings and localization to the seeded state",
     });
   },
 

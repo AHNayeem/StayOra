@@ -10,13 +10,15 @@
 import { getDashboardMenu } from "../navigation/menu-config";
 import type { MenuNode } from "../navigation/types";
 import { getFeatureFlags, type FeatureFlagKey } from "../feature-flags/flags";
+import type { RoleId } from "../rbac/types";
 
 export const platformService = {
   /** Fetch the DB-driven navigation tree. */
   getMenu: (): Promise<MenuNode[]> => getDashboardMenu(),
-  /** Fetch enabled feature flags for the current user/tenant. */
-  getFeatureFlags: (seed?: FeatureFlagKey[]): Promise<FeatureFlagKey[]> =>
-    getFeatureFlags(seed),
+  /** Fetch enabled feature flags for a role (or from an explicit seed). */
+  getFeatureFlags: (
+    roleOrSeed?: RoleId | FeatureFlagKey[],
+  ): Promise<FeatureFlagKey[]> => getFeatureFlags(roleOrSeed),
 };
 
 /**

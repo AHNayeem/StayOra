@@ -56,6 +56,7 @@ import {
   priceBooking,
   quoteStay,
   releaseHold,
+  requestSupplierConfirmation,
   resolveCommission,
   track,
 } from "@/features/dashboard/domain";
@@ -87,6 +88,8 @@ export interface CheckoutSelection {
   promoCode?: string;
   pointsToRedeem?: number;
   customerEmail: string;
+  /** Lead traveller's name, when known — used by recovery nudges. */
+  customerName?: string;
   /** Demo insurance plan the traveller selected, if any. */
   insurancePlanId?: string;
 }
@@ -314,6 +317,15 @@ export function createHold(selection: CheckoutSelection, quote: CheckoutQuote): 
       units: selection.units,
       guests: selection.guests,
       lockedTotal: quote.money.total,
+      // Carried so an abandoned checkout can be recovered with a link back to
+      // exactly this room, rate and date range.
+      intent: {
+        customerEmail: selection.customerEmail,
+        customerName: selection.customerName,
+        listingSlug: selection.listing.slug,
+        listingTitle: selection.listing.title,
+        vertical: selection.listing.vertical,
+      },
     });
     track("checkout_started", {
       listing: selection.listing.slug,
@@ -465,10 +477,30 @@ export async function confirmBooking(input: ConfirmInput): Promise<Booking> {
 
   if (attempt) linkAttemptToBooking(attempt.id, booking.id);
 
+  // Ask the supplier. Instant-confirmation products answer immediately with a
+  // supplier reference; on-request ones (venue hire, visas, some tours) stay
+  // pending until the merchant answers or the `supplier:confirm` job decides.
+  const supplier = requestSupplierConfirmation(booking);
+
   // Enquiry-only products (visa, venue hire) stop at payment_pending: nothing
   // has been charged and the merchant confirms availability first.
   if (input.requestOnly) {
     track("booking_requested", { reference: booking.reference, vertical: listing.vertical });
+    if (!supplier.instant) {
+      messagingService.send({
+        templateKey: "supplier_pending",
+        to: { email: input.customer.email },
+        customerEmail: input.customer.email,
+        bookingId: booking.id,
+        bookingRef: booking.reference,
+        href: `/account/bookings/${booking.id}`,
+        context: {
+          name: input.customer.name.split(" ")[0],
+          product: listing.title,
+          reference: booking.reference,
+        },
+      });
+    }
     return booking;
   }
 

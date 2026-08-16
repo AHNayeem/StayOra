@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, SearchX } from "lucide-react";
 import type { BookingVertical } from "@/types/booking";
 import type { Listing } from "@/types/catalog";
-import { getPopularSearches } from "@/services/search";
+import { getPopularSearches, recoverSearch, type SearchRecovery } from "@/services/search";
 import { AskAiButton } from "@/features/ai";
 import { VERTICAL_LIST } from "@/constants/verticals";
 import { AutoListingCard } from "@/components/cards/auto-listing-card";
@@ -195,29 +195,73 @@ function Count({ children }: { children: React.ReactNode }) {
   return <span className="text-xs opacity-70">({children})</span>;
 }
 
+/**
+ * Zero-result recovery.
+ *
+ * An empty search page is where a traveller leaves. Instead of a dead end, the
+ * search service relaxes the query one constraint at a time and tells us which
+ * one it dropped — so this shows real, bookable listings *and* explains why
+ * they are the ones on screen.
+ */
 function EmptyState({ query }: { query: string }) {
   const popular = getPopularSearches();
+  // Keyed by query so a new search discards the previous recovery without an
+  // effect having to reset it.
+  const [state, setState] = useState<{ query: string; result: SearchRecovery | null }>({
+    query,
+    result: null,
+  });
+  const recovery = state.query === query ? state.result : null;
+  const loading = !recovery;
+
+  useEffect(() => {
+    let active = true;
+    void recoverSearch(query).then((result) => {
+      if (active) setState({ query, result });
+    });
+    return () => {
+      active = false;
+    };
+  }, [query]);
+
   return (
-    <div className="flex flex-col items-center gap-5 rounded-panel border border-dashed border-line py-20 text-center">
-      <SearchX className="size-12 text-muted" aria-hidden="true" />
-      <div>
-        <p className="text-h3">No results{query ? ` for “${query}”` : ""}</p>
-        <p className="mx-auto mt-2 max-w-md text-body">
-          We couldn&apos;t find anything matching that. Check your spelling or try one
-          of these popular searches.
-        </p>
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col items-center gap-5 rounded-panel border border-dashed border-line py-14 text-center">
+        <SearchX className="size-12 text-muted" aria-hidden="true" />
+        <div>
+          <p className="text-h3">No exact matches{query ? ` for “${query}”` : ""}</p>
+          <p className="mx-auto mt-2 max-w-md text-body">
+            {loading
+              ? "Looking for the closest alternatives…"
+              : (recovery?.reason ??
+                "We couldn't find anything matching that. Try one of these popular searches.")}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2">
+          {(recovery?.suggestions?.length ? recovery.suggestions : popular).map((p) => (
+            <Link
+              key={p}
+              href={`/search?q=${encodeURIComponent(p)}`}
+              className="rounded-pill border border-line bg-surface px-4 py-2 text-sm font-medium text-body transition-colors hover:border-primary hover:text-primary"
+            >
+              {p}
+            </Link>
+          ))}
+        </div>
       </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        {popular.map((p) => (
-          <Link
-            key={p}
-            href={`/search?q=${encodeURIComponent(p)}`}
-            className="rounded-pill border border-line bg-surface px-4 py-2 text-sm font-medium text-body transition-colors hover:border-primary hover:text-primary"
-          >
-            {p}
-          </Link>
-        ))}
-      </div>
+
+      {recovery && recovery.listings.length > 0 && (
+        <div>
+          <h2 className="text-h4 text-ink">You might like these</h2>
+          <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {recovery.listings.map((listing, index) => (
+              <Reveal key={listing.id} step={index % 3}>
+                <AutoListingCard listing={listing} />
+              </Reveal>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import {
   Alert,
@@ -22,6 +23,7 @@ import {
 import { Can } from "../../rbac/permission-guard";
 import { ConfirmDialog } from "../../crud";
 import { toast } from "@/lib/toast";
+import { getErrorMessage } from "../../data";
 import { formatCurrency, formatDate } from "../../lib/format";
 import {
   BASIS_LABELS,
@@ -38,13 +40,8 @@ import type { CommissionBasis, ProductKind } from "../../domain/types";
 import { MERCHANTS } from "../../domain/seed";
 import { RATE_PLAN_LIST } from "../../domain/inventory";
 import { PRODUCT_KIND_LABELS } from "../bookings/types";
-import {
-  useCommissionPreview,
-  useCommissionRules,
-  useCreateCommissionRule,
-  useDeleteCommissionRule,
-  useUpdateCommissionRule,
-} from "./rules-hooks";
+import { useCommissionPreview, useCommissionRules } from "./rules-hooks";
+import { useSubmitCommissionChange } from "./approvals-hooks";
 
 const STATUS_TONES = {
   active: "success",
@@ -97,13 +94,12 @@ const EMPTY_RULE: CommissionRuleInput = {
  */
 export function CommissionRulesList() {
   const rules = useCommissionRules();
-  const create = useCreateCommissionRule();
-  const update = useUpdateCommissionRule();
-  const remove = useDeleteCommissionRule();
+  const submit = useSubmitCommissionChange();
 
   const [editing, setEditing] = useState<CommissionRule | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<CommissionRule | null>(null);
+  const [reason, setReason] = useState("");
 
   const rows = useMemo(() => rules.data ?? [], [rules.data]);
   const counts = useMemo(
@@ -215,6 +211,15 @@ export function CommissionRulesList() {
         />
       </div>
 
+      <Alert tone="warning" title="Rate changes need approval">
+        Creating, editing or deleting a rule raises a change request. The rate book only
+        moves when someone with `finance:approve` approves it on the{" "}
+        <Link href="/dashboard/finance/commission/approvals" className="font-medium underline">
+          approvals queue
+        </Link>
+        .
+      </Alert>
+
       <Alert tone="info" title="How a rate is decided">
         The most specific rule wins: insurance plan → B2B account → rate plan → product →
         merchant → vertical. Ties break on the most recent effective date. If nothing
@@ -262,41 +267,78 @@ export function CommissionRulesList() {
         }}
         size="lg"
         title={editing ? `Edit ${editing.name}` : "New commission rule"}
-        description="Changing a commission rate is audited with its before and after value."
+        description="Submitting raises a change request; the rate only moves once it is approved."
       >
         <RuleForm
           initial={editing ?? EMPTY_RULE}
-          pending={create.status === "pending" || update.status === "pending"}
-          onSubmit={async (values) => {
-            if (editing) {
-              await update.mutateAsync({ id: editing.id, input: values });
-              toast.success("Commission rule updated");
-            } else {
-              await create.mutateAsync(values);
-              toast.success("Commission rule created");
+          pending={submit.status === "pending"}
+          submitLabel={editing ? "Request rate change" : "Request new rule"}
+          onSubmit={async (values, note) => {
+            try {
+              const request = await submit.mutateAsync({
+                type: editing ? "update" : "create",
+                ruleId: editing?.id,
+                proposed: values,
+                note,
+              });
+              toast.success(`${request.reference} submitted for approval`, {
+                description: request.summary,
+              });
+              setCreating(false);
+              setEditing(null);
+            } catch (error) {
+              toast.error("Couldn't submit the change", {
+                description: getErrorMessage(error),
+              });
             }
-            setCreating(false);
-            setEditing(null);
           }}
         />
       </Modal>
 
       <ConfirmDialog
         open={Boolean(deleting)}
-        onClose={() => setDeleting(null)}
-        title="Delete this commission rule?"
+        onClose={() => {
+          setDeleting(null);
+          setReason("");
+        }}
+        title="Request removal of this rule?"
         message={
-          deleting
-            ? `Bookings for ${deleting.targetLabel} will fall back to the next matching rule.`
-            : ""
+          deleting ? (
+            <span className="flex flex-col gap-3">
+              <span className="text-sm text-body">
+                Once approved, bookings for {deleting.targetLabel} fall back to the next
+                matching rule.
+              </span>
+              <Input
+                label="Why"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Reason the rule should go"
+              />
+            </span>
+          ) : (
+            ""
+          )
         }
-        confirmLabel="Delete rule"
+        confirmLabel="Submit request"
         tone="danger"
+        loading={submit.isPending}
         onConfirm={async () => {
           if (!deleting) return;
-          await remove.mutateAsync(deleting.id);
-          toast.success("Commission rule deleted");
-          setDeleting(null);
+          try {
+            const request = await submit.mutateAsync({
+              type: "delete",
+              ruleId: deleting.id,
+              note: reason,
+            });
+            toast.success(`${request.reference} submitted for approval`);
+            setDeleting(null);
+            setReason("");
+          } catch (error) {
+            toast.error("Couldn't submit the change", {
+              description: getErrorMessage(error),
+            });
+          }
         }}
       />
     </div>
@@ -451,17 +493,21 @@ function SimLine({
 function RuleForm({
   initial,
   pending,
+  submitLabel = "Save rule",
   onSubmit,
 }: {
   initial: CommissionRuleInput;
   pending: boolean;
-  onSubmit: (values: CommissionRuleInput) => void | Promise<void>;
+  submitLabel?: string;
+  /** `note` is the justification recorded on the change request. */
+  onSubmit: (values: CommissionRuleInput, note: string) => void | Promise<void>;
 }) {
   const [values, setValues] = useState<CommissionRuleInput>({
     ...initial,
     effectiveFrom: initial.effectiveFrom.slice(0, 10),
     effectiveTo: initial.effectiveTo?.slice(0, 10),
   });
+  const [justification, setJustification] = useState("");
 
   const set = <K extends keyof CommissionRuleInput>(key: K, value: CommissionRuleInput[K]) =>
     setValues((prev) => ({ ...prev, [key]: value }));
@@ -475,7 +521,8 @@ function RuleForm({
       onSubmit={(e) => {
         e.preventDefault();
         if (!valid) return;
-        void onSubmit({
+        void onSubmit(
+          {
           ...values,
           name: values.name.trim(),
           targetLabel:
@@ -485,7 +532,9 @@ function RuleForm({
           effectiveTo: values.effectiveTo
             ? new Date(`${values.effectiveTo}T23:59:59.999Z`).toISOString()
             : undefined,
-        });
+          },
+          justification,
+        );
       }}
     >
       <Input
@@ -611,9 +660,22 @@ function RuleForm({
         hint="A disabled rule never applies, whatever its dates say."
       />
 
+      <Input
+        label="Why this change"
+        required
+        value={justification}
+        onChange={(e) => setJustification(e.target.value)}
+        placeholder="The approver reads this before deciding"
+        hint="Recorded on the change request."
+      />
+
       <div className="flex justify-end gap-2">
-        <Button type="submit" disabled={!valid || pending} loading={pending}>
-          Save rule
+        <Button
+          type="submit"
+          disabled={!valid || pending || justification.trim().length < 4}
+          loading={pending}
+        >
+          {submitLabel}
         </Button>
       </div>
     </form>

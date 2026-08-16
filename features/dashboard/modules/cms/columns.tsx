@@ -1,5 +1,8 @@
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import type { ColumnDef } from "../../crud";
 import { StatusBadge } from "../../ui";
+import { publicHref } from "./published";
 import { formatDate, formatDateTime } from "../../lib/format";
 import { labelMap, toneMap } from "../../lib/status";
 import { CMS_STATUSES, type CmsPage } from "./types";
@@ -16,7 +19,20 @@ export const cmsColumns: ColumnDef<CmsPage>[] = [
     cell: ({ row }) => (
       <div className="min-w-0">
         <p className="truncate font-medium text-ink">{row.original.title}</p>
-        <p className="truncate font-mono text-xs text-muted">/{row.original.slug}</p>
+        {/* Where this page appears once published — publishing genuinely
+            changes what the public site renders (see `published.ts`). */}
+        {row.original.status === "published" ? (
+          <Link
+            href={publicHref(row.original.slug)}
+            target="_blank"
+            className="inline-flex items-center gap-1 truncate font-mono text-xs text-primary hover:underline"
+          >
+            {publicHref(row.original.slug)}
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </Link>
+        ) : (
+          <p className="truncate font-mono text-xs text-muted">/{row.original.slug}</p>
+        )}
       </div>
     ),
   },

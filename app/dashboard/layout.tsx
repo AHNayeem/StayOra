@@ -30,7 +30,9 @@ export default async function DashboardLayout({
   const session = await getServerSession();
   if (!session) redirect("/login?next=/dashboard");
 
-  const featureFlags = await getFeatureFlags(session.user.featureFlags);
+  // Flags are resolved per tenant *and* role — a flag can be on for the
+  // workspace and still not apply to the signed-in role.
+  const featureFlags = await getFeatureFlags(session.user.roleId);
 
   return (
     <DashboardShell session={session} featureFlags={featureFlags}>

@@ -52,9 +52,14 @@ const CHANNEL_ICON: Record<MessageChannel, typeof Mail> = {
  * Notification composer and delivery report.
  *
  * "Sending" renders a template against a real booking and appends to the same
- * outbox the customer's inbox reads, so a test send is visible end-to-end. No
- * provider is contacted — the delivery status is chosen here, which is how the
- * failure path gets demonstrated without breaking anything.
+ * outbox the customer's inbox reads, so a test send is visible end-to-end.
+ *
+ * Delivery is a lifecycle, not a claim: automatic messages enter the queue and
+ * the `delivery:progress` job walks them queued → sent → delivered (a
+ * configurable share bounces, deterministically per message, so failure
+ * handling is demonstrable). A failed message can be re-queued from the log.
+ * No provider is contacted at any point — every record carries `simulated`, and
+ * a hand-composed send lets you pick the outcome outright.
  */
 export function NotificationComposer() {
   const scope = useDomainScope();
@@ -78,6 +83,7 @@ export function NotificationComposer() {
   const booking = bookings.find((b) => b.id === bookingId) ?? bookings[0];
 
   const stats = useDomainValue(() => messagingService.stats(), []);
+  const queued = useDomainValue(() => messagingService.queuedCount(), []) ?? 0;
   const log = useDomainValue(
     () =>
       messagingService.log({
@@ -146,6 +152,7 @@ export function NotificationComposer() {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Messages sent" value={String(stats.total)} icon="Send" />
+        <StatCard label="In the queue" value={String(queued)} icon="Clock" />
         <StatCard label="Delivered" value={String(stats.delivered)} icon="CheckCheck" />
         <StatCard label="Failed" value={String(stats.failed)} icon="TriangleAlert" />
         <StatCard
@@ -202,6 +209,8 @@ export function NotificationComposer() {
                 value={outcome}
                 onChange={(event) => setOutcome(event.target.value as DeliveryStatus)}
                 options={[
+                  { value: "queued", label: "Queued" },
+                  { value: "sent", label: "Sent" },
                   { value: "delivered", label: "Delivered" },
                   { value: "sent", label: "Sent (no delivery receipt)" },
                   { value: "queued", label: "Queued" },
@@ -293,6 +302,8 @@ export function NotificationComposer() {
                 onChange={(event) => setStatusFilter(event.target.value as DeliveryStatus | "")}
                 options={[
                   { value: "", label: "All statuses" },
+                  { value: "queued", label: "Queued" },
+                  { value: "sent", label: "Sent" },
                   { value: "delivered", label: "Delivered" },
                   { value: "read", label: "Read" },
                   { value: "sent", label: "Sent" },
@@ -357,6 +368,22 @@ export function NotificationComposer() {
                             <span className={cn("mt-1 block text-[11px] text-danger")}>
                               {message.failureReason}
                             </span>
+                          )}
+                          {(message.status === "failed" || message.status === "bounced") && (
+                            <Can anyPermission={["notifications:update"]}>
+                              <button
+                                type="button"
+                                className="mt-1 text-[11px] text-primary hover:underline"
+                                onClick={() => {
+                                  messagingService.retryDelivery(message.id);
+                                  toast.success("Re-queued", {
+                                    description: "It will be re-sent on the next delivery run.",
+                                  });
+                                }}
+                              >
+                                Retry delivery
+                              </button>
+                            </Can>
                           )}
                         </td>
                       </tr>

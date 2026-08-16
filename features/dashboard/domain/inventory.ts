@@ -131,6 +131,20 @@ export interface InventoryHold {
   /** Price the hold locked in, so the total can't drift mid-checkout. */
   lockedTotal: number;
   currency: string;
+
+  /**
+   * Who was checking out, and what for.
+   *
+   * A hold is the record of an *intent to book*, so it carries just enough
+   * context for abandoned-checkout recovery to write the traveller a link back
+   * to the same room on the same dates (`domain/recovery.ts`). All optional:
+   * a hold taken by the dashboard or a test has no traveller attached.
+   */
+  customerEmail?: string;
+  customerName?: string;
+  listingSlug?: string;
+  listingTitle?: string;
+  vertical?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -944,7 +958,15 @@ export class InventoryError extends Error {
  * selling the same last room.
  */
 export function holdInventory(
-  request: AvailabilityRequest & { lockedTotal: number; nowMs?: number },
+  request: AvailabilityRequest & {
+    lockedTotal: number;
+    nowMs?: number;
+    /** Traveller + listing context, kept for abandoned-checkout recovery. */
+    intent?: Pick<
+      InventoryHold,
+      "customerEmail" | "customerName" | "listingSlug" | "listingTitle" | "vertical"
+    >;
+  },
 ): InventoryHold {
   const nowMs = request.nowMs ?? Date.now();
   sweepExpiredHolds(nowMs);
@@ -972,6 +994,7 @@ export function holdInventory(
     status: "held",
     lockedTotal: money(request.lockedTotal),
     currency: "USD",
+    ...request.intent,
   };
 
   consume(hold.roomTypeId, holdDates(hold), hold.units);

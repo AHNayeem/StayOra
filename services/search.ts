@@ -258,6 +258,132 @@ export function getSearchSuggestions(
   );
 }
 
+/**
+ * Zero-result recovery.
+ *
+ * "No results" is where a traveller leaves. Rather than a dead end with a list
+ * of unrelated popular searches, this relaxes the query one constraint at a
+ * time — the way a person would — and reports *which* constraint it dropped, so
+ * the UI can say why it is showing what it is showing:
+ *
+ *   1. drop the least specific word ("cheap beach villa bali" → "beach villa bali")
+ *   2. match on the destination alone
+ *   3. match anywhere in the same country
+ *   4. fall back to the strongest listings overall
+ *
+ * The reason is part of the contract: recovery that cannot explain itself just
+ * looks like a broken search.
+ */
+export type RecoveryStrategy = "fewer-words" | "destination" | "same-country" | "popular";
+
+export interface SearchRecovery {
+  strategy: RecoveryStrategy;
+  /** One line explaining what was relaxed, shown above the results. */
+  reason: string;
+  /** The query that actually produced these, when it differs from the original. */
+  usedQuery?: string;
+  listings: Listing[];
+  /** Alternative searches worth a click. */
+  suggestions: string[];
+}
+
+function rank(tokens: string[], vertical?: BookingVertical): Listing[] {
+  const scored: Array<{ listing: Listing; score: number }> = [];
+  for (const entry of INDEX) {
+    if (vertical && entry.listing.vertical !== vertical) continue;
+    const score = scoreEntry(entry, tokens);
+    if (score > 0) scored.push({ listing: entry.listing, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((s) => s.listing);
+}
+
+export function recoverSearch(
+  query: string,
+  options: SearchOptions = {},
+): Promise<SearchRecovery> {
+  const tokens = tokenize(query);
+  const limit = options.limit ?? 8;
+
+  // 1. Fewer words — the most common cause of zero results is over-specifying.
+  for (let drop = 1; drop < tokens.length; drop += 1) {
+    const kept = tokens.slice(0, tokens.length - drop);
+    const listings = rank(kept, options.vertical);
+    if (listings.length > 0) {
+      const usedQuery = kept.join(" ");
+      return mockDelay(
+        {
+          strategy: "fewer-words" as const,
+          reason: `Nothing matched every word, so we searched for “${usedQuery}”.`,
+          usedQuery,
+          listings: listings.slice(0, limit),
+          suggestions: kept.map((token) => token),
+        },
+        250,
+      );
+    }
+  }
+
+  // 2. A destination in the query, even if the rest of it matched nothing.
+  const destination = POPULAR_DESTINATIONS.find((d) =>
+    tokens.some((token) => d.toLowerCase().includes(token) || token.includes(d.toLowerCase())),
+  );
+  if (destination) {
+    const listings = rank(tokenize(destination), options.vertical);
+    if (listings.length > 0) {
+      return mockDelay(
+        {
+          strategy: "destination" as const,
+          reason: `No exact match, but here is everything we have in ${destination}.`,
+          usedQuery: destination,
+          listings: listings.slice(0, limit),
+          suggestions: [destination],
+        },
+        250,
+      );
+    }
+  }
+
+  // 3. Same country as anything the query half-matched.
+  const country = ALL_LISTINGS.find((listing) =>
+    tokens.some((token) => listing.location.country?.toLowerCase().includes(token)),
+  )?.location.country;
+  if (country) {
+    const listings = ALL_LISTINGS.filter(
+      (listing) =>
+        listing.location.country === country &&
+        (!options.vertical || listing.vertical === options.vertical),
+    );
+    if (listings.length > 0) {
+      return mockDelay(
+        {
+          strategy: "same-country" as const,
+          reason: `Nothing in that exact spot — these are elsewhere in ${country}.`,
+          usedQuery: country,
+          listings: listings.slice(0, limit),
+          suggestions: [country],
+        },
+        250,
+      );
+    }
+  }
+
+  // 4. Give them the best of what exists rather than an empty page.
+  const best = [...ALL_LISTINGS]
+    .filter((listing) => !options.vertical || listing.vertical === options.vertical)
+    .sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0))
+    .slice(0, limit);
+  return mockDelay(
+    {
+      strategy: "popular" as const,
+      reason: "We couldn't match that search — here is what travellers book most.",
+      listings: best,
+      suggestions: getPopularSearches(),
+    },
+    250,
+  );
+}
+
 /** Curated popular searches shown before the user types anything. */
 export function getPopularSearches(): string[] {
   return [

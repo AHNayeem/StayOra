@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { PageBanner } from "@/components/ui/page-banner";
 import { Section } from "@/components/ui/section";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { CmsContent } from "@/components/shared/cms-content";
 import { TERMS_INTRO, TERMS_SECTIONS, TERMS_UPDATED } from "@/constants/legal";
 
 export const metadata: Metadata = {
@@ -35,7 +36,9 @@ export default function TermsPage() {
 
       <Section>
         <div className="mx-auto max-w-3xl">
-          <p className="text-body">{TERMS_INTRO}</p>
+          {/* Published CMS copy for the "terms" page wins over the shipped
+              intro — the same record an editor approves in the dashboard. */}
+          <CmsContent slug="terms" fallback={<p className="text-body">{TERMS_INTRO}</p>} />
 
           {/* Contents */}
           <nav

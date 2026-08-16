@@ -17,6 +17,10 @@ export interface CronJob {
   nextRun: string;
   lastDurationMs: number;
   lastResult: CronResult;
+  /** What the last run actually changed, e.g. "6 sent, 4 delivered". */
+  lastSummary?: string;
+  /** Due to run on the next scheduler tick. */
+  due?: boolean;
 }
 
 export interface CronSummary {
@@ -24,6 +28,8 @@ export interface CronSummary {
   active: number;
   paused: number;
   failed: number;
+  /** Jobs whose next run time has already passed. */
+  due: number;
 }
 
 export const CRON_STATUSES: readonly StatusDef<CronStatus>[] = [

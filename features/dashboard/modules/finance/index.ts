@@ -4,3 +4,4 @@ export { paymentsService, paymentKeys } from "./service";
 export { paymentColumns } from "./columns";
 export { usePayments } from "./hooks";
 export { PaymentsList } from "./list";
+export { PeriodsView } from "./periods-view";

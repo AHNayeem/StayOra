@@ -1,7 +1,20 @@
 "use client";
 
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useMemo,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { FeatureFlagKey } from "./flags";
+import {
+  getFlagsRevision,
+  getServerFlagsRevision,
+  resolveEnabledFlags,
+  subscribeFlags,
+} from "./flag-store";
+import { useRbac } from "../rbac/rbac-provider";
 
 interface FeatureFlagsValue {
   isEnabled: (flag: FeatureFlagKey) => boolean;
@@ -15,6 +28,11 @@ const FeatureFlagsContext = createContext<FeatureFlagsValue | null>(null);
  * Publishes the set of enabled feature flags to the dashboard subtree. Seeded on
  * the server from the resolved session and injected once by the shell, so every
  * flag check reads from a single source.
+ *
+ * Flags can be toggled at runtime from Settings, so the provider also subscribes
+ * to the flag store and re-resolves for the current role — a switch flipped there
+ * removes the module from the sidebar and blocks its route immediately, rather
+ * than after a sign-out.
  */
 export function FeatureFlagsProvider({
   flags,
@@ -23,13 +41,22 @@ export function FeatureFlagsProvider({
   flags: FeatureFlagKey[];
   children: ReactNode;
 }) {
+  const { user } = useRbac();
+  const revision = useSyncExternalStore(
+    subscribeFlags,
+    getFlagsRevision,
+    getServerFlagsRevision,
+  );
+
   const value = useMemo<FeatureFlagsValue>(() => {
-    const set = new Set(flags);
+    // Revision 0 is the server's view — use exactly what it rendered with.
+    const enabled = revision === 0 ? flags : resolveEnabledFlags(user.roleId);
+    const set = new Set(enabled);
     return {
       isEnabled: (flag) => set.has(flag),
-      enabled: flags,
+      enabled,
     };
-  }, [flags]);
+  }, [flags, revision, user.roleId]);
 
   return (
     <FeatureFlagsContext.Provider value={value}>

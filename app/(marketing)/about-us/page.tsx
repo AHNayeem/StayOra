@@ -11,6 +11,7 @@ import { FeaturedListings } from "@/components/sections/featured-listings";
 import { LatestBlog } from "@/components/sections/latest-blog";
 import { StatsSection } from "@/components/sections/stats-section";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { CmsContent } from "@/components/shared/cms-content";
 import { ABOUT_HERO, ABOUT_MISSION, ABOUT_STORY, ABOUT_VALUES } from "@/constants/about";
 
 export const metadata: Metadata = {
@@ -82,11 +83,17 @@ export default async function AboutPage() {
             <div>
               <p className="text-overline">{ABOUT_STORY.eyebrow}</p>
               <h2 className="text-h2 mt-3">{ABOUT_STORY.title}</h2>
-              {ABOUT_STORY.paragraphs.map((paragraph) => (
-                <p key={paragraph} className="mt-4 text-body">
-                  {paragraph}
-                </p>
-              ))}
+              {/* Editors own this copy: the "about" page in the CMS replaces it
+                  once published, and the shipped wording stands in until then. */}
+              <CmsContent
+                slug="about"
+                className="mt-4"
+                fallback={ABOUT_STORY.paragraphs.map((paragraph) => (
+                  <p key={paragraph} className="mt-4 text-body">
+                    {paragraph}
+                  </p>
+                ))}
+              />
             </div>
           </Reveal>
         </div>

@@ -9,6 +9,15 @@ export {
 } from "./hooks";
 export { CommissionList } from "./list";
 export { CommissionRulesList } from "./rules-list";
+export { CommissionApprovalsList } from "./approvals-list";
+export {
+  commissionApprovalKeys,
+  useCommissionChangeRequests,
+  useSubmitCommissionChange,
+  useApproveCommissionChange,
+  useRejectCommissionChange,
+  useCancelCommissionChange,
+} from "./approvals-hooks";
 export { CommissionLifecycle } from "./lifecycle-panel";
 export {
   commissionRuleKeys,

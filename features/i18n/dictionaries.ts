@@ -8,7 +8,18 @@
  * language (and any missing key) passes the English source straight through.
  * Coverage is the core site chrome — primary nav, header actions, the hero
  * search widget, section headings and the footer.
+ *
+ * Resolution order for every lookup ({@link translate}):
+ *
+ *   1. an operator's edit in Localization → Translations  (`locale-settings`)
+ *   2. the shipped dictionary for that language           (this file)
+ *   3. the English source string
+ *
+ * Shipped dictionaries are Bangla and Arabic. Arabic also drives RTL, so it is
+ * the language to switch to when checking direction-sensitive layout.
  */
+
+import { localeSettings } from "./locale-settings";
 
 export type Dictionary = Record<string, string>;
 
@@ -145,9 +156,177 @@ const bn: Dictionary = {
   "Get the best travel deals in your inbox": "সেরা ভ্রমণ অফার আপনার ইনবক্সে পান",
 };
 
+/** Arabic (العربية) — the RTL reference translation. */
+const ar: Dictionary = {
+  // — Primary navigation —
+  Home: "الرئيسية",
+  Tours: "الجولات",
+  Destinations: "الوجهات",
+  "About Us": "من نحن",
+  Pages: "الصفحات",
+  Blog: "المدونة",
+  "Contact Us": "اتصل بنا",
+  Contact: "اتصل",
+
+  // — Mega-menu / footer column headings —
+  Stays: "أماكن الإقامة",
+  "Book & Go": "احجز وانطلق",
+  Company: "الشركة",
+  Explore: "استكشف",
+  "Get in touch": "تواصل معنا",
+
+  // — Verticals —
+  Hotels: "الفنادق",
+  Apartments: "الشقق",
+  Resorts: "المنتجعات",
+  "Shared Rooms": "الغرف المشتركة",
+  "Convention Halls": "قاعات المؤتمرات",
+  Transport: "المواصلات",
+  Activities: "الأنشطة",
+  "All Visa": "جميع التأشيرات",
+
+  // — Company links —
+  FAQs: "الأسئلة الشائعة",
+  "Terms & Conditions": "الشروط والأحكام",
+
+  // — Header actions —
+  "Sign In": "تسجيل الدخول",
+  "Sign Up": "إنشاء حساب",
+  "Open menu": "فتح القائمة",
+  Search: "بحث",
+
+  // — Hero search: field labels —
+  Where: "أين",
+  "Check in": "تاريخ الوصول",
+  "Check out": "تاريخ المغادرة",
+  Guests: "الضيوف",
+  Beds: "الأسرّة",
+  "Event date": "تاريخ الفعالية",
+  "End date": "تاريخ الانتهاء",
+  Attendees: "الحضور",
+  "From / To": "من / إلى",
+  Departure: "المغادرة",
+  Return: "العودة",
+  Passengers: "الركاب",
+  Destination: "الوجهة",
+  From: "من",
+  To: "إلى",
+  Date: "التاريخ",
+  Travellers: "المسافرون",
+  "Destination country": "بلد الوجهة",
+  Applicants: "مقدمو الطلبات",
+
+  // — Hero search: placeholders & prompts —
+  "Search destinations": "ابحث عن وجهة",
+  "City, area or apartment": "المدينة أو المنطقة أو الشقة",
+  "City or venue": "المدينة أو المكان",
+  "Pickup or route": "مكان الانطلاق أو المسار",
+  "Where to?": "إلى أين؟",
+  "City or activity": "المدينة أو النشاط",
+  "Where are you travelling?": "إلى أين تسافر؟",
+  "Add dates": "أضف التواريخ",
+  "Add date": "أضف التاريخ",
+  "Add guests": "أضف الضيوف",
+  night: "ليلة",
+  nights: "ليالٍ",
+
+  // — Footer —
+  "Subscribe to our newsletter": "اشترك في نشرتنا البريدية",
+  "Your email": "بريدك الإلكتروني",
+  Subscribe: "اشترك",
+  "All rights reserved.": "جميع الحقوق محفوظة.",
+
+  // — Homepage section eyebrows & titles —
+  "Top destinations": "أفضل الوجهات",
+  "Explore popular places to stay": "استكشف أماكن الإقامة الأكثر شهرة",
+  "Popular tours": "الجولات الشائعة",
+  "Trips worth taking": "رحلات تستحق التجربة",
+  "Popular hotels": "الفنادق الشائعة",
+  "Stays our guests rate highest": "أماكن الإقامة الأعلى تقييمًا من ضيوفنا",
+  "Things to do": "أشياء يمكن فعلها",
+  "Experiences to remember": "تجارب لا تُنسى",
+  "Getting around": "التنقل",
+  "Transport for every route": "مواصلات لكل مسار",
+  "Why book with us": "لماذا تحجز معنا",
+  "Travel with total confidence": "سافر بثقة تامة",
+  "Phenomenal deals": "عروض استثنائية",
+  "Limited-time offers": "عروض لفترة محدودة",
+  "From the blog": "من المدونة",
+  "Travel inspiration & tips": "إلهام ونصائح للسفر",
+  "Loved by travellers": "محبوب من المسافرين",
+  "What our guests say": "ماذا يقول ضيوفنا",
+  "Travel documents": "وثائق السفر",
+  "Visa services made simple": "خدمات التأشيرات ببساطة",
+  "Fun facts": "حقائق ممتعة",
+  "Trusted by travellers worldwide": "موثوق من المسافرين حول العالم",
+  "Featured resorts": "منتجعات مختارة",
+  "Escapes worth every mile": "وجهات تستحق كل ميل",
+  "Featured apartments": "شقق مختارة",
+  "Feel at home, anywhere": "اشعر وكأنك في بيتك أينما كنت",
+  "Where to next": "إلى أين بعد ذلك",
+  "Trending destinations": "وجهات رائجة",
+  "Go global": "انطلق عالميًا",
+  "Browse by country": "تصفح حسب الدولة",
+  "All-in-one trips": "رحلات متكاملة",
+  "Trending packages": "باقات رائجة",
+  "Ends soon": "ينتهي قريبًا",
+  "Flash deals": "عروض خاطفة",
+  "Find your vibe": "اعثر على ما يناسبك",
+  "Travel inspiration": "إلهام السفر",
+  "Recognised worldwide": "معترف بها عالميًا",
+  "Award-winning service": "خدمة حائزة على جوائز",
+  "Good to know": "معلومات مفيدة",
+  "Frequently asked questions": "الأسئلة الشائعة",
+  "Trusted by leading travel brands worldwide": "موثوق من كبرى علامات السفر حول العالم",
+  "Your next trip starts here": "رحلتك القادمة تبدأ من هنا",
+  "Ready to plan your next journey?": "هل أنت مستعد لتخطيط رحلتك القادمة؟",
+  "About Otithee": "عن أوتيثي",
+  "One platform for every kind of stay and journey":
+    "منصة واحدة لكل أنواع الإقامة والسفر",
+  "Members save more": "الأعضاء يوفرون أكثر",
+  "Get 10% off your first booking": "احصل على خصم 10% على أول حجز",
+  "Stay in the loop": "ابقَ على اطلاع",
+  "Get the best travel deals in your inbox": "أفضل عروض السفر في بريدك",
+};
+
 /**
- * Per-language dictionaries. A language absent here (e.g. "fr") simply renders
- * the English source for every key — the switcher still works, copy stays
- * English until a dictionary is added.
+ * Per-language dictionaries. A language absent here (e.g. "fr") renders the
+ * English source for every key until translations are added — which an operator
+ * can now do from Localization → Translations without a deploy.
  */
-export const DICTIONARIES: Record<string, Dictionary> = { bn };
+export const DICTIONARIES: Record<string, Dictionary> = { bn, ar };
+
+/**
+ * Every source string the site can translate — the working set the dashboard
+ * translation editor lists. Derived from the shipped dictionaries so adding a
+ * key to one language automatically offers it in every other.
+ */
+export function translationKeys(): string[] {
+  const keys = new Set<string>();
+  for (const dictionary of Object.values(DICTIONARIES)) {
+    for (const key of Object.keys(dictionary)) keys.add(key);
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Resolve one string: operator override → shipped dictionary → English source.
+ */
+export function translate(language: string, source: string): string {
+  if (language === "en") return source;
+  const override = localeSettings().overrides[language]?.[source];
+  if (override) return override;
+  return DICTIONARIES[language]?.[source] ?? source;
+}
+
+/** Share of the working set a language has copy for, 0–1. */
+export function translationCoverage(language: string): number {
+  if (language === "en") return 1;
+  const keys = translationKeys();
+  if (keys.length === 0) return 0;
+  const covered = keys.filter((key) => {
+    const override = localeSettings().overrides[language]?.[key];
+    return Boolean(override ?? DICTIONARIES[language]?.[key]);
+  }).length;
+  return covered / keys.length;
+}

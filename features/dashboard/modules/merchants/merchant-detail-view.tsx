@@ -59,6 +59,9 @@ import {
   useSetCommission,
   useSetMerchantStatus,
 } from "./hooks";
+import { ImpersonationDialog } from "../../auth/impersonation-dialog";
+import type { ImpersonationTarget } from "../../auth/impersonation";
+import { merchantImpersonationTarget } from "./impersonate";
 import { OnboardingChecklist } from "./onboarding-progress";
 import { ReasonDialog } from "./review-dialogs";
 import { BANK_STATUSES, DOCUMENT_STATUSES, KYC_STATUSES, MERCHANT_STATUSES } from "./types";
@@ -102,6 +105,7 @@ function MerchantDetailBody({ merchant }: { merchant: Merchant }) {
   const performance = useMerchantPerformance(merchant.id);
   const [overriding, setOverriding] = useState(false);
   const [reasonFor, setReasonFor] = useState<MerchantStatus | null>(null);
+  const [impersonating, setImpersonating] = useState<ImpersonationTarget | null>(null);
 
   const move = async (status: MerchantStatus, note?: string) => {
     try {
@@ -250,16 +254,12 @@ function MerchantDetailBody({ merchant }: { merchant: Merchant }) {
               Commission
             </Button>
           </Can>
-          <Can anyPermission={["merchants:impersonate"]}>
+          <Can anyPermission={["merchants:impersonate"]} featureFlag="impersonation">
             <Button
               size="sm"
               variant="ghost"
               leftIcon={<UserCog className="size-4" />}
-              onClick={() =>
-                toast.info("Impersonation session started", {
-                  description: `You're now viewing the platform as ${merchant.name} (demo).`,
-                })
-              }
+              onClick={() => setImpersonating(merchantImpersonationTarget(merchant))}
             >
               Impersonate
             </Button>
@@ -330,6 +330,11 @@ function MerchantDetailBody({ merchant }: { merchant: Merchant }) {
         loading={setStatus.isPending}
         onClose={() => setReasonFor(null)}
         onConfirm={(note) => move(reasonFor!, note)}
+      />
+
+      <ImpersonationDialog
+        target={impersonating}
+        onClose={() => setImpersonating(null)}
       />
     </div>
   );

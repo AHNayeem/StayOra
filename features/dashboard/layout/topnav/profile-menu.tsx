@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { DEMO_B2B_ACCOUNT_ID, DEMO_MERCHANT_ID } from "../../domain/seed";
 import { useSession } from "../../auth/session-provider";
 import { useRbac } from "../../rbac/rbac-provider";
+import { useFeatureFlag } from "../../feature-flags/feature-flags-provider";
 import { getRole } from "../../rbac/roles";
 import type { RoleId } from "../../rbac/types";
 import { MenuPopover } from "./menu-popover";
@@ -18,8 +19,10 @@ const LINKS = [
 
 /**
  * Roles offered by the prototype's "view as" switcher, with the scope each one
- * needs. This is demo tooling — a real build would gate it behind
- * `users:impersonate` and exchange a token server-side.
+ * needs. Demo tooling for *previewing a role*, distinct from impersonating a
+ * *person* (Users → Impersonate), which carries an identity, a reason and an
+ * audit trail. It is now gated behind `users:impersonate` like the real thing,
+ * so a merchant can no longer promote themselves from the account menu.
  */
 const VIEW_AS: { role: RoleId; label: string; merchantId?: string; organizationId?: string }[] = [
   { role: "super_admin", label: "Super Admin" },
@@ -32,9 +35,13 @@ const VIEW_AS: { role: RoleId; label: string; merchantId?: string; organizationI
 
 /** Account menu — identity summary, profile links, role switcher and sign out. */
 export function ProfileMenu() {
-  const { user } = useRbac();
-  const { signOut, viewAsRole } = useSession();
+  const { user, can } = useRbac();
+  const { signOut, viewAsRole, impersonator } = useSession();
+  const hasImpersonation = useFeatureFlag("impersonation");
   const role = getRole(user.roleId);
+  // Never offer a role switch mid-impersonation: the exit path is the banner,
+  // and stacking the two would make "who am I really" unanswerable.
+  const showViewAs = can("users:impersonate") && hasImpersonation && !impersonator;
 
   return (
     <MenuPopover
@@ -75,6 +82,7 @@ export function ProfileMenu() {
         ))}
       </div>
 
+      {showViewAs && (
       <div className="border-t border-line py-1">
         <p className="flex items-center gap-2 px-3 py-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted">
           <UserCog className="size-3.5" aria-hidden="true" />
@@ -104,6 +112,7 @@ export function ProfileMenu() {
           ))}
         </div>
       </div>
+      )}
 
       <div className="border-t border-line pt-1">
         <button

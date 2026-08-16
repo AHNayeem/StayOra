@@ -15,6 +15,8 @@ import {
   useUpdateLanguage,
 } from "./hooks";
 import { CurrencyForm, LanguageForm } from "./forms";
+import { TranslationsPanel } from "./translations-panel";
+import { Alert } from "../../ui";
 import type { Currency, Language } from "./types";
 
 function LanguagesPanel() {
@@ -197,14 +199,29 @@ function CurrenciesPanel() {
   );
 }
 
-/** Localization — languages and currencies reference tables under tabs. */
+/**
+ * Localization — what the storefront actually offers.
+ *
+ * Languages and currencies here are the ones the public switcher shows;
+ * coverage is measured from the dictionaries, and the Translations tab edits
+ * the copy the site renders. Nothing on this screen is a claim the product
+ * cannot back up.
+ */
 export function Localization() {
   return (
-    <Tabs
-      items={[
-        { key: "languages", label: "Languages", content: <LanguagesPanel /> },
-        { key: "currencies", label: "Currencies", content: <CurrenciesPanel /> },
-      ]}
-    />
+    <>
+      <Alert tone="info" title="This drives the public site" className="mb-5">
+        Enabling a language adds it to the storefront switcher; coverage is counted from
+        the strings that actually have translations. Currency rates come from the FX engine
+        — change the spread in Settings → FX.
+      </Alert>
+      <Tabs
+        items={[
+          { key: "languages", label: "Languages", content: <LanguagesPanel /> },
+          { key: "currencies", label: "Currencies", content: <CurrenciesPanel /> },
+          { key: "translations", label: "Translations", content: <TranslationsPanel /> },
+        ]}
+      />
+    </>
   );
 }

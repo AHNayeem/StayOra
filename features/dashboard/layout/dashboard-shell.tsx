@@ -2,12 +2,17 @@
 
 import { type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { ImpersonationBanner } from "../auth/impersonation-banner";
 import { SessionProvider } from "../auth/session-provider";
 import type { Session } from "../auth/types";
 import { CommandPalette } from "../command-palette/command-palette";
 import { QueryProvider } from "../data/query";
-import { FeatureFlagsProvider } from "../feature-flags/feature-flags-provider";
+import {
+  FeatureFlagsProvider,
+  useFeatureFlag,
+} from "../feature-flags/feature-flags-provider";
 import type { FeatureFlagKey } from "../feature-flags/flags";
+import { useSchedulerTick } from "../domain/use-scheduler-tick";
 import { RbacProvider } from "../rbac/rbac-provider";
 import { RouteGuard } from "../rbac/route-guard";
 import { ThemeProvider, useTheme } from "../theme/theme-provider";
@@ -25,6 +30,12 @@ import { TopNav } from "./topnav/top-nav";
 function ShellFrame({ children }: { children: ReactNode }) {
   const { resolved } = useTheme();
   const { collapsed, commandOpen } = useShell();
+  // Scheduled jobs run while an operator has the dashboard open — message
+  // delivery, hold expiry, recovery nudges. See `domain/scheduler.ts`.
+  useSchedulerTick();
+  // The palette is flag-gated: switching it off has to remove the surface, not
+  // just its launcher, or ⌘K would still open it.
+  const paletteEnabled = useFeatureFlag("command-palette");
 
   return (
     <div
@@ -41,6 +52,10 @@ function ShellFrame({ children }: { children: ReactNode }) {
       >
         Skip to content
       </a>
+
+      {/* Above the rail and the top nav: an impersonated session must announce
+          itself before anything else on the page does. */}
+      <ImpersonationBanner />
 
       <div className="flex min-h-screen">
         {/* Desktop rail */}
@@ -72,7 +87,7 @@ function ShellFrame({ children }: { children: ReactNode }) {
         </div>
       </div>
 
-      {commandOpen && <CommandPalette />}
+      {commandOpen && paletteEnabled && <CommandPalette />}
     </div>
   );
 }

@@ -1,190 +1,16 @@
 import type { Permission, Role, RoleId } from "./types";
-import { PERMISSION_WILDCARD, RESOURCES } from "./permissions";
-
-/** All read permissions across every resource — a common building block. */
-const READ_ALL: Permission[] = RESOURCES.map((r) => `${r}:read`);
+import { PERMISSION_WILDCARD } from "./permissions";
+import { BUILT_IN_ROLES, readAllPermissions } from "./role-catalogue";
+import { getRoleRecord, listRoleRecords } from "./role-registry";
 
 /**
- * Role → permission seed.
+ * The shipped role → permission seed.
  *
- * Placeholder for the Phase 3 API. Wildcards (`resource:*`, `*:*`) are expanded
- * at login by {@link expandPermissions}, so guards only ever compare concrete
- * strings. Real deployments will replace this map with a fetched payload.
+ * Kept as the immutable floor beneath the runtime registry: an admin may
+ * override a role's grants at runtime (see `role-registry.ts`), and these
+ * definitions are what "reset to default" restores.
  */
-export const ROLES: Record<RoleId, Role> = {
-  super_admin: {
-    id: "super_admin",
-    label: "Super Admin",
-    description: "Unrestricted access to every module and action.",
-    permissions: [PERMISSION_WILDCARD],
-  },
-  admin: {
-    id: "admin",
-    label: "Admin",
-    description: "Manages the platform except destructive system operations.",
-    permissions: [
-      "dashboard:*",
-      "analytics:*",
-      "bookings:*",
-      "merchants:*",
-      "catalog:*",
-      "flights:*",
-      "customers:*",
-      "finance:*",
-      "b2b:*",
-      "promotions:*",
-      "reviews:*",
-      "cms:*",
-      "localization:*",
-      "reports:*",
-      "notifications:*",
-      "users:*",
-      "roles:read",
-      "permissions:read",
-      "settings:*",
-      "support:*",
-      "logs:read",
-      "profile:*",
-    ],
-  },
-  staff: {
-    id: "staff",
-    label: "Staff",
-    description: "Day-to-day operations across bookings and customers.",
-    permissions: [
-      "dashboard:read",
-      "bookings:read",
-      "bookings:update",
-      "flights:read",
-      "customers:read",
-      "reviews:read",
-      "notifications:read",
-      "profile:*",
-    ],
-  },
-  merchant: {
-    id: "merchant",
-    label: "Merchant",
-    description: "Scoped to their own organization's catalog and bookings.",
-    /**
-     * Merchants own their inventory, pricing, promotions and booking operations,
-     * and can *see* their money — but refund decisions, commission rules and
-     * settlement runs stay with the platform, so no `finance:update`,
-     * `finance:approve`, `merchants:*` or `settings:*` here.
-     */
-    permissions: [
-      "dashboard:read",
-      "analytics:read",
-      "bookings:read",
-      "bookings:update",
-      "catalog:*",
-      "finance:read",
-      "finance:export",
-      "promotions:read",
-      "promotions:create",
-      "promotions:update",
-      "promotions:delete",
-      "reviews:read",
-      "reviews:update",
-      "customers:read",
-      "reports:read",
-      "reports:export",
-      "support:read",
-      "support:create",
-      "notifications:read",
-      "profile:*",
-    ],
-  },
-  agency: {
-    id: "agency",
-    label: "Agency / Corporate",
-    description:
-      "B2B partner: books platform inventory at net rates against a credit account.",
-    permissions: [
-      "dashboard:read",
-      "b2b:read",
-      "b2b:create",
-      "bookings:read",
-      "bookings:create",
-      "bookings:update",
-      "finance:read",
-      "reports:read",
-      "notifications:read",
-      "support:read",
-      "support:create",
-      "profile:*",
-    ],
-  },
-  vendor: {
-    id: "vendor",
-    label: "Vendor",
-    description: "Supplies inventory; limited catalog and booking visibility.",
-    permissions: [
-      "dashboard:read",
-      "catalog:read",
-      "catalog:update",
-      "bookings:read",
-      "profile:*",
-    ],
-  },
-  support: {
-    id: "support",
-    label: "Customer Support",
-    description: "Handles tickets, bookings and customer records.",
-    permissions: [
-      "dashboard:read",
-      "bookings:read",
-      "bookings:update",
-      "flights:read",
-      "customers:read",
-      "support:*",
-      "reviews:read",
-      "notifications:read",
-      "profile:*",
-    ],
-  },
-  finance: {
-    id: "finance",
-    label: "Finance",
-    description: "Owns payments, payouts, invoices and reconciliation.",
-    permissions: [
-      "dashboard:read",
-      "finance:*",
-      "reports:read",
-      "reports:export",
-      "bookings:read",
-      "merchants:read",
-      "b2b:read",
-      "profile:*",
-    ],
-  },
-  marketing: {
-    id: "marketing",
-    label: "Marketing",
-    description: "Runs promotions, campaigns and content marketing.",
-    permissions: [
-      "dashboard:read",
-      "analytics:read",
-      "promotions:*",
-      "cms:*",
-      "reviews:read",
-      "reports:read",
-      "profile:*",
-    ],
-  },
-  content_manager: {
-    id: "content_manager",
-    label: "Content Manager",
-    description: "Manages CMS, localization and reviews moderation.",
-    permissions: [
-      "dashboard:read",
-      "cms:*",
-      "localization:*",
-      "reviews:*",
-      "profile:*",
-    ],
-  },
-};
+export const ROLES: Record<string, Role> = BUILT_IN_ROLES;
 
 /**
  * Expand a role's permission list into concrete `resource:action` strings so
@@ -211,13 +37,34 @@ export function expandPermissions(permissions: Permission[]): Permission[] {
   return [...out];
 }
 
-/** All selectable roles, in display order — for future role management UI. */
-export const ROLE_LIST: Role[] = Object.values(ROLES);
+/**
+ * The roles that ship with the product, in display order.
+ *
+ * Evaluated at import time, so it never contains runtime-created roles — use
+ * {@link listRoles} (or the `useRoles` hook) anywhere the live set matters.
+ */
+export const ROLE_LIST: Role[] = Object.values(BUILT_IN_ROLES);
 
-/** Look up a role, falling back to the least-privileged known role. */
+/** Every role known right now: shipped + overridden + custom. */
+export function listRoles(): Role[] {
+  return listRoleRecords();
+}
+
+/**
+ * Look up a role, falling back to the least-privileged known role.
+ *
+ * The fallback matters more than it used to: a custom role created in the
+ * browser is unknown during a server render, and resolving it to `vendor` fails
+ * closed rather than open. The client re-resolves once the registry hydrates.
+ */
 export function getRole(id: RoleId): Role {
-  return ROLES[id] ?? ROLES.vendor;
+  return getRoleRecord(id) ?? BUILT_IN_ROLES.vendor;
+}
+
+/** True when the runtime knows this role id at all. */
+export function roleExists(id: RoleId): boolean {
+  return Boolean(getRoleRecord(id));
 }
 
 /** Referenced so `READ_ALL` is available to callers assembling custom roles. */
-export const readAllPermissions = (): Permission[] => [...READ_ALL];
+export { readAllPermissions };

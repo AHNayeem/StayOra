@@ -50,6 +50,22 @@ export function useBadgeCounts(): Record<string, number> {
         "catalog.awaitingReview": catalogueAwaiting,
         "b2b.pendingAccounts": state.b2bAccounts.filter((a) => a.status === "pending")
           .length,
+        // Rate changes waiting on a decision — platform-side only.
+        "finance.commissionApprovals": platformScope
+          ? state.commissionChangeRequests.filter((r) => r.status === "pending").length
+          : 0,
+        // Supplier requests, waitlist demand and open recovery leads — each of
+        // these is work someone has to do, so each gets a badge.
+        "bookings.awaitingSupplier": (state.supplierConfirmations ?? []).filter(
+          (c) =>
+            c.status === "pending" &&
+            (!scope.merchantId || c.merchantId === scope.merchantId),
+        ).length,
+        "catalog.waitlist": (state.waitlist ?? []).filter((w) => w.status === "waiting")
+          .length,
+        "promotions.recovery": platformScope
+          ? (state.recoveryLeads ?? []).filter((l) => l.status === "open").length
+          : 0,
         "reviews.pending": 0,
       } satisfies Record<string, number>;
     },

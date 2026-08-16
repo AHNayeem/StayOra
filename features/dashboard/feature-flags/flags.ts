@@ -3,44 +3,36 @@
  *
  * Flags gate whole modules independently of permissions (a user may be
  * permitted to see Analytics, but the Analytics *module* can still be dark for
- * their tenant). The catalogue below documents the flags the shell references;
- * which are enabled is data, resolved per user/tenant by {@link getFeatureFlags}
- * — a Phase 3 stub that Phase 3+ swaps for an API/config-service call. Nothing
- * is hardcoded in components; they read flags through {@link useFeatureFlag}.
+ * their tenant). `flag-catalogue.ts` documents every flag and what it gates;
+ * `flag-store.ts` holds which are enabled and for which roles. This file is the
+ * read API the shell and the services layer call — a Phase 3 stub that a config
+ * service replaces without touching a component, since nothing is hardcoded in
+ * components: they read flags through {@link useFeatureFlag}.
  */
+
+import { FEATURE_FLAG_KEYS } from "./flag-catalogue";
+import { resolveEnabledFlags } from "./flag-store";
+import type { RoleId } from "../rbac/types";
 
 /** Known flag keys — reference list for admin UI and type hints. */
-export const KNOWN_FEATURE_FLAGS = [
-  "analytics",
-  "command-palette",
-  "org-switcher",
-  "merchant-switcher",
-  "messages",
-] as const;
+export const KNOWN_FEATURE_FLAGS = FEATURE_FLAG_KEYS;
 
 /** A flag key. Kept open (string) so tenants can define their own. */
-export type FeatureFlagKey = (typeof KNOWN_FEATURE_FLAGS)[number] | (string & {});
+export type FeatureFlagKey = string;
 
 /**
- * Flags enabled by default while there's no backend. This is the single source
- * for the demo principal too — `resolveCurrentUser` reads it — so the shell and
- * the flag provider never drift apart.
+ * Flags enabled by default while there's no backend — i.e. before any role
+ * targeting is applied. Kept as the seed the principal falls back to.
  */
-export const DEFAULT_ENABLED_FLAGS: FeatureFlagKey[] = [
-  "analytics",
-  "command-palette",
-  "org-switcher",
-  "merchant-switcher",
-  "messages",
-];
+export const DEFAULT_ENABLED_FLAGS: FeatureFlagKey[] = resolveEnabledFlags("super_admin");
 
 /**
- * Resolve enabled flags for the current user/tenant. Async so the swap to a
- * config service is a body-only change. Accepts an optional seed (e.g. the
- * session's flags) and returns it verbatim today.
+ * Resolve enabled flags for a principal. Async so the swap to a config service
+ * is a body-only change. Accepts a role id (preferred) or an explicit seed.
  */
 export async function getFeatureFlags(
-  seed: FeatureFlagKey[] = DEFAULT_ENABLED_FLAGS,
+  roleOrSeed: RoleId | FeatureFlagKey[] = "super_admin",
 ): Promise<FeatureFlagKey[]> {
-  return seed;
+  if (Array.isArray(roleOrSeed)) return roleOrSeed;
+  return resolveEnabledFlags(roleOrSeed);
 }

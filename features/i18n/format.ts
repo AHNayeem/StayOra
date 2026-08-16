@@ -47,16 +47,21 @@ function dateFormatter(
 }
 
 /**
- * Format a base-USD amount in the active currency, converting via the mock
- * rate. Prices across the catalog are stored in USD; this is the single place
+ * Format a base-currency amount in the active currency. Prices across the
+ * catalog are stored in the platform's base currency; this is the single place
  * conversion happens.
+ *
+ * `rate` lets the caller pass the platform's *quoted* rate (mid + FX spread,
+ * from `domain/fx.ts`) so what a traveller browses at is exactly what checkout
+ * locks. Without it the plain reference rate from `constants/geo` is used.
  */
 export function formatMoney(
   amountUsd: number,
   currency: Currency,
   options: Intl.NumberFormatOptions = {},
+  rate?: number,
 ): string {
-  const converted = amountUsd * currency.rate;
+  const converted = amountUsd * (rate ?? currency.rate);
   const fractionDigits = ZERO_DECIMAL.has(currency.code) ? 0 : undefined;
   return numberFormatter(currency.locale, {
     style: "currency",

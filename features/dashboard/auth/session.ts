@@ -42,6 +42,9 @@ export const getServerSession = cache(async (): Promise<Session | null> => {
     status: "authenticated",
     token: null,
     expiresAt: payload.exp ?? null,
+    // Resolved on the server so the impersonation banner renders with the first
+    // frame rather than appearing after hydration.
+    impersonator: payload.impersonator ?? null,
   };
 });
 

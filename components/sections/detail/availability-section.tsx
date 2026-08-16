@@ -12,7 +12,19 @@ import {
   unitNoun,
   type RatePlanId,
 } from "@/features/dashboard/domain";
-import { quoteCheckout, useCustomerEmail, useDomainValue } from "@/features/booking";
+import {
+  quoteCheckout,
+  toPropertyRef,
+  useCustomerEmail,
+  useDomainValue,
+} from "@/features/booking";
+import {
+  cheaperAlternatives,
+  suggestAlternativeDates,
+  type AlternativeDate,
+} from "@/features/dashboard/domain/alternatives";
+import { AlternativeDates } from "@/components/booking/alternative-dates";
+import { WaitlistPrompt } from "@/components/booking/waitlist-prompt";
 import { useLocale } from "@/features/i18n";
 import {
   RoomRateSelector,
@@ -85,6 +97,51 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
         : null,
     [resolved?.roomTypeId, resolved?.ratePlanId, listing.id, checkIn, checkOut, units, guests, email],
   );
+
+  /**
+   * Nearby dates worth offering.
+   *
+   * Sold out → the closest windows that *are* free, so the traveller has
+   * somewhere to go. Available → only the cheaper ones, so the suggestion is a
+   * saving rather than noise.
+   */
+  const alternatives = useDomainValue<AlternativeDate[]>(
+    () => {
+      if (!resolved || !hasDates || !quote) return [];
+      const search = {
+        property: toPropertyRef(listing),
+        roomTypeId: resolved.roomTypeId,
+        ratePlanId: resolved.ratePlanId,
+        checkIn,
+        checkOut: perNight ? checkOut : checkIn,
+        units,
+        guests,
+      };
+      return quote.available ? cheaperAlternatives(search) : suggestAlternativeDates(search);
+    },
+    [
+      resolved?.roomTypeId,
+      resolved?.ratePlanId,
+      listing.id,
+      checkIn,
+      checkOut,
+      units,
+      guests,
+      quote?.available,
+      hasDates,
+    ],
+  );
+
+  const pickAlternative = (option: AlternativeDate) => {
+    setCheckIn(option.checkIn);
+    if (perNight) setCheckOut(option.checkOut);
+    setChoice(null);
+    track("alternative_date_selected", {
+      listing: listing.slug,
+      shiftDays: option.shiftDays,
+      saving: option.savingVsRequested,
+    });
+  };
 
   const goToCheckout = () => {
     if (!resolved) return;
@@ -203,6 +260,32 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
             onChange={setChoice}
             className="mt-5"
           />
+
+          {/* Not available is no longer a dead end: shift the dates, or ask to
+              be told when they open up. */}
+          {quote && !quote.available && (
+            <>
+              <AlternativeDates
+                options={alternatives ?? []}
+                soldOut
+                onPick={pickAlternative}
+              />
+              <WaitlistPrompt
+                listing={listing}
+                property={toPropertyRef(listing)}
+                roomTypeId={resolved!.roomTypeId}
+                roomTypeName={quote.stay.roomTypeName}
+                checkIn={checkIn}
+                checkOut={perNight ? checkOut : checkIn}
+                units={units}
+                guests={guests}
+              />
+            </>
+          )}
+
+          {quote?.available && (alternatives?.length ?? 0) > 0 && (
+            <AlternativeDates options={alternatives ?? []} soldOut={false} onPick={pickAlternative} />
+          )}
 
           {quote?.available && (
             <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-card border border-primary/25 bg-primary-50/60 p-5">

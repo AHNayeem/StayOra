@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
@@ -26,11 +27,23 @@ import {
   formatMoney,
   formatNumber,
 } from "./format";
-import { DICTIONARIES } from "./dictionaries";
+import { quoteFx, type FxQuote } from "@/features/dashboard/domain/fx";
+import {
+  configRevision,
+  subscribeConfig,
+} from "@/features/dashboard/domain/platform-config";
+import { translate } from "./dictionaries";
+import {
+  localeSettings,
+  localeSettingsRevision,
+  subscribeLocaleSettings,
+} from "./locale-settings";
 
 interface LocaleContextValue {
   language: Language;
   currency: Currency;
+  /** The platform's live quote for the active currency (mid + FX spread). */
+  fx: FxQuote;
   country: Country | undefined;
   /** All options, for the switchers. */
   currencies: Currency[];
@@ -67,9 +80,50 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   const prefs = useLocalePreferences();
   const { setLanguage, setCurrency, setCountry } = useSetLocale();
 
-  const language = findLanguage(prefs.language) ?? FALLBACK_LANGUAGE;
-  const currency = findCurrency(prefs.currency) ?? FALLBACK_CURRENCY;
+  // Which languages/currencies the platform currently offers. Server snapshot
+  // is 0 so SSR renders the shipped set and the client re-derives after hydration.
+  const localeRevision = useSyncExternalStore(
+    subscribeLocaleSettings,
+    localeSettingsRevision,
+    () => 0,
+  );
+  const { languages, currencies } = useMemo(() => {
+    const settings = localeSettings();
+    const custom: Language[] = settings.custom.map((l) => ({
+      code: l.code,
+      name: l.name,
+      nativeName: l.nativeName,
+      dir: l.dir,
+    }));
+    const offered = [...LANGUAGES, ...custom].filter((l) =>
+      settings.enabledLanguages.includes(l.code),
+    );
+    return {
+      languages: offered.length > 0 ? offered : [FALLBACK_LANGUAGE],
+      currencies: CURRENCIES.filter((c) => settings.enabledCurrencies.includes(c.code)),
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `localeRevision` is the store snapshot
+  }, [localeRevision]);
+
+  // A language that has since been switched off falls back to the default
+  // rather than leaving the visitor stuck on an unavailable locale.
+  const language =
+    languages.find((l) => l.code === prefs.language) ?? languages[0] ?? FALLBACK_LANGUAGE;
+  const currency =
+    currencies.find((c) => c.code === prefs.currency) ??
+    findCurrency(prefs.currency) ??
+    FALLBACK_CURRENCY;
   const country = findCountry(prefs.country);
+
+  // Re-quote when an admin changes the FX spread in Settings. The server
+  // snapshot is 0, so SSR renders the shipped configuration and the client
+  // re-derives after hydration.
+  const revision = useSyncExternalStore(subscribeConfig, configRevision, () => 0);
+  const fx = useMemo(
+    () => quoteFx(currency.code),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `revision` is the store snapshot
+    [currency.code, revision],
+  );
 
   // Side effect only (no setState) — keeps <html lang/dir> aligned with choice.
   useEffect(() => {
@@ -82,19 +136,30 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
     () => ({
       language,
       currency,
+      fx,
       country,
-      currencies: CURRENCIES,
-      languages: LANGUAGES,
+      currencies,
+      languages,
       setLanguage,
       setCurrency,
       setCountry,
-      t: (source) => DICTIONARIES[language.code]?.[source] ?? source,
-      money: (amount, options) => formatMoney(amount, currency, options),
+      t: (source) => translate(language.code, source),
+      money: (amount, options) => formatMoney(amount, currency, options, fx.rate),
       number: (val, options) => formatNumber(val, language.code, options),
       date: (iso, options) => formatDate(iso, language.code, options),
       dateTime: (iso) => formatDateTime(iso, language.code),
     }),
-    [language, currency, country, setLanguage, setCurrency, setCountry],
+    [
+      language,
+      currency,
+      fx,
+      country,
+      currencies,
+      languages,
+      setLanguage,
+      setCurrency,
+      setCountry,
+    ],
   );
 
   return (

@@ -41,8 +41,13 @@ export const cronColumns: ColumnDef<CronJob>[] = [
     meta: { label: "Last run" },
     cell: ({ row }) => (
       <div className="min-w-0">
-        <p className="whitespace-nowrap text-body">{formatDateTime(row.original.lastRun)}</p>
-        <p className="text-xs text-muted">{formatDuration(row.original.lastDurationMs)}</p>
+        <p className="whitespace-nowrap text-body">
+          {row.original.lastRun ? formatDateTime(row.original.lastRun) : "Not run yet"}
+        </p>
+        {/* What the run changed — the number you can go and verify. */}
+        <p className="truncate text-xs text-muted">
+          {row.original.lastSummary ?? formatDuration(row.original.lastDurationMs)}
+        </p>
       </div>
     ),
   },
@@ -53,6 +58,7 @@ export const cronColumns: ColumnDef<CronJob>[] = [
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-body">
         {row.original.nextRun ? formatDateTime(row.original.nextRun) : "—"}
+        {row.original.due && <span className="ml-2 text-xs text-accent-600">due</span>}
       </span>
     ),
   },

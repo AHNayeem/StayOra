@@ -25,14 +25,25 @@ export const ROUTE_RULES: RouteRule[] = [
   // Operations
   { prefix: "/dashboard/bookings", anyPermission: ["bookings:read"] },
   { prefix: "/dashboard/catalog", anyPermission: ["catalog:read"] },
+  {
+    prefix: "/dashboard/catalog/revenue-management",
+    anyPermission: ["catalog:read"],
+    featureFlag: "revenue-management",
+  },
   { prefix: "/dashboard/flights", anyPermission: ["flights:read"] },
   { prefix: "/dashboard/merchants", anyPermission: ["merchants:read"] },
   { prefix: "/dashboard/customers", anyPermission: ["customers:read"] },
 
   // Money — merchants may read their own; only finance/admin may act.
   { prefix: "/dashboard/finance/revenue", anyPermission: ["finance:read"] },
+  {
+    prefix: "/dashboard/finance/disputes",
+    anyPermission: ["finance:read"],
+    featureFlag: "disputes",
+  },
   { prefix: "/dashboard/finance/insurance", anyPermission: ["finance:read"] },
   { prefix: "/dashboard/finance/commission/rules", anyPermission: ["finance:read"] },
+  { prefix: "/dashboard/finance/commission/approvals", anyPermission: ["finance:read"] },
   { prefix: "/dashboard/finance/earnings", anyPermission: ["finance:read"] },
   { prefix: "/dashboard/finance/settlements", anyPermission: ["finance:read"] },
   { prefix: "/dashboard/finance/commission", anyPermission: ["finance:read"] },
@@ -40,12 +51,20 @@ export const ROUTE_RULES: RouteRule[] = [
   { prefix: "/dashboard/finance", anyPermission: ["finance:read"] },
 
   // B2B
-  { prefix: "/dashboard/b2b", anyPermission: ["b2b:read"] },
+  { prefix: "/dashboard/b2b", anyPermission: ["b2b:read"], featureFlag: "b2b" },
 
   // Growth
   { prefix: "/dashboard/promotions", anyPermission: ["promotions:read"] },
-  { prefix: "/dashboard/advertising", anyPermission: ["promotions:read"] },
-  { prefix: "/dashboard/membership", anyPermission: ["finance:read", "customers:read"] },
+  {
+    prefix: "/dashboard/advertising",
+    anyPermission: ["promotions:read"],
+    featureFlag: "advertising",
+  },
+  {
+    prefix: "/dashboard/membership",
+    anyPermission: ["finance:read", "customers:read"],
+    featureFlag: "membership",
+  },
   { prefix: "/dashboard/reports", anyPermission: ["reports:read"] },
   { prefix: "/dashboard/analytics", anyPermission: ["analytics:read"], featureFlag: "analytics" },
 
@@ -70,6 +89,11 @@ export const ROUTE_RULES: RouteRule[] = [
   // The merchant's own workspace. Payout and subscription are money decisions,
   // so they need `finance:read`; the rest only needs a dashboard session, which
   // is what lets an unapproved merchant finish onboarding at all.
+  {
+    prefix: "/dashboard/merchant/advertising",
+    anyPermission: ["dashboard:read"],
+    featureFlag: "advertising",
+  },
   { prefix: "/dashboard/merchant/subscription", anyPermission: ["dashboard:read"] },
   { prefix: "/dashboard/merchant", anyPermission: ["dashboard:read"] },
   { prefix: "/dashboard/onboarding", anyPermission: ["dashboard:read"] },

@@ -1,15 +1,22 @@
 import { z } from "zod";
 import { emailSchema, requiredString } from "../../schemas/common";
-import { ROLE_LIST } from "../../rbac/roles";
+import { roleExists } from "../../rbac/roles";
 import { USER_STATUS_VALUES } from "./types";
 
-const ROLE_IDS = ROLE_LIST.map((r) => r.id) as [string, ...string[]];
-
-/** User form schema — serves both invite (create) and edit. */
+/**
+ * User form schema — serves both invite (create) and edit.
+ *
+ * The role is validated against the *runtime* registry rather than a compile-time
+ * enum, because roles can be created at runtime; an id that no longer exists is
+ * rejected here instead of silently granting the fallback role.
+ */
 export const userSchema = z.object({
   name: requiredString,
   email: emailSchema,
-  roleId: z.enum(ROLE_IDS),
+  roleId: z
+    .string()
+    .min(1, "Pick a role")
+    .refine((id) => roleExists(id), "That role no longer exists."),
   status: z.enum(USER_STATUS_VALUES),
 });
 

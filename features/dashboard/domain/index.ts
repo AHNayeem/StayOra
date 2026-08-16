@@ -35,6 +35,7 @@ export * from "./payouts";
 export * from "./lifecycle";
 export * from "./money";
 export * from "./commission-rules";
+export * from "./commission-approvals";
 export * from "./revenue";
 export * from "./insurance";
 export * from "./membership";
@@ -136,3 +137,96 @@ export type {
   DomainScope,
   OfferInput,
 } from "./services";
+
+// --- platform configuration, FX and operations ------------------------------
+export {
+  DEFAULT_PLATFORM_CONFIG,
+  isMaintenanceActive,
+  platformConfig,
+  pricingConfig,
+  resetPlatformConfig,
+  updatePlatformConfig,
+  validateEconomics,
+} from "./platform-config";
+export type {
+  DeliveryConfig,
+  EconomicsConfig,
+  FxConfig,
+  GeneralConfig,
+  IntegrationsConfig,
+  MaintenanceConfig,
+  PlatformConfig,
+  PlatformConfigPatch,
+} from "./platform-config";
+export { platformSettingsService } from "./platform-settings-service";
+export {
+  baseCurrency,
+  convertFromBase,
+  convertToBase,
+  describeFx,
+  fxMargin,
+  fxRateBoard,
+  fxService,
+  isFxLockExpired,
+  lockFx,
+  midRate,
+  quoteFx,
+  supportedCurrencies,
+} from "./fx";
+export type { FxQuote } from "./fx";
+export {
+  JOBS,
+  listJobs,
+  runJob,
+  schedulerService,
+  schedulerSummary,
+  setJobStatus,
+  tickScheduler,
+} from "./scheduler";
+export type { JobDefinition, JobRun, JobState, JobView } from "./scheduler";
+export { recoveryService, recoveryStats, sweepAbandonedCheckouts } from "./recovery";
+export type { RecoveryLead, RecoveryStatus } from "./recovery";
+export {
+  cancelWaitlist,
+  joinWaitlist,
+  sweepWaitlist,
+  waitlistFor,
+  waitlistService,
+} from "./waitlist";
+export type { JoinWaitlistInput, WaitlistEntry, WaitlistStatus } from "./waitlist";
+export {
+  requestSupplierConfirmation,
+  resolveSupplierConfirmation,
+  supplierConfirmationFor,
+  supplierService,
+} from "./supplier";
+export type { SupplierConfirmation, SupplierStatus } from "./supplier";
+export {
+  computePeriod,
+  financePeriodService,
+  isPeriodClosed,
+  listPeriods,
+  periodFigures,
+  periodIdFor,
+} from "./finance-periods";
+export type { FinancePeriod, PeriodSnapshot, PeriodStatus } from "./finance-periods";
+export {
+  SEGMENTS,
+  allCampaigns,
+  campaignReport,
+  campaignService,
+  findSegment,
+  segmentMembers,
+  segmentSizes,
+  sweepScheduledCampaigns,
+} from "./campaigns";
+export type {
+  MarketingCampaign,
+  MarketingCampaignChannel,
+  MarketingCampaignInput,
+  MarketingCampaignStatus,
+  SegmentDefinition,
+  SegmentMember,
+} from "./campaigns";
+export { cheaperAlternatives, suggestAlternativeDates } from "./alternatives";
+export type { AlternativeDate, AlternativeSearch } from "./alternatives";

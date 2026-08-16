@@ -45,6 +45,8 @@ import type { PlatformReview } from "./reviews";
 import type { NotificationPreferences, OutboundMessage } from "./messaging";
 import type { TelemetryEvent } from "./telemetry";
 import type { CommissionRule } from "./commission-rules";
+import type { CommissionChangeRequest } from "./commission-approvals";
+import { seedCommissionChangeRequests } from "./seed-commission-approvals";
 import type { RevenueEntry } from "./revenue";
 import type { InsurancePlan, InsurancePolicy, InsuranceProvider } from "./insurance";
 import type { MembershipPlan, MembershipSubscription } from "./membership";
@@ -53,6 +55,12 @@ import type { PricingRule } from "./revenue-management";
 import type { Merchant } from "./merchants";
 import type { CatalogueStatic, CatalogueWorkflow } from "./catalogue";
 import type { Dispute } from "./disputes";
+import type { JobState } from "./scheduler";
+import type { RecoveryLead } from "./recovery";
+import type { WaitlistEntry } from "./waitlist";
+import type { SupplierConfirmation } from "./supplier";
+import type { FinancePeriod } from "./finance-periods";
+import { seedCampaigns, type MarketingCampaign } from "./campaigns";
 import { buildDisputes } from "./seed-disputes";
 import { MERCHANTS_SEED } from "./seed-merchants";
 import { seedCatalogueDrafts, seedCatalogueWorkflow } from "./seed-catalogue";
@@ -93,6 +101,11 @@ export interface DomainState {
   /** Configurable commission rules; empty falls back to the product defaults. */
   commissionRules: CommissionRule[];
   /**
+   * Requested changes to those rules. A rate only moves when one of these is
+   * approved — see `commission-approvals.ts`.
+   */
+  commissionChangeRequests: CommissionChangeRequest[];
+  /**
    * Revenue entries the platform *stores* — membership, advertising, B2B
    * subscriptions and adjustments. Commission, fees and insurance are derived
    * from bookings on read, never stored (see `revenue.ts`).
@@ -126,6 +139,25 @@ export interface DomainState {
   catalogueDrafts: (CatalogueStatic & CatalogueWorkflow)[];
   /** Chargeback cases, keyed to real bookings and merchants. */
   disputes: Dispute[];
+
+  // --- operations ---------------------------------------------------------
+  /**
+   * Scheduled-job state. Definitions live in `scheduler.ts`; only what moves —
+   * status, next run and run history — is stored.
+   */
+  scheduledJobs: JobState[];
+  /** Abandoned checkouts worth chasing (`recovery.ts`). */
+  recoveryLeads: RecoveryLead[];
+  /** Booking ids already invited to review, so nobody is asked twice. */
+  reviewInvitations: string[];
+  /** Travellers waiting for sold-out dates (`waitlist.ts`). */
+  waitlist: WaitlistEntry[];
+  /** Supplier acknowledgement per booking (`supplier.ts`). */
+  supplierConfirmations: SupplierConfirmation[];
+  /** Closed accounting periods and their frozen figures (`finance-periods.ts`). */
+  financePeriods: FinancePeriod[];
+  /** Marketing campaigns and their simulated sends (`campaigns.ts`). */
+  marketingCampaigns: MarketingCampaign[];
 
   /** Monotonic counter for generated ids/references. */
   sequence: number;
@@ -164,6 +196,7 @@ function freshState(): DomainState {
     notificationPreferences: {},
     telemetry: [],
     commissionRules: monetization.commissionRules,
+    commissionChangeRequests: seedCommissionChangeRequests(monetization.commissionRules),
     revenueEntries: monetization.revenueEntries,
     insuranceProviders: monetization.insuranceProviders,
     insurancePlans: monetization.insurancePlans,
@@ -178,6 +211,13 @@ function freshState(): DomainState {
     catalogueWorkflow: seedCatalogueWorkflow(),
     catalogueDrafts: seedCatalogueDrafts(),
     disputes: buildDisputes(bookings),
+    scheduledJobs: [],
+    recoveryLeads: [],
+    reviewInvitations: [],
+    waitlist: [],
+    supplierConfirmations: [],
+    financePeriods: [],
+    marketingCampaigns: seedCampaigns(),
     sequence: 1,
   };
 }

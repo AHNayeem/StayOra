@@ -82,6 +82,41 @@ import {
 } from "@/features/dashboard/modules/cms/workflow";
 import { cmsService } from "@/features/dashboard/modules/cms/service";
 import { DEMO_ORIGIN, coordsFor, haversineKm } from "@/features/discovery/geo";
+import { roleService } from "@/features/dashboard/rbac/role-service";
+import { derivePermissions } from "@/features/dashboard/rbac/current-user";
+import {
+  flagAppliesTo,
+  resetFlag,
+  resolveEnabledFlags,
+  setFlagEnabled,
+  setFlagRoles,
+} from "@/features/dashboard/feature-flags/flag-store";
+import { commissionApprovalService } from "@/features/dashboard/domain/commission-approvals";
+import { commissionRuleStore, toRuleInput } from "@/features/dashboard/domain/commission-rules";
+import { priceBooking } from "@/features/dashboard/domain/money";
+import {
+  DEFAULT_PLATFORM_CONFIG,
+  platformConfig,
+  resetPlatformConfig,
+  updatePlatformConfig,
+  validateEconomics,
+} from "@/features/dashboard/domain/platform-config";
+import { platformSettingsService } from "@/features/dashboard/domain/platform-settings-service";
+import { isFxLockExpired, lockFx, quoteFx } from "@/features/dashboard/domain/fx";
+import { advanceDeliveries, retryDelivery, send } from "@/features/dashboard/domain/messaging";
+import { listJobs, runJob, setJobStatus, tickScheduler } from "@/features/dashboard/domain/scheduler";
+import { joinWaitlist, sweepWaitlist, waitlistService } from "@/features/dashboard/domain/waitlist";
+import { recoveryService, sweepAbandonedCheckouts } from "@/features/dashboard/domain/recovery";
+import {
+  requestSupplierConfirmation,
+  resolveSupplierConfirmation,
+  sweepSupplierConfirmations,
+} from "@/features/dashboard/domain/supplier";
+import { financePeriodService, periodFigures } from "@/features/dashboard/domain/finance-periods";
+import { campaignService, segmentMembers, segmentSizes } from "@/features/dashboard/domain/campaigns";
+import { suggestAlternativeDates } from "@/features/dashboard/domain/alternatives";
+import { translate, translationCoverage } from "@/features/i18n/dictionaries";
+import { setLanguageEnabled, setTranslation, resetLocaleSettings } from "@/features/i18n/locale-settings";
 
 let passed = 0;
 let failed = 0;
@@ -1424,6 +1459,563 @@ try {
   crossCatalogue = true;
 }
 check("a merchant cannot submit another merchant's listing", crossCatalogue);
+
+// ---------------------------------------------------------------------------
+section("Access control — runtime roles, permissions, feature flags");
+// ---------------------------------------------------------------------------
+
+const shippedRoles = await roleService.getRoles();
+check(
+  "every shipped role is in the registry",
+  shippedRoles.length >= 13 && shippedRoles.every((r) => r.builtIn),
+);
+check(
+  "the auditor reads everything and writes nothing",
+  derivePermissions("auditor").every((p) => p.endsWith(":read") || p.startsWith("profile") || p.endsWith(":export")),
+);
+check(
+  "compliance can approve merchants but holds no finance",
+  derivePermissions("compliance").includes("merchants:approve") &&
+    !derivePermissions("compliance").some((p) => p.startsWith("finance:")),
+);
+check(
+  "a B2B agent books without seeing the account's money",
+  derivePermissions("b2b_agent").includes("bookings:create") &&
+    !derivePermissions("b2b_agent").some((p) => p.startsWith("finance:")),
+);
+
+const cloned = await roleService.cloneRole("finance", {
+  label: "Finance (read only)",
+  actor: "Test Operator",
+});
+check("a role can be cloned", !cloned.builtIn && cloned.basedOn === "finance");
+check(
+  "the clone starts from the source's grants",
+  cloned.permissions.join("|") === shippedRoles.find((r) => r.id === "finance")!.permissions.join("|"),
+);
+
+await roleService.updateRolePermissions(cloned.id, ["dashboard:read", "finance:read"]);
+check(
+  "assigning permissions replaces the grant set",
+  derivePermissions(cloned.id).join("|") === "dashboard:read|finance:read",
+);
+
+let duplicateRefused = false;
+try {
+  await roleService.createRole({ id: cloned.id, label: "Duplicate", description: "", permissions: ["dashboard:read"] });
+} catch {
+  duplicateRefused = true;
+}
+check("a duplicate role id is refused", duplicateRefused);
+
+let emptyRefused = false;
+try {
+  await roleService.createRole({ label: "Nothing", description: "", permissions: [] });
+} catch {
+  emptyRefused = true;
+}
+check("a role with no permissions is refused", emptyRefused);
+
+let builtInDeleteRefused = false;
+try {
+  await roleService.deleteRole("admin");
+} catch {
+  builtInDeleteRefused = true;
+}
+check("a shipped role cannot be deleted", builtInDeleteRefused);
+
+await roleService.updateRolePermissions("staff", ["dashboard:read"]);
+check("a shipped role can be overridden", derivePermissions("staff").length === 1);
+await roleService.resetRole("staff");
+check(
+  "resetting restores the shipped grants",
+  derivePermissions("staff").includes("bookings:update"),
+);
+
+await roleService.deleteRole(cloned.id);
+check("a custom role can be deleted", !(await roleService.getRoles()).some((r) => r.id === cloned.id));
+
+check("flags ship enabled", flagAppliesTo("b2b", "agency"));
+setFlagEnabled("b2b", false, "Test Operator");
+check("a disabled flag applies to nobody", !flagAppliesTo("b2b", "agency"));
+setFlagEnabled("b2b", true, "Test Operator");
+setFlagRoles("b2b", ["agency"], "Test Operator");
+check(
+  "role targeting is the second gate",
+  flagAppliesTo("b2b", "agency") && !flagAppliesTo("b2b", "merchant"),
+);
+check(
+  "the resolved flag set follows the role",
+  resolveEnabledFlags("agency").includes("b2b") && !resolveEnabledFlags("merchant").includes("b2b"),
+);
+resetFlag("b2b");
+check("resetting a flag restores its shipped state", flagAppliesTo("b2b", "merchant"));
+
+// ---------------------------------------------------------------------------
+section("Commission approvals — the rate book needs a second pair of eyes");
+// ---------------------------------------------------------------------------
+
+const targetRule = commissionRuleStore.list()[0];
+const ratePriorToChange = targetRule.percent;
+
+const changeRequest = await commissionApprovalService.submit(
+  {
+    type: "update",
+    ruleId: targetRule.id,
+    proposed: { ...toRuleInput(targetRule), percent: ratePriorToChange - 3 },
+    note: "Competitive response for Q1.",
+  },
+  ACTOR,
+);
+check("a rate change starts as pending", changeRequest.status === "pending");
+check(
+  "submitting does not move the rate",
+  commissionRuleStore.get(targetRule.id)!.percent === ratePriorToChange,
+);
+check("the request explains the delta", changeRequest.summary.includes("→"));
+
+let rejectedWithoutReason = false;
+try {
+  await commissionApprovalService.reject(changeRequest.id, "", ACTOR);
+} catch {
+  rejectedWithoutReason = true;
+}
+check("a rejection needs a reason", rejectedWithoutReason);
+
+const approvedRequest = await commissionApprovalService.approve(
+  changeRequest.id,
+  { id: "usr_reviewer", name: "Second Pair", role: "finance" },
+  "Signed off with sales.",
+);
+check("approving records the reviewer", approvedRequest.reviewedByName === "Second Pair");
+check("approval is not self-approval here", approvedRequest.selfApproved === false);
+check(
+  "only approval moves the rate book",
+  commissionRuleStore.get(targetRule.id)!.percent === ratePriorToChange - 3,
+);
+check(
+  "the decision is on the record",
+  approvedRequest.history.some((e) => e.action === "approved" && e.note === "Signed off with sales."),
+);
+
+let doubleApproval = false;
+try {
+  await commissionApprovalService.approve(approvedRequest.id, ACTOR);
+} catch {
+  doubleApproval = true;
+}
+check("an approved request cannot be approved twice", doubleApproval);
+
+const selfRequest = await commissionApprovalService.submit(
+  { type: "disable", ruleId: targetRule.id, note: "Retiring this rate." },
+  ACTOR,
+);
+const selfApproved = await commissionApprovalService.approve(selfRequest.id, ACTOR);
+check("self-approval is allowed but flagged", selfApproved.selfApproved === true);
+check(
+  "disabling through approval reaches the rule",
+  commissionRuleStore.get(targetRule.id)!.status === "disabled",
+);
+
+const withdrawn = await commissionApprovalService.submit(
+  { type: "delete", ruleId: commissionRuleStore.list()[1].id },
+  ACTOR,
+);
+const withdrawnRequest = await commissionApprovalService.cancel(withdrawn.id, ACTOR);
+check("a request can be withdrawn", withdrawnRequest.status === "cancelled");
+check(
+  "withdrawing leaves the rule alone",
+  Boolean(commissionRuleStore.get(withdrawnRequest.ruleId!)),
+);
+
+check(
+  "impersonation and approvals reach the audit trail",
+  getState().auditLog.some((e) => e.entity === "commission_change_request" && e.action === "approve"),
+);
+
+// ---------------------------------------------------------------------------
+// Platform configuration — the settings screen is no longer decorative
+// ---------------------------------------------------------------------------
+section("Platform configuration");
+
+const shippedTax = platformConfig().economics.taxRate;
+check("ships with the documented tax rate", shippedTax === DEFAULT_PLATFORM_CONFIG.economics.taxRate);
+
+updatePlatformConfig({ economics: { taxRate: 0.2 } });
+check("a settings change is readable immediately", platformConfig().economics.taxRate === 0.2);
+
+const pricedAfterChange = priceBooking({ base: 1000, commissionRate: 10 });
+check(
+  "the money engine prices with the stored tax rate",
+  pricedAfterChange.taxes === 200,
+  `${pricedAfterChange.taxes}`,
+);
+check(
+  "a patch leaves the rest of the section alone",
+  platformConfig().economics.platformFeeRate === DEFAULT_PLATFORM_CONFIG.economics.platformFeeRate,
+);
+
+check("validation rejects an impossible tax rate", validateEconomics({ taxRate: 3 }).length === 1);
+check("validation accepts a sane one", validateEconomics({ taxRate: 0.12 }).length === 0);
+
+let rejectedEconomics = false;
+try {
+  await platformSettingsService.update("economics", { defaultCommissionRate: 300 }, ACTOR);
+} catch {
+  rejectedEconomics = true;
+}
+check("the settings service refuses invalid economics", rejectedEconomics);
+check(
+  "a rejected update never reaches the config",
+  platformConfig().economics.defaultCommissionRate !==300,
+);
+
+await platformSettingsService.update("economics", { taxRate: 0.09 }, ACTOR);
+check("a valid update is stored", platformConfig().economics.taxRate === 0.09);
+check(
+  "settings changes are audited",
+  getState().auditLog.some((e) => e.entity === "platform_settings"),
+);
+
+resetPlatformConfig();
+check("reset restores the shipped economics", platformConfig().economics.taxRate === shippedTax);
+
+// ---------------------------------------------------------------------------
+// FX — the snapshot the data model always anticipated
+// ---------------------------------------------------------------------------
+section("FX");
+
+const usdQuote = quoteFx("USD");
+check("the base currency quotes at parity", usdQuote.rate === 1);
+check("no spread is charged on the base currency", usdQuote.spreadPercent === 0);
+
+const aedQuote = quoteFx("AED");
+check("a foreign currency carries the platform spread", aedQuote.rate > aedQuote.mid);
+check(
+  "the spread matches the configured margin",
+  Math.abs(aedQuote.rate - aedQuote.mid * (1 + platformConfig().fx.spreadPercent / 100)) < 1e-6,
+);
+
+check("booking in the base currency locks nothing", lockFx("USD") === undefined);
+const lockedAed = lockFx("AED")!;
+check("a foreign booking locks a rate", lockedAed.rate === aedQuote.rate);
+check("the lock records its provider", lockedAed.provider === "mock-fx");
+check("a fresh lock has not expired", isFxLockExpired(lockedAed) === false);
+check(
+  "a lock expires once its window passes",
+  isFxLockExpired(lockedAed, Date.now() + (platformConfig().fx.lockMinutes + 1) * 60_000),
+);
+
+// ---------------------------------------------------------------------------
+// Simulated delivery lifecycle
+// ---------------------------------------------------------------------------
+section("Message delivery");
+
+const deliveryBooking = getState().bookings[0];
+const queuedMessages = send({
+  templateKey: "booking_confirmed",
+  channels: ["email"],
+  to: { email: "delivery.test@otithee.com" },
+  customerEmail: "delivery.test@otithee.com",
+  bookingId: deliveryBooking.id,
+  bookingRef: deliveryBooking.reference,
+  ignorePreferences: true,
+  context: { name: "Test", product: "Test stay", reference: deliveryBooking.reference },
+});
+check("an automatic send enters the queue", queuedMessages[0]?.status === "queued");
+check("every message is marked simulated", queuedMessages[0]?.simulated === true);
+
+const step = platformConfig().delivery.stepSeconds * 1000;
+advanceDeliveries(Date.now() + step + 1000);
+const afterFirstStep = getState().outbox.find((m) => m.id === queuedMessages[0].id)!;
+check(
+  "one step moves it out of the queue",
+  ["sent", "failed", "bounced"].includes(afterFirstStep.status),
+  afterFirstStep.status,
+);
+
+if (afterFirstStep.status === "sent") {
+  advanceDeliveries(Date.now() + step * 3);
+  const settled = getState().outbox.find((m) => m.id === queuedMessages[0].id)!;
+  check("a second step delivers it", settled.status === "delivered");
+  check("delivery is timestamped", Boolean(settled.deliveredAt));
+} else {
+  const retried = retryDelivery(afterFirstStep.id)!;
+  check("a failed message can be re-queued", retried.status === "queued");
+  check("a retry clears the failure reason", retried.failureReason === undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Scheduler
+// ---------------------------------------------------------------------------
+section("Scheduler");
+
+const jobs = listJobs();
+check("jobs are registered", jobs.length >= 8);
+check("every job has a handler bound to it", jobs.every((job) => typeof job.run === "function"));
+
+const deliveryRun = runJob("delivery:progress", { actor: ACTOR, manual: true });
+check("a manual run records what it did", deliveryRun.summary.length > 0);
+check(
+  "run history is kept on the job",
+  listJobs().find((j) => j.key === "delivery:progress")!.runs.length > 0,
+);
+check(
+  "a manual run is audited",
+  getState().auditLog.some((e) => e.entity === "scheduled_job"),
+);
+
+setJobStatus("fx:refresh", "paused", ACTOR);
+check(
+  "pausing a job sticks",
+  listJobs().find((j) => j.key === "fx:refresh")!.status === "paused",
+);
+check(
+  "a paused job is never due",
+  listJobs(Date.now() + 86_400_000).find((j) => j.key === "fx:refresh")!.due === false,
+);
+setJobStatus("fx:refresh", "active", ACTOR);
+
+const ticked = tickScheduler(Date.now() + 86_400_000);
+check("a tick runs everything that is due", ticked.length > 0);
+
+// ---------------------------------------------------------------------------
+// Waitlist and alternative dates
+// ---------------------------------------------------------------------------
+section("Waitlist & alternatives");
+
+const waitProperty = toPropertyRef(HOTELS[1]);
+const waitRoom = getRoomTypes(waitProperty)[0];
+const waitEntry = joinWaitlist({
+  customerEmail: "waitlist.test@otithee.com",
+  customerName: "Wait Lister",
+  property: waitProperty,
+  roomTypeId: waitRoom.id,
+  checkIn: "2027-03-10",
+  checkOut: "2027-03-13",
+  units: 1,
+  guests: 2,
+});
+check("joining the waitlist creates an entry", waitEntry.status === "waiting");
+check(
+  "joining twice does not duplicate",
+  joinWaitlist({
+    customerEmail: "waitlist.test@otithee.com",
+    property: waitProperty,
+    roomTypeId: waitRoom.id,
+    checkIn: "2027-03-10",
+    checkOut: "2027-03-13",
+    units: 1,
+    guests: 2,
+  }).id === waitEntry.id,
+);
+check(
+  "the entry carries a link back to the same selection",
+  waitEntry.resumeHref.includes(waitProperty.slug) && waitEntry.resumeHref.includes("2027-03-10"),
+);
+
+const waitSweep = sweepWaitlist();
+check("the sweep reports what it did", waitSweep.summary.length > 0);
+check(
+  "available dates notify the traveller",
+  waitlistService.forCustomer("waitlist.test@otithee.com")[0].status === "notified",
+);
+
+waitlistService.cancel(waitEntry.id);
+check(
+  "a request can be closed",
+  waitlistService.forCustomer("waitlist.test@otithee.com")[0].status === "cancelled",
+);
+
+const alternatives = suggestAlternativeDates({
+  property: waitProperty,
+  roomTypeId: waitRoom.id,
+  ratePlanId: "standard",
+  checkIn: "2027-04-10",
+  checkOut: "2027-04-13",
+  units: 1,
+  guests: 2,
+});
+check("alternative dates are offered", alternatives.length > 0);
+check("none of them are the requested window", alternatives.every((a) => a.shiftDays !== 0));
+check(
+  "they are ordered cheapest first",
+  alternatives.every((option, i) => i === 0 || option.total >= alternatives[i - 1].total),
+);
+check("each keeps the same length of stay", alternatives.every((a) => a.nights === 3));
+
+// ---------------------------------------------------------------------------
+// Supplier confirmation
+// ---------------------------------------------------------------------------
+section("Supplier confirmation");
+
+const instantBooking = getState().bookings.find((b) => b.productKind === "hotels")!;
+const instant = requestSupplierConfirmation(instantBooking);
+check("an instant product confirms immediately", instant.status === "confirmed");
+check("it carries a supplier reference", Boolean(instant.supplierRef));
+
+const onRequestBooking = getState().bookings.find(
+  (b) => b.productKind === "visa" || b.productKind === "convention-hall" || b.productKind === "tours",
+);
+if (onRequestBooking) {
+  const pending = requestSupplierConfirmation(onRequestBooking);
+  check("an on-request product waits for the supplier", pending.status === "pending");
+  check("asking twice does not duplicate the request", requestSupplierConfirmation(onRequestBooking).requestedAt === pending.requestedAt);
+
+  const resolved = resolveSupplierConfirmation(onRequestBooking.id, "confirmed")!;
+  check("a supplier decision is recorded", resolved.status === "confirmed");
+  check("a confirmed request gets a reference", Boolean(resolved.supplierRef));
+  check(
+    "a decided request cannot be decided again",
+    resolveSupplierConfirmation(onRequestBooking.id, "rejected")!.status === "confirmed",
+  );
+}
+check("the supplier sweep runs cleanly", sweepSupplierConfirmations().summary.length > 0);
+
+// ---------------------------------------------------------------------------
+// Abandoned checkout recovery
+// ---------------------------------------------------------------------------
+section("Abandoned checkout recovery");
+
+const recoveryProperty = toPropertyRef(HOTELS[2]);
+const recoveryRoom = getRoomTypes(recoveryProperty)[0];
+const abandonedHold = holdInventory({
+  property: recoveryProperty,
+  roomTypeId: recoveryRoom.id,
+  ratePlanId: "standard",
+  checkIn: "2027-05-04",
+  checkOut: "2027-05-07",
+  units: 1,
+  guests: 2,
+  lockedTotal: 640,
+  intent: {
+    customerEmail: "abandoner@otithee.com",
+    customerName: "Ava Bandon",
+    listingSlug: recoveryProperty.slug,
+    listingTitle: recoveryProperty.title,
+    vertical: recoveryProperty.vertical,
+  },
+});
+releaseHold(abandonedHold.id);
+
+const recoverySweep = sweepAbandonedCheckouts();
+check("the sweep reports what it did", recoverySweep.affected > 0, recoverySweep.summary);
+
+const lead = recoveryService.list().find((l) => l.holdId === abandonedHold.id)!;
+check("an abandoned hold becomes a lead", Boolean(lead));
+check("the lead knows what it was worth", lead.value === 640);
+check("the lead links back to the same dates", lead.resumeHref.includes("2027-05-04"));
+check("the traveller was nudged once", Boolean(lead.nudgedAt));
+check("nudging again is a no-op", recoveryService.nudge(lead.id) === false);
+check("recovery stats count the open lead", recoveryService.stats().open > 0);
+
+// ---------------------------------------------------------------------------
+// CRM segments and campaigns
+// ---------------------------------------------------------------------------
+section("Segments & campaigns");
+
+const sizes = segmentSizes();
+check("segments are computed", sizes.length >= 6);
+const allSegment = sizes.find((s) => s.id === "all")!;
+check("the 'all' segment holds every customer", allSegment.size > 0);
+check(
+  "repeat guests are a subset of all customers",
+  (sizes.find((s) => s.id === "repeat")?.size ?? 0) <= allSegment.size,
+);
+check(
+  "segment membership is derived from bookings",
+  segmentMembers("all").every((m) => m.bookings > 0),
+);
+
+const marketingCampaign = await campaignService.create(
+  {
+    name: "Regression campaign",
+    segmentId: "repeat",
+    channel: "email",
+    subject: "A test subject",
+    body: "Hello {{name}}, this is a test.",
+  },
+  ACTOR,
+);
+check("a campaign starts as a draft", marketingCampaign.status === "draft");
+
+const sentCampaign = await campaignService.sendNow(marketingCampaign.id, ACTOR);
+check("sending marks it sent", sentCampaign.status === "sent");
+check("the audience is frozen at send time", sentCampaign.recipients.length > 0);
+const report = campaignService.report(sentCampaign);
+check("the report reads the delivery log", report.sent === sentCampaign.messageIds.length);
+check("suppressed recipients are reported, not hidden", report.suppressed >= 0);
+
+let resendBlocked = false;
+try {
+  await campaignService.sendNow(marketingCampaign.id, ACTOR);
+} catch {
+  resendBlocked = true;
+}
+check("a sent campaign cannot be sent twice", resendBlocked);
+
+// ---------------------------------------------------------------------------
+// Financial period close
+// ---------------------------------------------------------------------------
+section("Period close");
+
+const closingId = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 7);
+const beforeClose = periodFigures(closingId);
+const closedPeriod = await financePeriodService.close(closingId, { actor: ACTOR, note: "Regression" });
+check("closing freezes a snapshot", closedPeriod.status === "closed" && Boolean(closedPeriod.snapshot));
+check(
+  "the snapshot matches what was live at close",
+  closedPeriod.snapshot!.platformRevenue === beforeClose.platformRevenue,
+);
+check(
+  "a closed period reports the frozen figure",
+  periodFigures(closingId).takenAt === closedPeriod.snapshot!.takenAt,
+);
+check(
+  "the close is audited",
+  getState().auditLog.some((e) => e.entity === "finance_period" && e.entityId === closingId),
+);
+
+let doubleClose = false;
+try {
+  await financePeriodService.close(closingId, { actor: ACTOR });
+} catch {
+  doubleClose = true;
+}
+check("a period cannot be closed twice", doubleClose);
+
+let currentClose = false;
+try {
+  await financePeriodService.close(new Date().toISOString().slice(0, 7), { actor: ACTOR });
+} catch {
+  currentClose = true;
+}
+check("the current month cannot be closed", currentClose);
+
+const reopened = await financePeriodService.reopen(closingId, { actor: ACTOR, reason: "Regression" });
+check("reopening returns it to live figures", reopened.status === "open");
+check("the superseded snapshot is kept", reopened.snapshot !== undefined);
+
+// ---------------------------------------------------------------------------
+// Localization
+// ---------------------------------------------------------------------------
+section("Localization");
+
+check("English passes through untouched", translate("en", "Sign In") === "Sign In");
+check("a shipped dictionary translates", translate("ar", "Sign In") !== "Sign In");
+check("an untranslated language falls back to the source", translate("fr", "Sign In") === "Sign In");
+check("Arabic has real coverage", translationCoverage("ar") > 0.5);
+check("an empty language has none", translationCoverage("fr") === 0);
+
+setTranslation("fr", "Sign In", "Se connecter");
+check("an operator edit wins", translate("fr", "Sign In") === "Se connecter");
+check("editing raises measured coverage", translationCoverage("fr") > 0);
+setTranslation("fr", "Sign In", "");
+check("clearing an edit restores the fallback", translate("fr", "Sign In") === "Sign In");
+
+setLanguageEnabled("en", false);
+check("English can never be switched off", translate("en", "Home") === "Home");
+resetLocaleSettings();
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

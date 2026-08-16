@@ -1,5 +1,6 @@
 /**
- * In-memory CRUD engine — the reusable data source for Phase 4 (no backend yet).
+ * Local CRUD engine — the reusable data source for modules with no domain
+ * backing (no backend yet).
  *
  * `createStubService` turns a seed array into a full {@link ResourceService}:
  * list (with search / filters / sort / pagination), get, create, update and
@@ -7,10 +8,17 @@
  * exercisable. The service signature matches a real repository, so each module
  * swaps `createStubService(...)` → `createResourceRepository(...)` later without
  * touching its hooks, columns or pages.
+ *
+ * **Persistence.** Writes are mirrored to `localStorage` under
+ * `otithee:module:v1:<key>`, mirroring what the domain store does for booking
+ * data. Before this, half the dashboard forgot every edit on reload while the
+ * other half remembered — same UI, different behaviour. Hydration is lazy and
+ * client-only, so SSR still renders the deterministic seed.
  */
 import { ApiError } from "../data/errors";
 import type { ID, ListParams, Paginated } from "../data/types";
 import { paginate } from "../data/types";
+import { registerModuleStore, readModuleState, writeModuleState } from "./module-store";
 import type { ResourceService } from "./types";
 
 type Row = Record<string, unknown>;
@@ -40,6 +48,13 @@ export interface StubServiceOptions<T, TCreate, TUpdate> {
   latencyMs?: number;
   /** Prefix for generated ids (default "row"). */
   idPrefix?: string;
+  /**
+   * localStorage namespace for this dataset. Defaults to `idPrefix`, which is
+   * already unique per module; pass an explicit key when two modules share a
+   * prefix. Pass `false` to keep the data in memory only (derived or
+   * high-churn datasets that should reset with the session).
+   */
+  persistKey?: string | false;
 }
 
 let idCounter = 0;
@@ -54,9 +69,10 @@ function compare(a: string | number, b: string | number): number {
 }
 
 /**
- * Create an in-memory service backing one resource. Data lives for the lifetime
- * of the module (module-scoped singleton), so creates/updates/deletes persist
- * across navigations within a session — enough to demo real CRUD flows.
+ * Create a local service backing one resource. Rows are hydrated from
+ * localStorage on first client access and written back after every mutation, so
+ * creates/updates/deletes survive a reload exactly as domain-backed modules do.
+ * On the server the seed is used unchanged, which keeps SSR deterministic.
  */
 export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>(
   options: StubServiceOptions<T, TCreate, TUpdate>,
@@ -71,24 +87,46 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
     applyUpdate,
     latencyMs = 450,
     idPrefix = "row",
+    persistKey,
   } = options;
+
+  const storageKey =
+    persistKey === false ? null : registerModuleStore(persistKey ?? idPrefix);
 
   // Own mutable copy so the seed constant is never mutated.
   let store: T[] = seed.map((row) => ({ ...row }));
+  let hydrated = false;
 
-  const find = (id: ID): T | undefined => store.find((row) => getId(row) === id);
+  /**
+   * The live rows. The first client-side read replaces the seed with whatever
+   * was persisted; the server keeps the seed, so both renders are stable.
+   */
+  function rows(): T[] {
+    if (storageKey && !hydrated && typeof window !== "undefined") {
+      store = readModuleState(storageKey, store);
+      hydrated = true;
+    }
+    return store;
+  }
+
+  function commit(next: T[]): void {
+    store = next;
+    if (storageKey) writeModuleState(storageKey, next);
+  }
+
+  const find = (id: ID): T | undefined => rows().find((row) => getId(row) === id);
 
   return {
     async list(params: ListParams = {}): Promise<Paginated<T>> {
       await delay(latencyMs);
       const { page = 1, pageSize = 10, sort, search, filters } = params;
 
-      let rows = [...store];
+      let out = [...rows()];
 
       // Search.
       const term = search?.trim().toLowerCase();
       if (term && searchFields.length > 0) {
-        rows = rows.filter((row) =>
+        out = out.filter((row) =>
           searchFields.some((field) =>
             String((row as Row)[field as string] ?? "")
               .toLowerCase()
@@ -105,7 +143,7 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
           const predicate =
             filterPredicates[key] ??
             ((row: T) => String((row as Row)[key] ?? "") === value);
-          rows = rows.filter((row) => predicate(row, value));
+          out = out.filter((row) => predicate(row, value));
         }
       }
 
@@ -115,14 +153,14 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
           sortAccessors[sort.field] ??
           ((row: T) => (row as Row)[sort.field] as string | number);
         const dir = sort.direction === "desc" ? -1 : 1;
-        rows = [...rows].sort(
+        out = [...out].sort(
           (a, b) => compare(accessor(a) ?? "", accessor(b) ?? "") * dir,
         );
       }
 
-      const total = rows.length;
+      const total = out.length;
       const start = (page - 1) * pageSize;
-      const items = rows.slice(start, start + pageSize);
+      const items = out.slice(start, start + pageSize);
       return paginate(items, { page, pageSize, total });
     },
 
@@ -144,7 +182,7 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
       const row = applyCreate
         ? applyCreate(input, id)
         : ({ ...(input as object), id } as T);
-      store = [row, ...store];
+      commit([row, ...rows()]);
       return { ...row };
     },
 
@@ -160,17 +198,17 @@ export function createStubService<T, TCreate = Partial<T>, TUpdate = Partial<T>>
       const next = applyUpdate
         ? applyUpdate(existing, input)
         : ({ ...existing, ...(input as object) } as T);
-      store = store.map((row) => (getId(row) === id ? next : row));
+      commit(rows().map((row) => (getId(row) === id ? next : row)));
       return { ...next };
     },
 
     async remove(id: ID): Promise<void> {
       await delay(latencyMs);
-      store = store.filter((row) => getId(row) !== id);
+      commit(rows().filter((row) => getId(row) !== id));
     },
 
     peek(): T[] {
-      return store.map((row) => ({ ...row }));
+      return rows().map((row) => ({ ...row }));
     },
   };
 }

@@ -7,8 +7,8 @@
  * exclusively through {@link useRbac}.
  */
 
-/** Stable role identifiers. Mirrors the roles named in DashboardDesign.md. */
-export type RoleId =
+/** The roles that ship with the product. Mirrors `role-catalogue.ts`. */
+export type BuiltInRoleId =
   | "super_admin"
   | "admin"
   | "staff"
@@ -16,10 +16,25 @@ export type RoleId =
   | "vendor"
   /** B2B: travel agency / corporate travel manager booking on credit. */
   | "agency"
+  /** A named booker inside an agency — books, but sees none of its money. */
+  | "b2b_agent"
   | "support"
   | "finance"
+  /** Owns merchant verification: approves or rejects onboarding applications. */
+  | "compliance"
+  /** Read-only across every module, for internal and external audit. */
+  | "auditor"
   | "marketing"
   | "content_manager";
+
+/**
+ * A role identifier.
+ *
+ * Open by design: roles can be created at runtime (see `role-registry.ts`), so
+ * an id is any string. The union above is kept for autocomplete and for the
+ * places that legitimately reason about a *specific* shipped role.
+ */
+export type RoleId = BuiltInRoleId | (string & {});
 
 /**
  * A permission string in `resource:action` form (e.g. `bookings:read`).

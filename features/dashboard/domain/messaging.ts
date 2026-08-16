@@ -12,6 +12,8 @@
  * template registry, the preference checks and the log all stay.
  */
 
+import { hashString } from "@/lib/random";
+import { platformConfig } from "./platform-config";
 import { getState, mutate, nextId } from "./store";
 
 export const CHANNELS = ["email", "sms", "push", "whatsapp", "inapp"] as const;
@@ -60,6 +62,8 @@ export interface OutboundMessage {
   body: string;
   status: DeliveryStatus;
   createdAt: string;
+  /** When the simulated provider accepted it off the queue. */
+  sentAt?: string;
   deliveredAt?: string;
   readAt?: string;
   failureReason?: string;
@@ -68,6 +72,12 @@ export interface OutboundMessage {
   href?: string;
   /** True for messages the admin composed by hand. */
   manual?: boolean;
+  /**
+   * Always true in the prototype: no provider was contacted. Kept explicit on
+   * the record so the delivery log can label simulated sends rather than
+   * implying a customer received something.
+   */
+  simulated?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,6 +184,41 @@ export const MESSAGE_TEMPLATES: MessageTemplate[] = [
     subject: "How was {{product}}?",
     body: "Hi {{name}}, thanks for staying at {{product}}. A short review helps other travellers — and earns you loyalty points.",
     short: "How was {{product}}? Leave a review and earn points.",
+  },
+  {
+    key: "abandoned_checkout",
+    name: "Abandoned checkout nudge",
+    category: "marketing",
+    channels: ["email", "push", "inapp"],
+    subject: "Your dates at {{product}} are still available",
+    body: "Hi {{name}}, you were a step away from booking {{product}} for {{dates}} ({{total}}).\n\nWe've kept your selection — pick up where you left off and the same room, rate and dates are waiting.",
+    short: "Still thinking about {{product}}? Your dates are available.",
+  },
+  {
+    key: "waitlist_available",
+    name: "Waitlist opening",
+    category: "booking",
+    channels: ["email", "push", "sms", "inapp"],
+    subject: "{{room}} at {{product}} just opened up",
+    body: "Good news — {{room}} at {{product}} is available again for {{dates}}.\n\nWaitlist openings go quickly, so book soon to secure it.",
+    short: "{{room}} at {{product}} is free for {{dates}}. Book now.",
+  },
+  {
+    key: "marketing_broadcast",
+    name: "Marketing broadcast",
+    category: "marketing",
+    channels: ["email", "sms", "push", "inapp"],
+    subject: "{{subject}}",
+    body: "{{body}}",
+    short: "{{subject}}",
+  },
+  {
+    key: "supplier_pending",
+    name: "Awaiting supplier confirmation",
+    category: "booking",
+    channels: ["email", "inapp"],
+    subject: "We're confirming {{reference}} with the supplier",
+    body: "Hi {{name}}, we've received your request for {{product}} and are confirming it with the supplier. You'll hear from us within a few hours — nothing is charged until they accept.",
   },
   {
     key: "support_reply",
@@ -312,6 +357,11 @@ export function send(input: SendInput): OutboundMessage[] {
     }
 
     const short = channel === "sms" || channel === "push" || channel === "whatsapp";
+    // An in-app message is delivered the moment it is written — there is no
+    // carrier in between. Everything else enters the queue and is progressed by
+    // `advanceDeliveries` on the scheduler's tick, which is what makes the
+    // delivery report a lifecycle rather than a claim.
+    const simulate = platformConfig().delivery.simulate && channel !== "inapp";
     const message: OutboundMessage = {
       id: nextId("msg"),
       templateKey: template.key,
@@ -321,16 +371,19 @@ export function send(input: SendInput): OutboundMessage[] {
       customerEmail: input.customerEmail,
       subject: render(template.subject, input.context),
       body: render(short && template.short ? template.short : template.body, input.context),
-      status: input.forceStatus ?? "delivered",
+      status: input.forceStatus ?? (simulate ? "queued" : "delivered"),
       createdAt: at,
       bookingId: input.bookingId,
       bookingRef: input.bookingRef,
       href: input.href,
       manual: input.manual,
+      simulated: true,
     };
     if (message.status === "delivered" || message.status === "read") {
+      message.sentAt = at;
       message.deliveredAt = at;
     }
+    if (message.status === "sent") message.sentAt = at;
     if (message.status === "failed" || message.status === "bounced") {
       message.failureReason =
         channel === "email" ? "Mailbox unavailable (simulated)" : "Handset unreachable (simulated)";
@@ -340,6 +393,93 @@ export function send(input: SendInput): OutboundMessage[] {
 
   if (created.length) mutate((draft) => draft.outbox.unshift(...created));
   return created.map((m) => structuredClone(m));
+}
+
+// ---------------------------------------------------------------------------
+// Simulated delivery lifecycle
+// ---------------------------------------------------------------------------
+
+export interface DeliverySweepResult {
+  sent: number;
+  delivered: number;
+  failed: number;
+}
+
+/**
+ * Advance queued messages through the simulated provider.
+ *
+ * `queued → sent` after one step, `sent → delivered` after another; a
+ * configurable share bounces instead, so failure handling is demonstrable. The
+ * outcome is decided by a hash of the message id, which keeps a given demo
+ * deterministic — the same message always fails, and a re-run of the sweep
+ * cannot flip a delivered message to failed.
+ *
+ * The scheduler calls this every tick (`delivery:progress`). Nothing here talks
+ * to a provider; `simulated: true` on every record is what the delivery log
+ * surfaces so no one mistakes it for real delivery.
+ */
+export function advanceDeliveries(nowMs = Date.now()): DeliverySweepResult {
+  const { simulate, failureRatePercent, stepSeconds } = platformConfig().delivery;
+  const result: DeliverySweepResult = { sent: 0, delivered: 0, failed: 0 };
+  if (!simulate) return result;
+
+  const stepMs = Math.max(1, stepSeconds) * 1000;
+  const now = new Date(nowMs).toISOString();
+
+  mutate((draft) => {
+    for (const message of draft.outbox) {
+      if (message.status === "queued") {
+        const queuedFor = nowMs - new Date(message.createdAt).getTime();
+        if (queuedFor < stepMs) continue;
+        // Deterministic per message: 0–99.
+        const roll = hashString(message.id) % 100;
+        if (roll < failureRatePercent) {
+          message.status = message.channel === "email" ? "bounced" : "failed";
+          message.failureReason =
+            message.channel === "email"
+              ? "Mailbox unavailable (simulated)"
+              : "Handset unreachable (simulated)";
+          result.failed += 1;
+        } else {
+          message.status = "sent";
+          message.sentAt = now;
+          result.sent += 1;
+        }
+        continue;
+      }
+      if (message.status === "sent") {
+        const sentFor = nowMs - new Date(message.sentAt ?? message.createdAt).getTime();
+        if (sentFor < stepMs) continue;
+        message.status = "delivered";
+        message.deliveredAt = now;
+        result.delivered += 1;
+      }
+    }
+  });
+
+  return result;
+}
+
+/** Re-queue a failed message — the "retry" action on the delivery report. */
+export function retryDelivery(id: string, nowMs = Date.now()): OutboundMessage | undefined {
+  return mutate((draft) => {
+    const message = draft.outbox.find((m) => m.id === id);
+    if (!message) return undefined;
+    if (message.status !== "failed" && message.status !== "bounced") return message;
+    message.status = "queued";
+    message.createdAt = new Date(nowMs).toISOString();
+    message.failureReason = undefined;
+    message.sentAt = undefined;
+    // Give the retry a fresh id-derived roll, or a permanently-failing message
+    // would fail again forever.
+    message.id = `${message.id}r`;
+    return structuredClone(message);
+  });
+}
+
+/** How many messages are waiting in the simulated queue. */
+export function queuedCount(): number {
+  return getState().outbox.filter((m) => m.status === "queued").length;
 }
 
 /** Preview a template without sending anything. */
@@ -360,6 +500,9 @@ export function preview(
 export const messagingService = {
   send,
   preview,
+  advanceDeliveries,
+  retryDelivery,
+  queuedCount,
   getPreferences,
   setPreference,
 

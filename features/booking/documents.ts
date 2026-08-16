@@ -1,6 +1,6 @@
 "use client";
 
-import type { Booking } from "@/features/dashboard/domain";
+import { supplierConfirmationFor, type Booking } from "@/features/dashboard/domain";
 
 /**
  * Booking documents — the things a traveller downloads or prints.
@@ -108,7 +108,16 @@ export function voucherText(booking: Booking): string {
       ? ["Included extras", ...booking.addOns.map((a) => `  · ${a.label} × ${a.quantity}`), ""]
       : []),
     `Total            ${booking.money.currency} ${booking.money.total.toFixed(2)}`,
+    // The rate the traveller was quoted at, frozen at purchase — a voucher must
+    // still read the same number next year, whatever today's rates do.
+    booking.fx
+      ? `Charged in       ${booking.fx.currency} at 1 ${booking.fx.baseCurrency ?? "USD"} = ${booking.fx.rate}
+                 (rate locked ${booking.fx.capturedAt.slice(0, 10)})`
+      : "",
     `Invoice          ${booking.invoiceNumber}`,
+    supplierConfirmationFor(booking.id)?.supplierRef
+      ? `Supplier ref     ${supplierConfirmationFor(booking.id)?.supplierRef}`
+      : "",
     booking.specialRequests ? `\nGuest notes      ${booking.specialRequests}` : "",
     "",
     rule,

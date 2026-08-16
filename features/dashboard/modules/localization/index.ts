@@ -20,3 +20,4 @@ export {
 } from "./hooks";
 export { LanguageForm, CurrencyForm } from "./forms";
 export { Localization } from "./localization";
+export { TranslationsPanel } from "./translations-panel";

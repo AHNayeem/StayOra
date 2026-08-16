@@ -13,37 +13,72 @@ import {
   Textarea,
 } from "../../ui";
 import { Can } from "../../rbac/permission-guard";
+import { platformSettingsService } from "../../domain/platform-settings-service";
+import { usePlatformConfig } from "../../domain/use-platform-config";
+import { useDomainActor } from "../../domain/use-domain";
+
+/** `datetime-local` wants `YYYY-MM-DDTHH:mm`, not a full ISO string. */
+function toLocalInput(iso?: string): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /**
- * MaintenanceView — the platform maintenance-mode control. A single client
- * surface (no list/service): toggling the switch previews the guest-facing
- * banner live, while "Save" mocks the ~450ms persistence a real settings
- * endpoint would perform. Swapping the mock save for a PATCH is the only change.
+ * MaintenanceView — the platform maintenance-mode control.
+ *
+ * The switch is enforced: `MaintenanceGate` wraps the public layout, so turning
+ * this on genuinely replaces the storefront with the maintenance screen while
+ * signed-in staff keep browsing. The message and the expected end time shown to
+ * visitors are the ones typed here.
  */
 export function MaintenanceView() {
-  const [enabled, setEnabled] = useState(false);
-  const [message, setMessage] = useState(
-    "We're carrying out scheduled maintenance and will be back shortly. Thanks for your patience.",
-  );
+  const config = usePlatformConfig();
+  const actor = useDomainActor();
+  const [draft, setDraft] = useState(config.maintenance);
   const [saving, setSaving] = useState(false);
 
-  const save = () => {
+  // Adjust-during-render rather than an effect: the stored section is the source
+  // of truth and only changes on a save, another tab or a reset.
+  const [seen, setSeen] = useState(config.maintenance);
+  if (seen !== config.maintenance) {
+    setSeen(config.maintenance);
+    setDraft(config.maintenance);
+  }
+
+  const save = async () => {
     setSaving(true);
-    // Mirror the ~450ms latency used across the dashboard stubs.
-    setTimeout(() => {
-      setSaving(false);
+    try {
+      await platformSettingsService.update(
+        "maintenance",
+        {
+          ...draft,
+          startedAt: draft.enabled ? (draft.startedAt ?? new Date().toISOString()) : undefined,
+        },
+        actor,
+      );
       toast.saved("Maintenance settings");
-    }, 450);
+    } catch (error) {
+      toast.error("Not saved", {
+        description: error instanceof Error ? error.message : "Please try again.",
+      });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  const live = config.maintenance.enabled;
 
   return (
     <div className="flex flex-col gap-6">
       <Alert
-        tone={enabled ? "warning" : "success"}
-        title={enabled ? "Maintenance mode is ON" : "Platform is live"}
+        tone={live ? "warning" : "success"}
+        title={live ? "Maintenance mode is ON" : "Platform is live"}
       >
-        {enabled
-          ? "The public storefront shows the maintenance page. Admins can still sign in to the dashboard."
+        {live
+          ? "The public storefront is showing the maintenance page to visitors. Signed-in staff still see the site and the dashboard."
           : "All surfaces are serving traffic normally."}
       </Alert>
 
@@ -54,9 +89,15 @@ export function MaintenanceView() {
         >
           <Switch
             label="Enable maintenance mode"
-            hint="Guests see the maintenance page; the dashboard and API stay available to signed-in staff."
-            checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
+            hint="Guests see the maintenance page; staff with a dashboard session keep full access."
+            checked={draft.enabled}
+            onChange={(e) => setDraft((d) => ({ ...d, enabled: e.target.checked }))}
+          />
+          <Switch
+            label="Keep the dashboard reachable"
+            hint="Off would take the admin surfaces down with the storefront."
+            checked={draft.allowDashboard}
+            onChange={(e) => setDraft((d) => ({ ...d, allowDashboard: e.target.checked }))}
           />
         </FormSection>
 
@@ -68,40 +109,45 @@ export function MaintenanceView() {
             <Textarea
               label="Message"
               rows={3}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              value={draft.message}
+              onChange={(e) => setDraft((d) => ({ ...d, message: e.target.value }))}
             />
           </FormGrid>
         </FormSection>
 
         <FormSection
-          title="Scheduled window"
-          description="Optional — announce a window ahead of time. Leave blank to toggle manually."
+          title="Expected window"
+          description="Optional — visitors see when you expect to be back. Leave blank to toggle manually."
         >
           <FormGrid cols={2}>
-            <Input label="Starts" type="datetime-local" />
-            <Input label="Ends" type="datetime-local" />
-          </FormGrid>
-        </FormSection>
-
-        <FormSection
-          title="Allowlist"
-          description="IP addresses that keep full access to the storefront during maintenance."
-        >
-          <FormGrid cols={1}>
-            <Textarea
-              label="Allowed IPs"
-              rows={2}
-              hint="One per line — e.g. office and QA egress addresses."
-              className="font-mono"
-              defaultValue={"203.0.113.24\n198.51.100.7"}
+            <Input
+              label="Started"
+              type="datetime-local"
+              value={toLocalInput(draft.startedAt)}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  startedAt: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                }))
+              }
+            />
+            <Input
+              label="Expected back"
+              type="datetime-local"
+              value={toLocalInput(draft.endsAt)}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  endsAt: e.target.value ? new Date(e.target.value).toISOString() : undefined,
+                }))
+              }
             />
           </FormGrid>
         </FormSection>
 
         <FormActions>
           <Can anyPermission={["system:update"]}>
-            <Button size="sm" onClick={save} loading={saving}>
+            <Button size="sm" onClick={() => void save()} loading={saving}>
               Save changes
             </Button>
           </Can>

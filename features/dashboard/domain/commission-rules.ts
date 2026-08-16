@@ -291,6 +291,19 @@ export type CommissionRuleInput = Omit<
   "id" | "createdAt" | "updatedAt" | "updatedBy"
 >;
 
+/**
+ * Strip the stored-only fields off a rule so it can be edited, proposed in a
+ * change request or diffed against another version.
+ */
+export function toRuleInput(rule: CommissionRule): CommissionRuleInput {
+  const copy: Partial<CommissionRule> = { ...rule };
+  delete copy.id;
+  delete copy.createdAt;
+  delete copy.updatedAt;
+  delete copy.updatedBy;
+  return copy as CommissionRuleInput;
+}
+
 export const commissionRuleStore = {
   list(): CommissionRule[] {
     const at = new Date().toISOString();

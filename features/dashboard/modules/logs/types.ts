@@ -28,6 +28,8 @@ export const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   export: "Exported",
   suspend: "Suspended",
   activate: "Activated",
+  impersonate: "Impersonation started",
+  impersonation_end: "Impersonation ended",
 };
 
 export const AUDIT_ACTION_OPTIONS: SelectOption[] = Object.entries(
@@ -41,4 +43,6 @@ export const HIGH_RISK_ACTIONS: AuditAction[] = [
   "suspend",
   "cancel",
   "refund",
+  // Acting as someone else is the entry an auditor looks for first.
+  "impersonate",
 ];

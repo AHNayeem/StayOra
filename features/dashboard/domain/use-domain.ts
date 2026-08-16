@@ -20,7 +20,10 @@ export function useDomainScope(): DomainScope {
     if (user.roleId === "merchant" || user.roleId === "vendor") {
       return { merchantId: user.merchantId };
     }
-    if (user.roleId === "agency") {
+    // An agency sub-user is scoped exactly like the account owner: same
+    // organization, less permission. Scope and permission are separate
+    // questions, and conflating them is how a sub-user would leak.
+    if (user.roleId === "agency" || user.roleId === "b2b_agent") {
       return { organizationId: user.organizationId };
     }
     return {};
@@ -46,7 +49,7 @@ export function useDomainActor(): DomainActor {
 export function useNotificationAudience(): NotificationAudience {
   const { user } = useRbac();
   if (user.roleId === "merchant" || user.roleId === "vendor") return "merchant";
-  if (user.roleId === "agency") return "agency";
+  if (user.roleId === "agency" || user.roleId === "b2b_agent") return "agency";
   return "admin";
 }
 
@@ -56,7 +59,7 @@ export function useRoleView() {
   return useMemo(
     () => ({
       isMerchant: user.roleId === "merchant" || user.roleId === "vendor",
-      isAgency: user.roleId === "agency",
+      isAgency: user.roleId === "agency" || user.roleId === "b2b_agent",
       isPlatform:
         user.roleId === "super_admin" ||
         user.roleId === "admin" ||
@@ -64,7 +67,9 @@ export function useRoleView() {
         user.roleId === "support" ||
         user.roleId === "staff" ||
         user.roleId === "marketing" ||
-        user.roleId === "content_manager",
+        user.roleId === "content_manager" ||
+        user.roleId === "compliance" ||
+        user.roleId === "auditor",
       roleId: user.roleId,
     }),
     [user.roleId],

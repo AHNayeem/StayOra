@@ -25,6 +25,7 @@
  */
 
 import { getCancellationPolicy } from "./lifecycle";
+import { pricingConfig } from "./platform-config";
 import type {
   AppliedDiscount,
   B2BCommercialModel,
@@ -44,39 +45,45 @@ import type {
   Settlement,
 } from "./types";
 
-/** Platform pricing constants. A real deployment reads these from settings. */
+/**
+ * Platform pricing settings.
+ *
+ * Every field is a live read of {@link platformConfig} rather than a constant,
+ * so changing the tax rate or the default commission in Settings → Economics
+ * changes what the next quote charges. The shipped values still live in one
+ * place — `DEFAULT_PLATFORM_CONFIG` in `platform-config.ts`.
+ *
+ * `cancellationAdminShare` is the platform's administration share of a
+ * cancellation fee. The rest of the fee stays with the merchant, who lost the
+ * night. That share is deducted from the merchant's settlement and recognised
+ * as platform revenue, so the "Cancellation & amendment fees" line in the
+ * Revenue Center is a real transfer rather than a second view of retained
+ * commission.
+ */
 export const PRICING_CONFIG = {
-  currency: "USD",
+  get currency(): string {
+    return pricingConfig().currency;
+  },
   /** Tax applied to the net sale. */
-  taxRate: 0.075,
+  get taxRate(): number {
+    return pricingConfig().taxRate;
+  },
   /** Platform service fee charged to the customer. */
-  platformFeeRate: 0.02,
+  get platformFeeRate(): number {
+    return pricingConfig().platformFeeRate;
+  },
   /** Fallback commission when a merchant has no negotiated rate. */
-  defaultCommissionRate: 12,
-  /**
-   * The platform's administration share of a cancellation fee.
-   *
-   * The rest of the fee stays with the merchant, who lost the night. This share
-   * is deducted from the merchant's settlement and recognised as platform
-   * revenue, so the "Cancellation & amendment fees" line in the Revenue Center
-   * is a real transfer rather than a second view of retained commission.
-   */
-  cancellationAdminShare: 0.2,
+  get defaultCommissionRate(): number {
+    return pricingConfig().defaultCommissionRate;
+  },
+  get cancellationAdminShare(): number {
+    return pricingConfig().cancellationAdminShare;
+  },
   /** Commission rates per product kind, percent. */
-  commissionByProduct: {
-    hotels: 12,
-    apartments: 14,
-    resorts: 13,
-    "shared-rooms": 10,
-    "convention-hall": 9,
-    flights: 5,
-    transport: 15,
-    tours: 18,
-    activities: 18,
-    visa: 8,
-    combo: 15,
-  } as Record<ProductKind, number>,
-} as const;
+  get commissionByProduct(): Record<ProductKind, number> {
+    return pricingConfig().commissionByProduct;
+  },
+};
 
 /** Round to cents so totals never drift by floating-point dust. */
 export function money(value: number): number {

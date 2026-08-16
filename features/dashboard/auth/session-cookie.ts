@@ -15,6 +15,7 @@
  */
 
 import type { MerchantStaffRoleId, RoleId } from "../rbac/types";
+import type { ImpersonationOrigin } from "./impersonation";
 
 export const DASHBOARD_SESSION_COOKIE = "otithee_session";
 
@@ -36,6 +37,12 @@ export interface SessionCookiePayload {
   organizationId?: string;
   /** Coarse account role from the public session, for post-login routing. */
   accountRole?: string;
+  /**
+   * Present only while impersonating: the operator this session really belongs
+   * to. Everything else in the payload describes the *impersonated* user, so
+   * every existing consumer keeps resolving the principal unchanged.
+   */
+  impersonator?: ImpersonationOrigin;
   /** Epoch ms expiry. */
   exp: number;
 }
