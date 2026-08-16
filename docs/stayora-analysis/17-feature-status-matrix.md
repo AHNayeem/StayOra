@@ -1,5 +1,10 @@
 # 17 — Master Feature Status Matrix
 
+> **Superseded in part.** This matrix was written before the gap-closure passes.
+> Read it alongside [15 — Gap Closure](./15-gap-closure.md) and
+> [18 — Audit Implementation](./18-audit-implementation.md), which record what has since been
+> built and, importantly, which rows below were wrong when written.
+
 **Legend:** ✅ Implemented · 🟡 Partial · 🟠 Prototype/UI only · 🔵 Mock/demo data · 🔴 Missing · ⚪ Recommended/future
 **Users:** C = Customer · M = Merchant · A = Admin · F = Finance · S = Support · B = B2B/Agency · P = Platform/system
 

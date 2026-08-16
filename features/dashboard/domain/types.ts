@@ -9,6 +9,7 @@
  */
 
 import type { BookingVertical } from "@/types/booking";
+import type { TaxLine } from "./tax";
 
 // ---------------------------------------------------------------------------
 // Shared vocabulary
@@ -150,7 +151,16 @@ export interface BookingMoney {
   platformFundedDiscount: number;
   /** `base + markup - discount` — the sale value after discounts. */
   netSale: number;
+  /** Tax charged on top of the sale — the sum of the exclusive tax lines. */
   taxes: number;
+  /**
+   * The tax rules that produced `taxes`, snapshotted at booking time so a rate
+   * change never rewrites history. Absent on bookings priced before the rule
+   * engine existed, or when the flat platform rate applied.
+   */
+  taxLines?: TaxLine[];
+  /** Tax already inside the price (inclusive rules). Never added to `total`. */
+  taxIncluded?: number;
   /** Platform service fee charged to the customer. */
   fees: number;
   /** Insurance premium the customer paid (0 when no policy was attached). */
@@ -232,12 +242,19 @@ export interface FxSnapshot {
 
 /** How the customer is paying: in full now, or a deposit with a balance later. */
 export interface PaymentPlan {
-  kind: "full" | "deposit";
+  /**
+   * `split` is a group booking: `depositAmount` is the organiser's own share,
+   * taken at checkout, and `balanceAmount` is what the other payers owe. The
+   * shares themselves live in `domain/split-payment.ts`.
+   */
+  kind: "full" | "deposit" | "split";
   /** Taken at checkout. */
   depositAmount: number;
   /** Still owed. Zero for `kind: "full"`. */
   balanceAmount: number;
   balanceDueAt?: string;
+  /** Split payment record, when `kind` is `split`. */
+  splitId?: string;
 }
 
 /** What was actually selected on a stay — room type, rate plan, occupancy. */
@@ -493,6 +510,11 @@ export interface RefundQuote {
   refundPercent: number;
   cancellationFee: number;
   taxAdjustment: number;
+  /**
+   * Per-authority tax reversal, when the booking was priced by the rule engine.
+   * Empty for bookings that carry only a flat tax figure.
+   */
+  taxLinesReversed: TaxLine[];
   refundAmount: number;
   commissionReversed: number;
   /** Insurance premium returned to the customer. */

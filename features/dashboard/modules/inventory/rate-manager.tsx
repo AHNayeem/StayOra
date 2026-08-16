@@ -366,7 +366,10 @@ function DayCell({
       type="button"
       onClick={onToggle}
       aria-pressed={selected}
-      aria-label={`${day.date}: ${day.available} ${noun.many} available at $${day.price}`}
+      aria-label={`${day.date}: ${day.available} ${noun.many} available at $${day.price}${
+        day.blocked > 0 ? `, ${day.blocked} held by ${day.blockedBy ?? "another channel"}` : ""
+      }`}
+      title={day.blockedBy ? `${day.blocked} held — ${day.blockedBy}` : undefined}
       className={cn(
         "flex min-h-20 flex-col gap-0.5 rounded-field border p-2 text-left text-xs transition-colors",
         selected ? "border-primary bg-primary-50 ring-1 ring-primary" : "border-line",
@@ -392,6 +395,13 @@ function DayCell({
         {day.minStay > 1 && <span className="rounded bg-surface-muted px-1">MIN {day.minStay}</span>}
         {day.closedToArrival && <span className="rounded bg-surface-muted px-1">CTA</span>}
         {day.closedToDeparture && <span className="rounded bg-surface-muted px-1">CTD</span>}
+        {/* Nights another channel has taken — the merchant can't sell them here
+            and needs to know that isn't a mistake in our numbers. */}
+        {day.blocked > 0 && (
+          <span className="rounded bg-warning/30 px-1 font-semibold">
+            OTA {day.blocked}
+          </span>
+        )}
       </span>
     </button>
   );

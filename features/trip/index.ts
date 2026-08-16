@@ -53,3 +53,9 @@ export { TripCartView } from "./trip-cart-view";
 export { TripCheckoutView } from "./trip-checkout-view";
 export { TripsView } from "./trips-view";
 export { TripDetailView } from "./trip-detail-view";
+export {
+  downloadItinerary,
+  downloadTripICS,
+  itineraryText,
+  tripICS,
+} from "./itinerary";

@@ -40,8 +40,12 @@ import {
   bookingService,
   getRoomTypes,
   paymentPosition,
+  collectedUsd,
+  outstandingUsd,
   quoteReschedule,
   reschedule,
+  shareHref,
+  splitForBooking,
   addTraveler,
   correctTravelerName,
   supportService,
@@ -175,6 +179,7 @@ function DomainBookingDetail({ booking }: { booking: Booking }) {
     () => paymentPosition(booking.id, booking.money.total),
     [booking.id, booking.money.total],
   );
+  const split = useDomainValue(() => splitForBooking(booking.id), [booking.id]);
 
   // Read the clock once, on mount: a countdown that re-derives on every render
   // is both impure and pointlessly unstable for a "days to go" label.
@@ -252,6 +257,42 @@ function DomainBookingDetail({ booking }: { booking: Booking }) {
 
       {booking.status === "failed" && <FailedBanner booking={booking} actor={actor} />}
 
+      {/* A group booking's balance isn't owed by this traveller — it's owed by
+          the other payers, so this links to the split rather than a Pay button. */}
+      {split && split.status !== "cancelled" && (
+        <div className="mt-3 rounded-card border border-primary/25 bg-primary-50/50 p-4 text-sm">
+          <p className="flex flex-wrap items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5 font-medium text-ink">
+              <Users className="size-4 text-primary" aria-hidden="true" />
+              Split between {split.shares.length} people
+            </span>
+            <span className="text-muted">
+              <Money usd={collectedUsd(split)} /> collected ·{" "}
+              <strong className="text-ink">
+                <Money usd={outstandingUsd(split)} />
+              </strong>{" "}
+              outstanding
+            </span>
+          </p>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <Link
+              href={shareHref(split.shares.find((s) => s.organiser) ?? split.shares[0])}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Manage the split →
+            </Link>
+            {split.status === "complete" && (
+              <span className="text-xs font-medium text-emerald-600">Paid in full</span>
+            )}
+            {split.status === "expired" && (
+              <span className="text-xs font-medium text-amber-700">
+                The window closed — cover the balance to settle it
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {position.due > 0 && booking.paymentPlan?.kind === "deposit" && (
         <p className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning/40 bg-warning/10 p-4 text-sm text-amber-900">
           <span>
@@ -327,12 +368,38 @@ function DomainBookingDetail({ booking }: { booking: Booking }) {
                   −<Money usd={booking.money.discount} />
                 </Line>
               )}
-              <Line label="Taxes">
-                <Money usd={booking.money.taxes} />
-              </Line>
+              {/* Tax as it was actually assessed, authority by authority. */}
+              {booking.money.taxLines?.filter((line) => line.type === "exclusive").length ? (
+                booking.money.taxLines
+                  .filter((line) => line.type === "exclusive")
+                  .map((line) => (
+                    <Line
+                      key={line.ruleId}
+                      label={
+                        line.rate !== undefined
+                          ? `${line.name} (${line.rate}%)`
+                          : line.detail
+                            ? `${line.name} (${line.detail})`
+                            : line.name
+                      }
+                    >
+                      <Money usd={line.amount} />
+                    </Line>
+                  ))
+              ) : (
+                <Line label="Taxes">
+                  <Money usd={booking.money.taxes} />
+                </Line>
+              )}
               <Line label="Service fee">
                 <Money usd={booking.money.fees} />
               </Line>
+              {(booking.money.taxIncluded ?? 0) > 0 && (
+                <p className="text-xs text-muted">
+                  Price includes <Money usd={booking.money.taxIncluded ?? 0} /> of tax
+                  already collected by the property.
+                </p>
+              )}
               <div className="mt-2 flex items-center justify-between border-t border-line pt-3 text-base">
                 <span className="font-semibold text-ink">Total</span>
                 <span className="font-bold text-accent-600">

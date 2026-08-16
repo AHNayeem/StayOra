@@ -595,11 +595,19 @@ export const CHANNEL_PROVIDER_LABELS: Record<ChannelProvider, string> = {
   custom_api: "Custom API / PMS",
 };
 
+/**
+ * The connection lifecycle. `connected` is the link established but not yet
+ * pulled; `synced` is a completed import. They are distinct on purpose — a
+ * merchant needs to know whether the availability on screen has actually been
+ * reconciled with the other channel or merely could be.
+ */
 export const CHANNEL_STATUS_VALUES = [
   "not_connected",
   "connected",
   "syncing",
+  "synced",
   "error",
+  "paused",
 ] as const;
 
 export type ChannelStatus = (typeof CHANNEL_STATUS_VALUES)[number];
@@ -608,14 +616,18 @@ export const CHANNEL_STATUS_LABELS: Record<ChannelStatus, string> = {
   not_connected: "Not connected",
   connected: "Connected",
   syncing: "Syncing",
+  synced: "Synced",
   error: "Error",
+  paused: "Paused",
 };
 
 export const CHANNEL_STATUS_TONES: Record<ChannelStatus, StatusTone> = {
   not_connected: "neutral",
-  connected: "success",
+  connected: "info",
   syncing: "info",
+  synced: "success",
   error: "danger",
+  paused: "warning",
 };
 
 /** What a connection is allowed to push/pull. Mirrors real channel scopes. */
@@ -645,6 +657,10 @@ export interface ChannelConnection {
   lastSyncAt?: string;
   /** Human explanation shown when `status` is `error`. */
   message?: string;
+  /** Completed pulls so far — drives the simulated failure cadence. */
+  syncRuns?: number;
+  /** Nights the last pull imported (see `calendar-sync.ts`). */
+  blocksImported?: number;
 }
 
 export const DISCONNECTED_CHANNEL: ChannelConnection = {

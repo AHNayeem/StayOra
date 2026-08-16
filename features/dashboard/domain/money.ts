@@ -26,6 +26,7 @@
 
 import { getCancellationPolicy } from "./lifecycle";
 import { pricingConfig } from "./platform-config";
+import { assessTax, reverseTaxLines, type TaxContext, type TaxLine } from "./tax";
 import type {
   AppliedDiscount,
   B2BCommercialModel,
@@ -121,6 +122,16 @@ export interface PriceBookingInput {
   commissionRuleId?: string;
   currency?: string;
   taxRate?: number;
+  /**
+   * Tax resolved by the rule engine. When supplied it wins over `taxRate` —
+   * `taxes` becomes the sum of the *exclusive* lines and the lines themselves
+   * are snapshotted onto the booking. Build one with
+   * {@link import("./tax").assessTax} or pass a {@link TaxContext} as
+   * `taxContext` and let this function do it.
+   */
+  taxLines?: TaxLine[];
+  /** Shorthand for `taxLines: assessTax(context).lines`. */
+  taxContext?: Omit<TaxContext, "netSale" | "fees">;
   platformFeeRate?: number;
   /** Absolute service fee, e.g. 0 when a membership waives it. */
   feeOverride?: number;
@@ -151,6 +162,8 @@ export function priceBooking({
   commissionRuleId,
   currency = PRICING_CONFIG.currency,
   taxRate = PRICING_CONFIG.taxRate,
+  taxLines,
+  taxContext,
   platformFeeRate = PRICING_CONFIG.platformFeeRate,
   feeOverride,
   insurance = 0,
@@ -161,8 +174,31 @@ export function priceBooking({
   insuranceRevenueReversed = 0,
 }: PriceBookingInput): BookingMoney {
   const netSale = money(Math.max(0, base + markup - discount));
-  const taxes = money(netSale * taxRate);
+  // Fees are settled before tax because a `service_fee` tax rule charges
+  // against them.
   const fees = money(feeOverride ?? netSale * platformFeeRate);
+
+  // Tax: explicit lines win, then a context the engine resolves, then the flat
+  // platform rate. The last branch is what every pre-rule-engine caller gets,
+  // so no existing figure moves.
+  const resolvedLines: TaxLine[] | undefined =
+    taxLines ??
+    (taxContext ? assessTax({ ...taxContext, netSale, fees }).lines : undefined);
+  const taxes = resolvedLines
+    ? money(
+        resolvedLines
+          .filter((line) => line.type === "exclusive")
+          .reduce((sum, line) => sum + line.amount, 0),
+      )
+    : money(netSale * taxRate);
+  const taxIncluded = resolvedLines
+    ? money(
+        resolvedLines
+          .filter((line) => line.type === "inclusive")
+          .reduce((sum, line) => sum + line.amount, 0),
+      )
+    : 0;
+
   const insurancePremium = money(Math.max(0, insurance));
   const providerShare = money(Math.min(insurancePremium, Math.max(0, insuranceProviderShare)));
   const insuranceRevenue = money(insurancePremium - providerShare);
@@ -202,6 +238,8 @@ export function priceBooking({
     platformFundedDiscount: subsidy,
     netSale,
     taxes,
+    taxLines: resolvedLines,
+    taxIncluded,
     fees,
     insurance: insurancePremium,
     insuranceProviderShare: providerShare,
@@ -240,7 +278,10 @@ export function applyRefundToMoney(
     commissionAmount: current.commission,
     commissionRuleId: current.commissionRuleId,
     currency: current.currency,
+    // Keep the tax exactly as it was assessed: re-deriving a rate from the
+    // total would round-trip badly once fixed per-night levies are in the mix.
     taxRate: current.taxes / (current.netSale || 1),
+    taxLines: current.taxLines,
     feeOverride: current.fees,
     insurance: current.insurance,
     insuranceProviderShare: current.insuranceProviderShare,
@@ -574,7 +615,10 @@ export function quoteRefund({
 
   const refundableNet = money(m.netSale * refundPercent);
   const cancellationFee = money(m.netSale * feePercent);
-  // Taxes and platform fees follow the refunded share of the sale.
+  // Taxes and platform fees follow the refunded share of the sale. When the
+  // rule engine priced the booking, each line is reversed individually so the
+  // authority-by-authority reversal reconciles, not just the total.
+  const taxLinesReversed = reverseTaxLines(m.taxLines, refundPercent);
   const taxAdjustment = money((m.taxes + m.fees) * refundPercent);
   // The demo insurance premium follows the same share; the provider's cut and
   // the platform's cut of it are both unwound proportionally.
@@ -630,6 +674,7 @@ export function quoteRefund({
     refundPercent,
     cancellationFee,
     taxAdjustment,
+    taxLinesReversed,
     refundAmount,
     commissionReversed,
     insuranceRefund,

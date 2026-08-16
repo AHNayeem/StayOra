@@ -11,7 +11,7 @@ import {
   useReviewInvitations,
   useUnreadCount as useInboxUnread,
 } from "@/features/booking";
-import { supportService } from "@/features/dashboard/domain";
+import { savedSearchService, supportService } from "@/features/dashboard/domain";
 import { ACCOUNT_DATA } from "@/lib/mock/account-data";
 import { cn } from "@/lib/utils";
 
@@ -34,12 +34,21 @@ function useBadgeCounts(): Record<AccountBadgeKey, number> {
   const email = useCustomerEmail();
   const pendingReviews = useReviewInvitations().length;
   const support = useDomainValue(() => supportService.unreadForCustomer(email), [email]);
+  // Only triggered alerts badge — a search quietly being watched isn't news.
+  const searches = useDomainValue(
+    () =>
+      savedSearchService
+        .forCustomer(email)
+        .filter((search) => search.alert?.status === "triggered").length,
+    [email],
+  );
 
   return {
     wishlist,
     notifications: localNotifications + inboxUnread,
     messages: UNREAD_MESSAGES,
     reviews: pendingReviews,
+    searches,
     support,
   };
 }

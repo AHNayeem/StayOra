@@ -64,3 +64,16 @@ export {
   type AccountBadgeKey,
 } from "./nav";
 export { createCollectionStore, type CollectionStore } from "./collection-store";
+export {
+  addToBoard,
+  boardsContaining,
+  createBoard,
+  deleteBoard,
+  removeFromBoard,
+  renameBoard,
+  toggleInBoard,
+  useBoardsContaining,
+  useWishlistBoards,
+  useWishlistGroups,
+  type WishlistBoard,
+} from "./wishlist-boards";

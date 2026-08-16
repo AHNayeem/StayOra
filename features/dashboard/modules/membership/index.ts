@@ -10,10 +10,12 @@ export { subscriptionColumns } from "./columns";
 export {
   membershipKeys,
   useCancelMembership,
+  useDunningMemberships,
   useMembershipPlans,
   useMembershipSummary,
   useRefundMembership,
   useRenewMembership,
+  useRetryMembershipBilling,
   useSubscribeMember,
   useSubscriptions,
   useUpdateMembershipPlan,

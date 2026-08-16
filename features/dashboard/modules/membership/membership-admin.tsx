@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BanknoteArrowDown, Check, Download, RefreshCw, X } from "lucide-react";
+import { BanknoteArrowDown, Check, CreditCard, Download, RefreshCw, TriangleAlert, X } from "lucide-react";
 import { ResourceListView, RowActions } from "../../crud";
 import {
   Alert,
@@ -25,11 +25,17 @@ import { exportToCsv } from "../../lib/export-csv";
 import { formatCurrency, formatDate, formatNumber } from "../../lib/format";
 import { PERIOD_LABELS, type MembershipPlan, type MembershipSubscription } from "../../domain/membership";
 import {
+  DUNNING_RETRY_DAYS,
+  MAX_DUNNING_ATTEMPTS,
+} from "../../domain/membership-billing";
+import {
   useCancelMembership,
+  useDunningMemberships,
   useMembershipPlans,
   useMembershipSummary,
   useRefundMembership,
   useRenewMembership,
+  useRetryMembershipBilling,
   useSubscriptions,
   useUpdateMembershipPlan,
 } from "./hooks";
@@ -49,6 +55,7 @@ export function MembershipAdmin() {
   const cancel = useCancelMembership();
   const renew = useRenewMembership();
   const refund = useRefundMembership();
+  const retry = useRetryMembershipBilling();
   const [editing, setEditing] = useState<MembershipPlan | null>(null);
 
   const list = useSubscriptions((row) => (
@@ -65,6 +72,21 @@ export function MembershipAdmin() {
           >
             Simulate renewal
           </DropdownItem>
+          {row.dunning && (
+            <DropdownItem
+              icon={<CreditCard />}
+              onSelect={async () => {
+                const outcome = await retry.mutateAsync(row.id);
+                if (outcome?.result === "renewed") {
+                  toast.success(`Charge cleared — ${row.planName} renewed`);
+                } else {
+                  toast.error("Charge declined again", { description: outcome?.message });
+                }
+              }}
+            >
+              Retry the charge
+            </DropdownItem>
+          )}
           {row.autoRenew && (
             <DropdownItem
               icon={<X />}
@@ -116,11 +138,14 @@ export function MembershipAdmin() {
 
   return (
     <div className="flex flex-col gap-5">
-      <Alert tone="info" title="Renewal is simulated">
-        There is no recurring billing in this prototype. &ldquo;Simulate renewal&rdquo;
-        advances a subscription by one period and records the revenue, so the whole
-        lifecycle can be demonstrated without a payment processor.
+      <Alert tone="info" title="Billing runs on a schedule, and it is simulated">
+        The <code>membership:renew</code> job bills every subscription whose period has
+        ended and records the revenue. A declined charge is deterministic, not random:
+        it enters dunning, is retried {MAX_DUNNING_ATTEMPTS} times {DUNNING_RETRY_DAYS} days
+        apart, and lapses if it never clears. No payment processor is contacted.
       </Alert>
+
+      <DunningPanel />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
@@ -380,5 +405,76 @@ function PlanPricingForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * Memberships whose renewal charge was declined and hasn't cleared yet.
+ *
+ * Recurring revenue at risk is the one number worth interrupting the page for:
+ * every row here is a member who still wants the plan but whose card failed, and
+ * a single retry after they update it recovers the whole subscription.
+ */
+function DunningPanel() {
+  const dunning = useDunningMemberships();
+  const retry = useRetryMembershipBilling();
+  const rows = dunning.data ?? [];
+
+  if (rows.length === 0) return null;
+
+  const atRisk = rows.reduce((sum, row) => sum + row.price, 0);
+
+  return (
+    <Panel>
+      <PanelHeader
+        title="Renewals failing to bill"
+        description={`${formatNumber(rows.length)} membership${rows.length === 1 ? "" : "s"} · ${formatCurrency(atRisk, rows[0]?.currency ?? "USD")} of recurring revenue at risk`}
+      />
+      <PanelBody>
+        <ul className="flex flex-col gap-3">
+          {rows.map((row) => (
+            <li
+              key={row.id}
+              className="flex flex-wrap items-start justify-between gap-3 rounded-field border border-line p-3"
+            >
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
+                  <TriangleAlert className="size-4 text-warning" aria-hidden="true" />
+                  {row.customerName}
+                  <Badge variant="neutral">{row.planName}</Badge>
+                  <span className="text-xs font-normal text-muted">
+                    attempt {row.dunning?.attempts ?? 0} of {MAX_DUNNING_ATTEMPTS}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted">
+                  {row.dunning?.reason}
+                  {row.dunning?.nextRetryAt
+                    ? ` · retrying ${formatDate(row.dunning.nextRetryAt)} (every ${DUNNING_RETRY_DAYS} days)`
+                    : " · no attempts left"}
+                </p>
+              </div>
+              <Can anyPermission={["finance:update", "customers:update"]}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  leftIcon={<CreditCard className="size-4" />}
+                  loading={retry.isPending}
+                  onClick={async () => {
+                    const outcome = await retry.mutateAsync(row.id);
+                    if (outcome?.result === "renewed") {
+                      toast.success(`Charge cleared — ${row.planName} renewed`);
+                    } else {
+                      toast.error("Declined again", { description: outcome?.message });
+                    }
+                  }}
+                >
+                  Retry the charge
+                </Button>
+              </Can>
+            </li>
+          ))}
+        </ul>
+      </PanelBody>
+    </Panel>
   );
 }

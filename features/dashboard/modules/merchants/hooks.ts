@@ -2,6 +2,7 @@
 
 import { type ReactNode } from "react";
 import {
+  calendarSyncService,
   catalogueService,
   merchantService,
   type BankDetailsInput,
@@ -19,6 +20,7 @@ import {
   type PropertyInput,
   type RegisterMerchantInput,
   type StaffInput,
+  type SyncOutcome,
   type UploadDocumentInput,
 } from "@/features/dashboard/domain";
 import { useMutation, useQuery } from "../../data";
@@ -313,6 +315,35 @@ export function useCompleteChannelSync() {
   >({
     mutationFn: ({ id, propertyId, status, message }) =>
       merchantService.completeChannelSync(id, propertyId, { status, message }, actor, scope),
+    invalidateKeys: MERCHANT_KEYS,
+  });
+}
+
+/**
+ * Pull the property's external calendar now. Unlike `useCompleteChannelSync`
+ * (which only settles the status), this actually imports the blocks and drops
+ * availability — see `domain/calendar-sync.ts`.
+ */
+export function useSyncCalendar() {
+  const actor = useDomainActor();
+  return useMutation<SyncOutcome, { id: string; propertyId: string }>({
+    mutationFn: ({ id, propertyId }) => calendarSyncService.sync(id, propertyId, actor),
+    invalidateKeys: MERCHANT_KEYS,
+  });
+}
+
+export function usePauseCalendarSync() {
+  const actor = useDomainActor();
+  return useMutation<unknown, { id: string; propertyId: string }>({
+    mutationFn: ({ id, propertyId }) => calendarSyncService.pause(id, propertyId, actor),
+    invalidateKeys: MERCHANT_KEYS,
+  });
+}
+
+export function useResumeCalendarSync() {
+  const actor = useDomainActor();
+  return useMutation<SyncOutcome, { id: string; propertyId: string }>({
+    mutationFn: ({ id, propertyId }) => calendarSyncService.resume(id, propertyId, actor),
     invalidateKeys: MERCHANT_KEYS,
   });
 }

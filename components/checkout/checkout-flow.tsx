@@ -13,6 +13,7 @@ import {
   Sparkles,
   Tag,
   UserCheck,
+  Users,
   X,
 } from "lucide-react";
 import type { Listing } from "@/types/catalog";
@@ -27,7 +28,11 @@ import { lockFx } from "@/features/dashboard/domain/fx";
 import {
   DEMO_CUSTOMER,
   REDEEM_STEP,
+  SPLIT_WINDOW_HOURS,
+  createSplit,
+  divideTotal,
   isPerNight,
+  money as roundMoney,
   nightsBetween,
   track,
   unitNoun,
@@ -61,6 +66,7 @@ import { Container } from "@/components/ui/container";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Stepper } from "@/components/ui/stepper";
 import { controlClasses } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import { OrderSummary } from "./order-summary";
 import { AddOnsPicker } from "./add-ons-picker";
 import { InsurancePicker } from "./insurance-picker";
@@ -164,6 +170,8 @@ export function CheckoutFlow({
   const [promoCode, setPromoCode] = useState<string | undefined>();
   const [points, setPoints] = useState(0);
   const [payLater, setPayLater] = useState(false);
+  /** Group booking: the organiser pays their share now, the rest are invited. */
+  const [splitWith, setSplitWith] = useState<{ name: string; email: string }[]>([]);
 
   const nights = perNight ? nightsBetween(checkIn, checkOut) : 1;
   const addOnScale = { nights: Math.max(1, nights), guests, units };
@@ -234,7 +242,26 @@ export function CheckoutFlow({
   const submitting = useRef(false);
 
   const payment = useMockPayment();
-  const plan = payLater ? depositPlan(quote.money.total, checkIn) : null;
+  // A split and a deposit are mutually exclusive: the organiser's share is
+  // already a part-payment, and stacking a deposit on top of it would leave two
+  // different answers to "what is still owed".
+  const splitParticipants = splitWith.filter((p) => p.email.trim());
+  const splitShares = splitParticipants.length
+    ? divideTotal(quote.money.total, [
+        { name: travelers[0]?.fullName || user?.name || "You", email },
+        ...splitParticipants,
+      ])
+    : [];
+  const organiserShare = splitShares[0]?.amountUsd ?? 0;
+  const plan: Booking["paymentPlan"] | null = splitShares.length
+    ? {
+        kind: "split",
+        depositAmount: organiserShare,
+        balanceAmount: roundMoney(quote.money.total - organiserShare),
+      }
+    : payLater
+      ? depositPlan(quote.money.total, checkIn)
+      : null;
   const amountNow = plan ? plan.depositAmount : quote.money.total;
 
   // Release the hold if the traveller leaves before confirming. The unmount
@@ -353,12 +380,36 @@ export function CheckoutFlow({
         paymentPlan: plan ?? undefined,
         requestOnly,
       });
+      // The booking exists and holds the inventory, so the group can settle
+      // afterwards without the room being at risk while they do.
+      if (splitShares.length > 1) {
+        const split = createSplit({
+          bookingId: booking.id,
+          bookingRef: booking.reference,
+          productTitle: listing.title,
+          organiserName: lead?.fullName || user?.name || "You",
+          organiserEmail: email,
+          totalUsd: booking.money.total,
+          currency: booking.money.currency,
+          participants: splitShares.map(({ participant, amountUsd }) => ({
+            name: participant.name,
+            email: participant.email,
+            amountUsd,
+          })),
+        });
+        toast.success("Booking confirmed — split requests sent", {
+          description: `${split.shares.length - 1} payment link${
+            split.shares.length === 2 ? "" : "s"
+          } sent. Track it under Account → Bookings.`,
+        });
+      } else {
+        toast.success(requestOnly ? "Request submitted" : "Booking confirmed!", {
+          description: `Reference ${booking.reference}`,
+        });
+      }
       setConfirmed(booking);
       setStep(3);
       scrollTop();
-      toast.success(requestOnly ? "Request submitted" : "Booking confirmed!", {
-        description: `Reference ${booking.reference}`,
-      });
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Something went wrong finishing your booking.";
@@ -768,19 +819,110 @@ export function CheckoutFlow({
                     <input
                       type="checkbox"
                       checked={payLater}
+                      disabled={splitShares.length > 1}
                       onChange={(event) => setPayLater(event.target.checked)}
-                      className="mt-0.5 size-4 rounded border-line text-primary focus:ring-primary"
+                      className="mt-0.5 size-4 rounded border-line text-primary focus:ring-primary disabled:opacity-40"
                     />
                     <span className="text-sm">
                       <span className="font-medium text-ink">Reserve now, pay later</span>
                       <span className="mt-0.5 block text-muted">
-                        Pay a {money(depositPlan(quote.money.total, checkIn).depositAmount)}{" "}
-                        deposit today; the balance of{" "}
-                        {money(depositPlan(quote.money.total, checkIn).balanceAmount)} is due{" "}
-                        {date(depositPlan(quote.money.total, checkIn).balanceDueAt!)}.
+                        {splitShares.length > 1
+                          ? "Not available on a split booking — your own share is already the part-payment."
+                          : `Pay a ${money(depositPlan(quote.money.total, checkIn).depositAmount)} deposit today; the balance of ${money(depositPlan(quote.money.total, checkIn).balanceAmount)} is due ${date(depositPlan(quote.money.total, checkIn).balanceDueAt!)}.`}
                       </span>
                     </span>
                   </label>
+
+                  {/* Split the bill. The organiser pays their own share now and
+                      the booking is confirmed immediately — the room is never at
+                      risk while the group settles up. */}
+                  <div className="mt-3 rounded-field border border-line p-3.5">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <p className="text-sm">
+                        <span className="flex items-center gap-1.5 font-medium text-ink">
+                          <Users className="size-4 text-primary" aria-hidden="true" />
+                          Split with other travellers
+                        </span>
+                        <span className="mt-0.5 block text-muted">
+                          Everyone gets a link for their own share. You pay yours today.
+                        </span>
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSplitWith((prev) => [...prev, { name: "", email: "" }])}
+                      >
+                        Add person
+                      </Button>
+                    </div>
+
+                    {splitWith.length > 0 && (
+                      <ul className="mt-3 flex flex-col gap-2">
+                        {splitWith.map((person, index) => (
+                          <li key={index} className="flex flex-wrap items-end gap-2">
+                            <Input
+                              label={index === 0 ? "Name" : undefined}
+                              aria-label={`Name of person ${index + 2}`}
+                              placeholder="Sam Traveller"
+                              value={person.name}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setSplitWith((prev) =>
+                                  prev.map((p, i) => (i === index ? { ...p, name: value } : p)),
+                                );
+                              }}
+                              wrapperClassName="min-w-40 flex-1"
+                            />
+                            <Input
+                              label={index === 0 ? "Email" : undefined}
+                              aria-label={`Email of person ${index + 2}`}
+                              type="email"
+                              placeholder="sam@example.com"
+                              value={person.email}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setSplitWith((prev) =>
+                                  prev.map((p, i) => (i === index ? { ...p, email: value } : p)),
+                                );
+                              }}
+                              wrapperClassName="min-w-48 flex-1"
+                            />
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Remove person ${index + 2}`}
+                              onClick={() =>
+                                setSplitWith((prev) => prev.filter((_, i) => i !== index))
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {splitShares.length > 1 && (
+                      <dl className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
+                        {splitShares.map(({ participant, amountUsd }, index) => (
+                          <div key={index} className="flex justify-between gap-3">
+                            <dt className="truncate text-muted">
+                              {index === 0
+                                ? `You (${participant.name || "organiser"})`
+                                : participant.name || participant.email}
+                            </dt>
+                            <dd className="font-medium text-ink">{money(amountUsd)}</dd>
+                          </div>
+                        ))}
+                        <p className="pt-1 text-xs text-muted">
+                          Shares are equal to the cent; any odd penny is yours. Unpaid shares
+                          after {SPLIT_WINDOW_HOURS} hours come back to you to cover.
+                        </p>
+                      </dl>
+                    )}
+                  </div>
                 </Section>
               )}
 
@@ -891,11 +1033,15 @@ export function CheckoutFlow({
           {plan && (
             <div className="mt-3 rounded-card border border-primary/25 bg-primary-50/60 p-4 text-sm">
               <p className="flex justify-between font-medium text-ink">
-                <span>Due today</span>
+                <span>{plan.kind === "split" ? "Your share today" : "Due today"}</span>
                 <span>{money(plan.depositAmount)}</span>
               </p>
               <p className="mt-1 flex justify-between text-muted">
-                <span>Balance {date(plan.balanceDueAt!)}</span>
+                <span>
+                  {plan.kind === "split"
+                    ? `${splitShares.length - 1} other${splitShares.length === 2 ? "" : "s"} to pay`
+                    : `Balance ${date(plan.balanceDueAt!)}`}
+                </span>
                 <span>{money(plan.balanceAmount)}</span>
               </p>
             </div>

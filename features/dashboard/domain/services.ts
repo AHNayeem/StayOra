@@ -59,6 +59,7 @@ import {
 import { MERCHANTS } from "./seed";
 import { DEMO_CUSTOMER_PHONE } from "./seed-extra";
 import { commitHold, releaseForBooking } from "./inventory";
+import { cancelSplit } from "./split-payment";
 import { loyaltyService } from "./engagement";
 import {
   commissionRuleStore,
@@ -130,6 +131,7 @@ import { resetRoleRegistry } from "../rbac/role-registry";
 import { resetAllFlags } from "../feature-flags/flag-store";
 import { clearAllModuleState } from "../crud/module-store";
 import { resetPlatformConfig } from "./platform-config";
+import { resetTaxRules } from "./tax";
 import { resetLocaleSettings } from "@/features/i18n/locale-settings";
 import { recordRefund as recordPaymentRefund } from "./payments";
 import { track } from "./telemetry";
@@ -315,6 +317,11 @@ export interface CreateBookingInput {
   productKind: ProductKind;
   productTitle: string;
   destination: string;
+  /**
+   * ISO-2 of the destination country. Decides which tax jurisdiction's rules
+   * apply; without it only `GLOBAL` rules (and the flat fallback) can match.
+   */
+  destinationCountryCode?: string;
   merchantId: string;
   customerName: string;
   customerEmail: string;
@@ -801,6 +808,19 @@ export const bookingService = {
         })
       : null;
 
+    // Needed before pricing: fixed-amount tax rules (city levies) multiply by
+    // nights and guests.
+    const nights = Math.max(
+      0,
+      Math.round(
+        (new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 86_400_000,
+      ),
+    );
+    const travellerCount = Math.max(
+      1,
+      input.travelers?.length ?? input.travelerNames?.length ?? input.stay?.guests ?? 1,
+    );
+
     const priced = priceBooking({
       base: saleBase,
       markup: b2b ? b2b.markup : 0,
@@ -816,6 +836,13 @@ export const bookingService = {
         : undefined,
       insurance: insuranceQuote?.premium ?? 0,
       insuranceProviderShare: insuranceQuote?.providerShare ?? 0,
+      taxContext: {
+        productKind: input.productKind,
+        countryCode: input.destinationCountryCode,
+        nights,
+        units: Math.max(1, input.quantity),
+        guests: travellerCount,
+      },
     });
 
     // --- B2B credit limit ----------------------------------------------------
@@ -830,12 +857,6 @@ export const bookingService = {
       }
     }
 
-    const nights = Math.max(
-      0,
-      Math.round(
-        (new Date(input.endAt).getTime() - new Date(input.startAt).getTime()) / 86_400_000,
-      ),
-    );
     const now = new Date().toISOString();
     const id = nextId("bkg");
     const booking: Booking = {
@@ -1188,6 +1209,9 @@ function applyLifecycleSideEffects(result: BookingActionResult): void {
   // A booking that will never be delivered gives its units straight back.
   if (to === "cancelled" || to === "failed" || to === "refunded") {
     releaseForBooking(booking.id);
+    // Nobody should be asked to pay their share of a booking that no longer
+    // stands, so an open split closes with it.
+    cancelSplit(booking.id);
   }
 
   // --- loyalty ----------------------------------------------------------
@@ -3548,6 +3572,7 @@ export const platformService = {
     resetAllFlags();
     clearAllModuleState();
     resetPlatformConfig();
+    resetTaxRules();
     resetLocaleSettings();
     recordAudit({
       actor,
@@ -3556,7 +3581,7 @@ export const platformService = {
       entityId: "demo_data",
       entityLabel: "Demo dataset",
       summary:
-        "Reset all demo data, roles, feature flags, module records, platform settings and localization to the seeded state",
+        "Reset all demo data, roles, feature flags, module records, platform settings, tax rules and localization to the seeded state",
     });
   },
 

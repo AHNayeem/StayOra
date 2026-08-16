@@ -46,10 +46,15 @@ import type {
 } from "@/features/dashboard/domain/types";
 import {
   bookingService,
+  availableBookingActions,
   commissionRateFor,
+  getCancellationPolicy,
+  getState as getDomainState,
   money as roundMoney,
   priceB2B,
   priceBooking,
+  quoteRefund,
+  toCountryCode,
 } from "@/features/dashboard/domain";
 import { MERCHANTS } from "@/features/dashboard/domain/seed";
 import { BOOKING_CONFIG } from "@/constants/detail";
@@ -157,6 +162,7 @@ export function buildListingItem(input: ListingItemInput): TripItem {
     title: listing.title,
     image: listing.image,
     destination: listing.location.city ?? listing.location.label,
+    countryCode: toCountryCode(listing.location.countryCode, listing.location.country),
     merchantId: merchant.id,
     merchantName: merchant.name,
     unitPriceUsd: listing.price.amount,
@@ -363,6 +369,15 @@ export function priceTrip(input: PriceTripInput): TripPricing {
       markup,
       discount,
       commissionRate: rate,
+      // Each leg is taxed in its own jurisdiction — a Dubai hotel and a Paris
+      // tour on the same trip carry different tax lines.
+      taxContext: {
+        productKind: item.kind,
+        countryCode: item.countryCode,
+        nights: Math.max(1, item.units),
+        units: Math.max(1, item.quantity),
+        guests: Math.max(1, item.travelers),
+      },
     });
 
     return {
@@ -583,6 +598,7 @@ export async function createTripBooking(
         productKind: item.kind,
         productTitle: item.title,
         destination: item.destination,
+        destinationCountryCode: item.countryCode,
         merchantId: item.merchantId,
         customerName: customer.name,
         customerEmail: customer.email,
@@ -816,6 +832,154 @@ export async function cancelTripComponent(
     refundReason: "customer_cancellation",
   });
   return { booking: refunded.booking, refundId: refunded.refund?.id };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Whole-trip cancellation                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** What cancelling one leg of a trip would return, before anything is done. */
+export interface TripLegQuote {
+  bookingId: string;
+  reference: string;
+  title: string;
+  kind: BookingVertical;
+  /** False when the leg is already cancelled, refunded or failed. */
+  cancellable: boolean;
+  /** Why not, when it isn't — the policy's own words. */
+  reason?: string;
+  refundUsd: number;
+  cancellationFeeUsd: number;
+  policyLabel: string;
+}
+
+export interface TripCancellationQuote {
+  legs: TripLegQuote[];
+  cancellableCount: number;
+  totalRefundUsd: number;
+  totalFeeUsd: number;
+  /** Legs that can't be cancelled and will be left exactly as they are. */
+  untouched: TripLegQuote[];
+}
+
+/**
+ * Quote cancelling every leg of a trip at once.
+ *
+ * Each leg is quoted against **its own** supplier's policy — a non-refundable
+ * tour beside a flexible hotel returns two different numbers, and the traveller
+ * sees both before committing. That is the whole difficulty of multi-supplier
+ * refunds, and hiding it behind one figure would misrepresent what they get
+ * back. Pure: nothing is cancelled, nothing is written.
+ */
+export function quoteTripCancellation(
+  trip: TripBooking,
+  at = new Date().toISOString(),
+): TripCancellationQuote {
+  const bookings = getDomainState().bookings;
+  const legs: TripLegQuote[] = trip.components.map((component) => {
+    const booking = bookings.find((b) => b.id === component.bookingId);
+    const base: TripLegQuote = {
+      bookingId: component.bookingId,
+      reference: component.reference,
+      title: component.title,
+      kind: component.kind,
+      cancellable: false,
+      refundUsd: 0,
+      cancellationFeeUsd: 0,
+      policyLabel: "—",
+    };
+
+    if (!booking) {
+      return { ...base, reason: "This booking is no longer on file." };
+    }
+    const canCancel = availableBookingActions(booking).some((a) => a.id === "cancel");
+    if (!canCancel) {
+      return {
+        ...base,
+        reason: `Already ${booking.status.replace(/_/g, " ")}.`,
+        policyLabel: getCancellationPolicy(booking.cancellationPolicyId).label,
+      };
+    }
+
+    const quote = quoteRefund({ booking, reason: "customer_cancellation", at });
+    return {
+      ...base,
+      cancellable: true,
+      reason: quote.reason,
+      refundUsd: quote.refundAmount,
+      cancellationFeeUsd: quote.cancellationFee,
+      policyLabel: quote.policy.label,
+    };
+  });
+
+  const cancellable = legs.filter((leg) => leg.cancellable);
+  return {
+    legs,
+    cancellableCount: cancellable.length,
+    totalRefundUsd: roundMoney(cancellable.reduce((sum, leg) => sum + leg.refundUsd, 0)),
+    totalFeeUsd: roundMoney(cancellable.reduce((sum, leg) => sum + leg.cancellationFeeUsd, 0)),
+    untouched: legs.filter((leg) => !leg.cancellable),
+  };
+}
+
+export interface TripCancellationResult {
+  cancelled: { bookingId: string; reference: string; title: string; refundId?: string }[];
+  /** Legs that could not be cancelled, with the reason. */
+  skipped: { bookingId: string; title: string; reason: string }[];
+  refundIds: string[];
+}
+
+/**
+ * Cancel every cancellable leg of a trip and raise each supplier's refund.
+ *
+ * Deliberately **not atomic**, because the real world isn't: each leg is a
+ * separate contract with a separate supplier. One leg failing to cancel must not
+ * roll back the others, so every leg is attempted and the ones that couldn't be
+ * are reported rather than swallowed. That report is what the UI shows.
+ */
+export async function cancelWholeTrip(
+  trip: TripBooking,
+  note = "Whole trip cancelled by the traveller.",
+): Promise<TripCancellationResult> {
+  const result: TripCancellationResult = { cancelled: [], skipped: [], refundIds: [] };
+  // Decided by the same quote the traveller was shown, so what runs is exactly
+  // what the dialog promised — and a leg already cancelled is skipped rather
+  // than pushed at the state machine to see whether it throws.
+  const quote = quoteTripCancellation(trip);
+  const cancellable = new Map(quote.legs.map((leg) => [leg.bookingId, leg]));
+
+  for (const component of trip.components) {
+    const leg = cancellable.get(component.bookingId);
+    if (!leg?.cancellable) {
+      result.skipped.push({
+        bookingId: component.bookingId,
+        title: component.title,
+        reason: leg?.reason ?? "This booking can't be cancelled at its current stage.",
+      });
+      continue;
+    }
+    try {
+      const { refundId } = await cancelTripComponent(component.bookingId, note);
+      result.cancelled.push({
+        bookingId: component.bookingId,
+        reference: component.reference,
+        title: component.title,
+        refundId,
+      });
+      if (refundId) result.refundIds.push(refundId);
+    } catch (error) {
+      result.skipped.push({
+        bookingId: component.bookingId,
+        title: component.title,
+        reason:
+          error instanceof Error
+            ? error.message
+            : "This booking can't be cancelled at its current stage.",
+      });
+    }
+  }
+
+  return result;
 }
 
 /** Seat-count helper for flight components added from an offer. */

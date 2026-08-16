@@ -58,6 +58,7 @@ import {
   releaseHold,
   requestSupplierConfirmation,
   resolveCommission,
+  toCountryCode,
   track,
 } from "@/features/dashboard/domain";
 import type {
@@ -150,6 +151,9 @@ export function quoteCheckout(selection: CheckoutSelection): CheckoutQuote {
 
   const addOnTotal = money(selection.addOns.reduce((sum, a) => sum + a.total, 0));
   const base = money(stay.roomSubtotal + addOnTotal);
+  const stayNights = isPerNight(selection.listing.vertical)
+    ? nightsBetween(selection.checkIn, selection.checkOut)
+    : 1;
 
   const discounts: AppliedDiscount[] = [];
   const rejected: DiscountRejection[] = [];
@@ -271,6 +275,18 @@ export function quoteCheckout(selection: CheckoutSelection): CheckoutQuote {
     feeOverride: money(feeWithoutMembership * (1 - membership.serviceFeeWaiver)),
     insurance: insurance?.premium ?? 0,
     insuranceProviderShare: insurance?.providerShare ?? 0,
+    // Tax comes from the rule book for the destination's jurisdiction. With no
+    // rule for it, `assessTax` falls back to the flat platform rate.
+    taxContext: {
+      productKind: selection.listing.vertical,
+      countryCode: toCountryCode(
+        selection.listing.location.countryCode,
+        selection.listing.location.country,
+      ),
+      nights: stayNights,
+      units: selection.units,
+      guests: Math.max(1, selection.guests),
+    },
   });
 
   return {
@@ -291,9 +307,7 @@ export function quoteCheckout(selection: CheckoutSelection): CheckoutQuote {
     maxPointsRedeemable,
     available: stay.available,
     blockers: stay.blockers,
-    nights: isPerNight(selection.listing.vertical)
-      ? nightsBetween(selection.checkIn, selection.checkOut)
-      : 1,
+    nights: stayNights,
   };
 }
 
@@ -422,6 +436,10 @@ export async function confirmBooking(input: ConfirmInput): Promise<Booking> {
       productKind: listing.vertical,
       productTitle: listing.title,
       destination: listing.location.city ?? listing.location.label,
+      destinationCountryCode: toCountryCode(
+        listing.location.countryCode,
+        listing.location.country,
+      ),
       merchantId: merchant.id,
       customerName: input.customer.name,
       customerEmail: input.customer.email,

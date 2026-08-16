@@ -471,7 +471,27 @@ export function BookingDetail({ id }: { id: string }) {
                     />
                   )}
                   <MoneyRow label="Net sale" amount={m.netSale} currency={m.currency} />
-                  <MoneyRow label="Taxes" amount={m.taxes} currency={m.currency} />
+                  {/* The rules that were live when this booking was priced — a
+                      later rate change never rewrites what was charged. */}
+                  {m.taxLines?.length ? (
+                    m.taxLines.map((line) => (
+                      <MoneyRow
+                        key={line.ruleId}
+                        label={line.name}
+                        amount={line.amount}
+                        currency={m.currency}
+                        hint={
+                          line.type === "inclusive"
+                            ? "Included in the price"
+                            : (line.rate !== undefined
+                                ? `${line.rate}% of net sale`
+                                : line.detail)
+                        }
+                      />
+                    ))
+                  ) : (
+                    <MoneyRow label="Taxes" amount={m.taxes} currency={m.currency} />
+                  )}
                   <MoneyRow label="Platform fee" amount={m.fees} currency={m.currency} />
                   {m.insurance > 0 && (
                     <MoneyRow

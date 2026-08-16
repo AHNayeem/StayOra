@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Link2, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
+import { Download, Link2, Pause, Play, Plus, RefreshCw, Trash2, Unlink } from "lucide-react";
 import { toast } from "@/lib/toast";
 import { VERTICAL_LABELS } from "@/types/booking";
+import { downloadText } from "@/features/booking/documents";
 import {
   CHANNEL_PROVIDER_LABELS,
   CHANNEL_SCOPES,
@@ -11,6 +12,9 @@ import {
   CHANNEL_STATUS_LABELS,
   CHANNEL_STATUS_TONES,
   PROPERTY_STATUS_LABELS,
+  blocksForProperty,
+  calendarFeed,
+  clearBlocksForProperty,
   limitLabel,
   planAllows,
   planFor,
@@ -41,10 +45,12 @@ import { formatDate, formatDateTime, formatNumber } from "../../lib/format";
 import { channelSchema, propertySchema, type ChannelValues, type PropertyValues } from "../merchants/schemas";
 import {
   useAddProperty,
-  useCompleteChannelSync,
   useConnectChannel,
   useDisconnectChannel,
+  usePauseCalendarSync,
   useRemoveProperty,
+  useResumeCalendarSync,
+  useSyncCalendar,
 } from "../merchants/hooks";
 import { useOwnMerchant } from "./use-merchant";
 import { NoMerchantAccount, WorkspaceSkeleton } from "./no-merchant";
@@ -63,7 +69,9 @@ export function MerchantPropertiesView() {
   const [connecting, setConnecting] = useState<MerchantProperty | null>(null);
   const [removing, setRemoving] = useState<MerchantProperty | null>(null);
   const disconnect = useDisconnectChannel();
-  const completeSync = useCompleteChannelSync();
+  const syncCalendar = useSyncCalendar();
+  const pauseSync = usePauseCalendarSync();
+  const resumeSync = useResumeCalendarSync();
   const removeProperty = useRemoveProperty();
 
   if (!merchantId) return <NoMerchantAccount />;
@@ -100,9 +108,10 @@ export function MerchantPropertiesView() {
         </Alert>
       )}
 
-      <Alert tone="info" title="Channel manager connections are architectural only">
-        Connecting a property records the link a real integration would create. No request leaves
-        the browser and no inventory, rates or reservations are exchanged.
+      <Alert tone="info" title="Calendar sync is simulated, and it is real inventory">
+        No request leaves the browser: a feed is generated deterministically from your property
+        code. What it imports is not simulated — blocked nights come straight out of what this
+        platform will sell, exactly as a live channel manager would take them.
       </Alert>
 
       <section className="rounded-card border border-line bg-surface p-5 shadow-card">
@@ -175,29 +184,90 @@ export function MerchantPropertiesView() {
                       </Button>
                     ) : (
                       <>
-                        {property.channel.status === "syncing" && (
+                        {property.channel.status === "paused" ? (
                           <Button
                             size="sm"
                             variant="outline"
-                            leftIcon={<RefreshCw className="size-4" />}
-                            loading={completeSync.isPending}
+                            leftIcon={<Play className="size-4" />}
+                            loading={resumeSync.isPending}
                             onClick={() =>
-                              void completeSync
-                                .mutateAsync({
-                                  id: merchant.id,
-                                  propertyId: property.id,
-                                  status: "connected",
-                                  message: undefined,
-                                })
-                                .then(() => toast.success("Sync marked complete"))
+                              void resumeSync
+                                .mutateAsync({ id: merchant.id, propertyId: property.id })
+                                .then((outcome) =>
+                                  toast.success("Sync resumed", {
+                                    description: outcome.message,
+                                  }),
+                                )
                                 .catch((e) =>
-                                  toast.error("Couldn't update", { description: getErrorMessage(e) }),
+                                  toast.error("Couldn't resume", {
+                                    description: getErrorMessage(e),
+                                  }),
                                 )
                             }
                           >
-                            Mark sync complete
+                            Resume sync
                           </Button>
+                        ) : (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              leftIcon={<RefreshCw className="size-4" />}
+                              loading={syncCalendar.isPending}
+                              onClick={() =>
+                                void syncCalendar
+                                  .mutateAsync({ id: merchant.id, propertyId: property.id })
+                                  .then((outcome) =>
+                                    outcome.status === "error"
+                                      ? toast.error("Sync failed", {
+                                          description: outcome.message,
+                                        })
+                                      : toast.success("Calendar synced", {
+                                          description: outcome.message,
+                                        }),
+                                  )
+                                  .catch((e) =>
+                                    toast.error("Couldn't sync", {
+                                      description: getErrorMessage(e),
+                                    }),
+                                  )
+                              }
+                            >
+                              Sync now
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              leftIcon={<Pause className="size-4" />}
+                              loading={pauseSync.isPending}
+                              onClick={() =>
+                                void pauseSync
+                                  .mutateAsync({ id: merchant.id, propertyId: property.id })
+                                  .then(() =>
+                                    toast.success("Sync paused", {
+                                      description:
+                                        "Imported blocks were released back into availability.",
+                                    }),
+                                  )
+                                  .catch((e) =>
+                                    toast.error("Couldn't pause", {
+                                      description: getErrorMessage(e),
+                                    }),
+                                  )
+                              }
+                            >
+                              Pause
+                            </Button>
+                          </>
                         )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          leftIcon={<Download className="size-4" />}
+                          onClick={() => downloadFeed(merchant.id, property.id, property.name)}
+                        >
+                          Export .ics
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -206,7 +276,12 @@ export function MerchantPropertiesView() {
                           onClick={() =>
                             void disconnect
                               .mutateAsync({ id: merchant.id, propertyId: property.id })
-                              .then(() => toast.success("Disconnected"))
+                              .then(() => {
+                                clearBlocksForProperty(property.id);
+                                toast.success("Disconnected", {
+                                  description: "Imported blocks were released.",
+                                });
+                              })
                               .catch((e) =>
                                 toast.error("Couldn't disconnect", { description: getErrorMessage(e) }),
                               )
@@ -230,6 +305,8 @@ export function MerchantPropertiesView() {
                     {property.channel.message}
                   </p>
                 )}
+
+                <ImportedBlocks propertyId={property.id} />
               </li>
             ))}
           </ul>
@@ -285,6 +362,56 @@ export function MerchantPropertiesView() {
           }
         }}
       />
+    </div>
+  );
+}
+
+/** Hand the merchant the feed other channels would subscribe to. */
+function downloadFeed(merchantId: string, propertyId: string, name: string): void {
+  try {
+    downloadText(
+      `${name.toLowerCase().replace(/\W+/g, "-")}-availability.ics`,
+      calendarFeed(merchantId, propertyId),
+      "text/calendar",
+    );
+  } catch (error) {
+    toast.error("Couldn't build the feed", { description: getErrorMessage(error) });
+  }
+}
+
+/**
+ * What the last import actually took. Without this the sync is a status badge;
+ * with it, the merchant can see the nights they have lost to another channel
+ * and go and check them in the rate manager.
+ */
+function ImportedBlocks({ propertyId }: { propertyId: string }) {
+  const blocks = blocksForProperty(propertyId);
+  if (blocks.length === 0) return null;
+
+  const nights = new Set(blocks.map((b) => b.date));
+  const bySource = new Map<string, number>();
+  for (const block of blocks) {
+    bySource.set(block.summary, (bySource.get(block.summary) ?? 0) + 1);
+  }
+  const sorted = [...bySource.entries()].sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className="mt-3 rounded-field bg-subtle px-3 py-2">
+      <p className="text-xs font-medium text-ink">
+        {formatNumber(blocks.length)} blocked night
+        {blocks.length === 1 ? "" : "s"} across {nights.size} date
+        {nights.size === 1 ? "" : "s"} — held by other channels and not sellable here
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {sorted.slice(0, 4).map(([source, count]) => (
+          <Tag key={source} variant="soft">
+            {source} · {count}
+          </Tag>
+        ))}
+        <span className="self-center text-xs text-muted">
+          Next {blocks[0]?.date}
+        </span>
+      </div>
     </div>
   );
 }

@@ -38,3 +38,4 @@ export {
 export { CompareButton } from "./compare-button";
 export { CompareTray } from "./compare-tray";
 export { CompareDialog } from "./compare-dialog";
+export { SaveSearchButton, describeSearch } from "./save-search-button";

@@ -59,6 +59,11 @@ Everything the brief excludes, restated so nobody mistakes a gap for an oversigh
 ## Verification
 
 `bun run typecheck` · `npx eslint .` (0 errors) · `bun run test:domain` (338 checks) ·
-`bun run build`. The regression harness covers platform configuration, FX locking, the delivery
+`bun run build`.
+
+> A later pass closed the remaining audit items — tax rule engine, external calendar sync,
+> saved searches and price alerts, wishlist boards, recurring membership billing with dunning,
+> split payment, and the trip-level itinerary and cross-supplier refunds. See
+> [18 — Audit Implementation](./18-audit-implementation.md). The regression harness covers platform configuration, FX locking, the delivery
 lifecycle, the scheduler, waitlist and alternatives, supplier confirmation, recovery, segments and
 campaigns, period close, and localization.

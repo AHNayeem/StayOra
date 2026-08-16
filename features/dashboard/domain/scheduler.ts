@@ -14,6 +14,10 @@
  *   supplier:confirm       resolve pending supplier confirmations
  *   settlements:release    move due settlements along the payout track
  *   fx:refresh             re-quote the rate board
+ *   calendar:sync          pull external channel calendars into availability
+ *   alerts:price           re-run saved searches and notify on a price drop
+ *   membership:renew       bill due memberships, with dunning on a decline
+ *   split:chase            chase unpaid shares of a group booking
  *
  * Every run appends a {@link JobRun} with what it actually changed, so "12
  * bookings recovered" on the Cron screen is a number you can go and verify in
@@ -33,6 +37,10 @@ import { sweepWaitlist } from "./waitlist";
 import { sweepSupplierConfirmations } from "./supplier";
 import { sweepDueSettlements } from "./settlement-sweep";
 import { sweepScheduledCampaigns } from "./campaigns";
+import { sweepCalendarSync } from "./calendar-sync";
+import { sweepPriceAlerts } from "./saved-searches";
+import { sweepMembershipRenewals } from "./membership-billing";
+import { sweepSplitPayments } from "./split-payment";
 
 export type JobStatus = "active" | "paused";
 export type JobResult = "success" | "failed" | "skipped";
@@ -170,6 +178,53 @@ export const JOBS: JobDefinition[] = [
     run: () => {
       const board = fxRateBoard();
       return { affected: board.length, summary: `${board.length} currencies re-quoted` };
+    },
+  },
+  {
+    key: "split:chase",
+    name: "Split payment chasing",
+    description:
+      "Reminds people who haven't paid their share of a group booking, and closes the window when it passes.",
+    schedule: "0 */6 * * *",
+    everyMinutes: 360,
+    run: (now) => sweepSplitPayments(now),
+  },
+  {
+    key: "membership:renew",
+    name: "Membership renewals",
+    description:
+      "Bills memberships whose period has ended, and retries the ones whose charge was declined.",
+    schedule: "0 3 * * *",
+    everyMinutes: 360,
+    run: (now) => sweepMembershipRenewals(now),
+  },
+  {
+    key: "alerts:price",
+    name: "Price alerts",
+    description:
+      "Re-runs saved searches and writes to travellers whose target price has been met.",
+    schedule: "*/20 * * * *",
+    everyMinutes: 20,
+    run: (now) => sweepPriceAlerts(now),
+  },
+  {
+    key: "calendar:sync",
+    name: "External calendar sync",
+    description:
+      "Pulls each connected property's channel calendar and blocks the nights other channels have sold.",
+    schedule: "0 * * * *",
+    everyMinutes: 60,
+    run: (now) => {
+      const result = sweepCalendarSync(now);
+      const affected = result.synced + result.failed;
+      return {
+        affected,
+        summary: affected
+          ? `${result.synced} propert${result.synced === 1 ? "y" : "ies"} synced (${result.blocks} blocked nights)${
+              result.failed ? `, ${result.failed} failed` : ""
+            }`
+          : "No connection due",
+      };
     },
   },
 ];

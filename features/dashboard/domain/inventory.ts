@@ -19,7 +19,7 @@ import type { BookingVertical } from "@/types/booking";
 import { hashString } from "@/lib/random";
 import { getCancellationPolicy } from "./lifecycle";
 import { money } from "./money";
-import { getState, mutate, nextId } from "./store";
+import { getRevision, getState, mutate, nextId } from "./store";
 import type { CancellationPolicyId } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -86,6 +86,10 @@ export interface DayRate {
   allotment: number;
   /** Units already sold or held. */
   booked: number;
+  /** Units an external channel holds (`calendar-sync.ts`). */
+  blocked: number;
+  /** Which channel took them, for the calendar cell's explanation. */
+  blockedBy?: string;
   available: number;
   /** Nightly price for the room type at the *standard* plan, USD. */
   price: number;
@@ -608,6 +612,45 @@ function consumedUnits(roomTypeId: string, date: string): number {
   return getState().inventoryConsumed[overrideKey(roomTypeId, date)] ?? 0;
 }
 
+/**
+ * External blocks, indexed by `roomTypeId|date`.
+ *
+ * A rate-manager calendar renders hundreds of cells and each one asks about one
+ * night, so a linear scan of every imported block per cell is quadratic on a
+ * screen that redraws often. The index is rebuilt only when the store's revision
+ * moves, which is exactly when the blocks can have changed.
+ */
+let blockIndex: Map<string, { units: number; summary: string }> | null = null;
+let blockIndexRevision = -1;
+
+function externalBlockIndex(): Map<string, { units: number; summary: string }> {
+  const revision = getRevision();
+  if (blockIndex && blockIndexRevision === revision) return blockIndex;
+  const next = new Map<string, { units: number; summary: string }>();
+  for (const block of getState().externalBlocks) {
+    const key = overrideKey(block.roomTypeId, block.date);
+    const existing = next.get(key);
+    if (existing) existing.units += block.units;
+    else next.set(key, { units: block.units, summary: block.summary });
+  }
+  blockIndex = next;
+  blockIndexRevision = revision;
+  return next;
+}
+
+/**
+ * Units an external channel holds for one night. Written by `calendar-sync.ts`;
+ * read here so availability is one number regardless of which channel took it.
+ */
+export function blockedUnits(roomTypeId: string, date: string): number {
+  return externalBlockIndex().get(overrideKey(roomTypeId, date))?.units ?? 0;
+}
+
+/** Which channel took the night, for the calendar cell's explanation. */
+export function blockedBy(roomTypeId: string, date: string): string | undefined {
+  return externalBlockIndex().get(overrideKey(roomTypeId, date))?.summary;
+}
+
 /** One fully-resolved night: baseline + override − consumed. */
 export function dayRate(property: PropertyRef, room: RoomType, date: string): DayRate {
   const base = baseline(property, room, date);
@@ -620,13 +663,18 @@ export function dayRate(property: PropertyRef, room: RoomType, date: string): Da
   );
   const stopSell = override?.stopSell ?? base.stopSell;
   const booked = consumedUnits(room.id, date);
+  // Nights another channel has taken come out of availability exactly as our
+  // own bookings do — that is the whole point of syncing a calendar.
+  const blocked = blockedUnits(room.id, date);
 
   return {
     date,
     roomTypeId: room.id,
     allotment,
     booked,
-    available: stopSell ? 0 : Math.max(0, allotment - booked),
+    blocked,
+    blockedBy: blocked > 0 ? blockedBy(room.id, date) : undefined,
+    available: stopSell ? 0 : Math.max(0, allotment - booked - blocked),
     price: money(override?.price ?? base.price),
     stopSell,
     minStay: override?.minStay ?? plan.minStay,

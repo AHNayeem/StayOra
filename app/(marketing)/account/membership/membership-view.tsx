@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Crown, X } from "lucide-react";
+import Link from "next/link";
+import { Check, Crown, TriangleAlert, X } from "lucide-react";
 import {
+  MAX_DUNNING_ATTEMPTS,
   PERIOD_LABELS,
   benefitsFor,
   membershipAdminService,
@@ -97,6 +99,31 @@ export function MembershipView() {
               )}
             </div>
           </div>
+
+          {/* A declined renewal is the one thing a member has to act on, so it
+              sits above the benefits rather than in a history row. */}
+          {current.dunning && (
+            <div className="mt-4 flex flex-wrap items-start gap-3 rounded-field border border-warning/40 bg-warning/10 p-3">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+              <div className="min-w-0 text-sm">
+                <p className="font-medium text-ink">
+                  We couldn&apos;t take {money(current.price)} for your renewal
+                </p>
+                <p className="mt-0.5 text-xs text-body">
+                  {current.dunning.reason}{" "}
+                  {current.dunning.nextRetryAt
+                    ? `We'll try again on ${date(current.dunning.nextRetryAt)} — attempt ${current.dunning.attempts} of ${MAX_DUNNING_ATTEMPTS} so far.`
+                    : `We've stopped trying after ${current.dunning.attempts} attempts.`}
+                </p>
+                <Link
+                  href="/account/cards"
+                  className="mt-2 inline-block text-xs font-medium text-primary hover:underline"
+                >
+                  Update your card
+                </Link>
+              </div>
+            </div>
+          )}
 
           <dl className="mt-4 grid gap-3 border-t border-primary/20 pt-4 sm:grid-cols-2 lg:grid-cols-4">
             <Benefit label="Service fee" value={`${Math.round(benefits.serviceFeeWaiver * 100)}% waived`} />

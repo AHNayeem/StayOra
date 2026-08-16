@@ -17,6 +17,7 @@ import {
   Settings,
   Shield,
   Star,
+  Search,
   Ticket,
   User,
   Users,
@@ -28,6 +29,7 @@ export type AccountBadgeKey =
   | "messages"
   | "notifications"
   | "wishlist"
+  | "searches"
   | "reviews"
   | "support";
 
@@ -59,6 +61,7 @@ export const ACCOUNT_NAV: AccountNavGroup[] = [
       { label: "My flights", href: "/account/flights", icon: Plane },
       { label: "Travel history", href: "/account/history", icon: History },
       { label: "Wishlist", href: "/account/wishlist", icon: Heart, badge: "wishlist" },
+      { label: "Saved searches", href: "/account/searches", icon: Search, badge: "searches" },
       { label: "Reviews", href: "/account/reviews", icon: Star, badge: "reviews" },
     ],
   },

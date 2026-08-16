@@ -17,6 +17,7 @@
 
 import { money } from "./money";
 import { getState, mutate, nextId, nextReference } from "./store";
+import type { MembershipDunning } from "./membership-billing";
 
 // ---------------------------------------------------------------------------
 // Plans
@@ -90,6 +91,11 @@ export interface MembershipSubscription {
   /** Lifetime revenue from this subscription, net of refunds. */
   lifetimeRevenue: number;
   refunded: number;
+  /**
+   * Set while a renewal charge is failing (`membership-billing.ts`). Cleared the
+   * moment one succeeds, so its presence means "currently failing to bill".
+   */
+  dunning?: MembershipDunning;
 }
 
 export const PERIOD_LABELS: Record<BillingPeriod, string> = {

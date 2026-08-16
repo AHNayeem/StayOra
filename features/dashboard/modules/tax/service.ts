@@ -1,25 +1,14 @@
-import { createStubService } from "../../crud";
-import type { TaxRule } from "./types";
-import type { TaxFormValues } from "./schemas";
-import { TAXES_SEED } from "./data";
+/**
+ * Tax rules data source.
+ *
+ * Delegates to the domain's `taxRuleService`, which is the same rule book the
+ * money engine reads at quote time. It used to be a `createStubService` with
+ * its own array, which is why editing a rate here changed nothing a customer
+ * paid — see `domain/tax.ts`.
+ */
+import { taxRuleService } from "@/features/dashboard/domain";
 
-/** Tax rules configuration data source (in-memory stub; repository-ready). */
-export const taxesService = createStubService<TaxRule, TaxFormValues>({
-  seed: TAXES_SEED,
-  getId: (row) => row.id,
-  searchFields: ["name", "region", "category"],
-  idPrefix: "tax",
-  applyCreate: (input, id) => ({
-    ...input,
-    id,
-    updatedAt: new Date().toISOString(),
-  }),
-  applyUpdate: (existing, input) => ({
-    ...existing,
-    ...input,
-    updatedAt: new Date().toISOString(),
-  }),
-});
+export const taxesService = taxRuleService;
 
 export const taxKeys = {
   all: ["finance", "tax"] as const,

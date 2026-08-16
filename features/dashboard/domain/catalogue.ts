@@ -238,6 +238,11 @@ function staticFromListing(listing: Listing): CatalogueStatic {
   };
 }
 
+/** Every marketing listing in one vertical. */
+export function listingsFor(vertical: BookingVertical): Listing[] {
+  return BY_VERTICAL[vertical] ?? [];
+}
+
 let seededStatics: CatalogueStatic[] | null = null;
 
 /** Every marketing listing, as a catalogue record. Built once, then cached. */

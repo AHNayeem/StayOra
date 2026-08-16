@@ -59,6 +59,9 @@ import type { JobState } from "./scheduler";
 import type { RecoveryLead } from "./recovery";
 import type { WaitlistEntry } from "./waitlist";
 import type { SupplierConfirmation } from "./supplier";
+import type { ExternalBlock } from "./calendar-sync";
+import type { SavedSearch } from "./saved-searches";
+import type { SplitPayment } from "./split-payment";
 import type { FinancePeriod } from "./finance-periods";
 import { seedCampaigns, type MarketingCampaign } from "./campaigns";
 import { buildDisputes } from "./seed-disputes";
@@ -152,8 +155,17 @@ export interface DomainState {
   reviewInvitations: string[];
   /** Travellers waiting for sold-out dates (`waitlist.ts`). */
   waitlist: WaitlistEntry[];
+  /** Saved searches and the price alerts hanging off them. */
+  savedSearches: SavedSearch[];
+  /** Group bookings being paid by more than one person (`split-payment.ts`). */
+  splitPayments: SplitPayment[];
   /** Supplier acknowledgement per booking (`supplier.ts`). */
   supplierConfirmations: SupplierConfirmation[];
+  /**
+   * Nights an external channel holds, imported by `calendar-sync.ts`. They come
+   * out of availability exactly as a booking does.
+   */
+  externalBlocks: ExternalBlock[];
   /** Closed accounting periods and their frozen figures (`finance-periods.ts`). */
   financePeriods: FinancePeriod[];
   /** Marketing campaigns and their simulated sends (`campaigns.ts`). */
@@ -215,7 +227,10 @@ function freshState(): DomainState {
     recoveryLeads: [],
     reviewInvitations: [],
     waitlist: [],
+    savedSearches: [],
+    splitPayments: [],
     supplierConfirmations: [],
+    externalBlocks: [],
     financePeriods: [],
     marketingCampaigns: seedCampaigns(),
     sequence: 1,

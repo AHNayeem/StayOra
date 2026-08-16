@@ -42,6 +42,8 @@ export * from "./membership";
 export * from "./advertising";
 export * from "./revenue-management";
 export * from "./inventory";
+export * from "./tax";
+export { taxRuleService } from "./tax-service";
 export * from "./payments";
 export * from "./engagement";
 export * from "./support";
@@ -228,5 +230,76 @@ export type {
   SegmentDefinition,
   SegmentMember,
 } from "./campaigns";
+export {
+  SYNC_EVERY_MINUTES,
+  SYNC_HORIZON_DAYS,
+  blocksForMerchant,
+  blocksForProperty,
+  calendarFeed,
+  calendarSyncService,
+  clearBlocksForProperty,
+  isSyncDue,
+  isSyncable,
+  listingsForProperty,
+  runCalendarSync,
+  sweepCalendarSync,
+} from "./calendar-sync";
+export type { ExternalBlock, SyncOutcome } from "./calendar-sync";
+export {
+  clearPriceAlert,
+  dropPercent,
+  removeSavedSearch,
+  saveSearch,
+  savedSearchService,
+  savedSearchesFor,
+  setAlertStatus,
+  setPriceAlert,
+  sweepPriceAlerts,
+} from "./saved-searches";
+export type {
+  PriceAlert,
+  PriceAlertStatus,
+  SaveSearchInput,
+  SavedSearch,
+  SavedSearchQuery,
+} from "./saved-searches";
+export {
+  DUNNING_RETRY_DAYS,
+  MAX_DUNNING_ATTEMPTS,
+  billRenewal,
+  dueForBilling,
+  inDunning,
+  membershipBillingService,
+  retryBilling,
+  sweepMembershipRenewals,
+} from "./membership-billing";
+export type { BillingOutcome, MembershipDunning } from "./membership-billing";
+export {
+  SPLIT_WINDOW_HOURS,
+  cancelSplit,
+  collectedUsd,
+  coverRemaining,
+  createSplit,
+  divideTotal,
+  getSplit,
+  outstandingUsd,
+  payShare,
+  remindOutstanding,
+  shareByToken,
+  shareHref,
+  splitForBooking,
+  splitPaymentService,
+  splitsFor,
+  sweepSplitPayments,
+} from "./split-payment";
+export type {
+  CreateSplitInput,
+  PayShareResult,
+  SplitParticipantInput,
+  SplitPayment,
+  SplitShare,
+  SplitShareStatus,
+  SplitStatus,
+} from "./split-payment";
 export { cheaperAlternatives, suggestAlternativeDates } from "./alternatives";
 export type { AlternativeDate, AlternativeSearch } from "./alternatives";

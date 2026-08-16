@@ -46,6 +46,9 @@ export function OrderSummary({
   const { money, date, currency, fx } = useLocale();
   const vertical = VERTICALS[listing.vertical];
   const perNight = quote.nights > 0 && quote.stay.nights.length > 1;
+  const taxLines = quote.money.taxLines ?? [];
+  const chargedTaxLines = taxLines.filter((line) => line.type === "exclusive");
+  const includedTax = quote.money.taxIncluded ?? 0;
 
   return (
     <div className="rounded-panel border border-line bg-surface p-5 shadow-card">
@@ -125,10 +128,34 @@ export function OrderSummary({
             </div>
           ))}
 
-          <Row label={`Taxes (${Math.round((quote.money.taxes / (quote.money.netSale || 1)) * 100)}%)`}>
-            {money(quote.money.taxes)}
-          </Row>
+          {/* Tax, rule by rule. A destination with several authorities (VAT plus
+              a city levy) is shown as several lines, which is what the
+              traveller sees on the property's own bill. */}
+          {chargedTaxLines.length > 0 ? (
+            chargedTaxLines.map((line) => (
+              <Row
+                key={line.ruleId}
+                label={
+                  line.rate !== undefined
+                    ? `${line.name} (${line.rate}%)`
+                    : line.detail
+                      ? `${line.name} (${line.detail})`
+                      : line.name
+                }
+              >
+                {money(line.amount)}
+              </Row>
+            ))
+          ) : (
+            <Row label="Taxes">{money(quote.money.taxes)}</Row>
+          )}
           <Row label="Service fee">{money(quote.money.fees)}</Row>
+          {includedTax > 0 && (
+            <p className="text-xs text-muted">
+              Price includes {money(includedTax)} of tax already collected by the
+              property.
+            </p>
+          )}
 
           <div className="mt-1 flex items-center justify-between border-t border-line pt-3 text-base">
             <span className="font-semibold text-ink">Total</span>

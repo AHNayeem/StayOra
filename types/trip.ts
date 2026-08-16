@@ -107,6 +107,8 @@ export interface TripItem {
   image: string;
   /** City the product is delivered in. */
   destination: string;
+  /** ISO-2 of that city's country — decides which tax jurisdiction applies. */
+  countryCode?: string;
   /** Provider that owns this component — preserved through to booking. */
   merchantId: string;
   merchantName: string;

@@ -12,7 +12,15 @@ import { labelMap, statusOptions } from "../../lib/status";
 import { exportToCsv } from "../../lib/export-csv";
 import { useDeleteTax, useSetTaxStatus, useTaxes } from "./hooks";
 import { TaxForm } from "./form";
-import { TAX_STATUSES, TAX_TYPES, type TaxRule } from "./types";
+import { TaxRuleCheck } from "./rule-check";
+import {
+  TAX_BASIS_LABELS,
+  TAX_STATUSES,
+  TAX_TYPES,
+  isPercentageBasis,
+  jurisdictionLabel,
+  type TaxRule,
+} from "./types";
 
 const statusLabel = labelMap(TAX_STATUSES);
 const typeLabel = labelMap(TAX_TYPES);
@@ -22,6 +30,9 @@ export function TaxList() {
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<TaxRule | null>(null);
   const [deleting, setDeleting] = useState<TaxRule | null>(null);
+  // Bumped after every mutation so the rule-check panel re-reads the rule book.
+  const [revision, setRevision] = useState(0);
+  const bump = () => setRevision((n) => n + 1);
   const del = useDeleteTax();
   const setStatus = useSetTaxStatus();
 
@@ -39,10 +50,12 @@ export function TaxList() {
             <DropdownItem
               icon={active ? <PowerOff /> : <Power />}
               onSelect={() =>
-                void setStatus.mutateAsync({
-                  id: row.id,
-                  status: active ? "inactive" : "active",
-                })
+                void setStatus
+                  .mutateAsync({
+                    id: row.id,
+                    status: active ? "inactive" : "active",
+                  })
+                  .then(bump)
               }
             >
               {active ? "Disable" : "Enable"}
@@ -61,20 +74,26 @@ export function TaxList() {
   const closeForm = () => {
     setCreating(false);
     setEditing(null);
+    bump();
   };
 
   const confirmDelete = async () => {
     if (!deleting) return;
     await del.mutateAsync(deleting.id);
     setDeleting(null);
+    bump();
   };
 
   const handleExport = () => {
     exportToCsv<TaxRule>("tax-rules", list.rows, [
       { header: "Rule", value: (r) => r.name },
-      { header: "Region", value: (r) => r.region },
+      { header: "Jurisdiction", value: (r) => jurisdictionLabel(r.region) },
       { header: "Applies to", value: (r) => r.category },
-      { header: "Rate", value: (r) => `${r.rate}%` },
+      { header: "Charged on", value: (r) => TAX_BASIS_LABELS[r.basis] },
+      {
+        header: "Charge",
+        value: (r) => (isPercentageBasis(r.basis) ? `${r.rate}%` : r.amount.toFixed(2)),
+      },
       { header: "Type", value: (r) => typeLabel[r.type] },
       { header: "Status", value: (r) => statusLabel[r.status] },
       { header: "Updated", value: (r) => formatDate(r.updatedAt) },
@@ -123,6 +142,8 @@ export function TaxList() {
         }
         caption="Tax rules"
       />
+
+      <TaxRuleCheck revision={revision} />
 
       <Drawer
         open={creating || Boolean(editing)}

@@ -16,13 +16,20 @@ import { statusOptions } from "../../lib/status";
 import { taxSchema } from "./schemas";
 import { useCreateTax, useUpdateTax } from "./hooks";
 import {
+  TAX_BASES,
   TAX_CATEGORY_VALUES,
+  TAX_JURISDICTIONS,
   TAX_STATUSES,
   TAX_TYPES,
+  isPercentageBasis,
   type TaxRule,
 } from "./types";
 
 const CATEGORY_OPTIONS = TAX_CATEGORY_VALUES.map((v) => ({ value: v, label: v }));
+const JURISDICTION_OPTIONS = TAX_JURISDICTIONS.map((j) => ({
+  value: j.code,
+  label: j.label,
+}));
 
 interface TaxFormProps {
   /** Present ⇒ edit mode. */
@@ -42,13 +49,21 @@ export function TaxForm({ initial, onDone, onCancel }: TaxFormProps) {
   const form = useZodForm(taxSchema, {
     defaultValues: {
       name: initial?.name ?? "",
-      region: initial?.region ?? "",
+      region: initial?.region ?? "GLOBAL",
       category: initial?.category ?? "All bookings",
+      basis: initial?.basis ?? "net_sale",
       rate: initial?.rate ?? 0,
+      amount: initial?.amount ?? 0,
       type: initial?.type ?? "exclusive",
+      priority: initial?.priority ?? 10,
       status: initial?.status ?? "active",
+      effectiveFrom: initial?.effectiveFrom?.slice(0, 10) ?? "",
+      effectiveTo: initial?.effectiveTo?.slice(0, 10) ?? "",
     },
   });
+
+  const basis = form.watch("basis");
+  const percentage = isPercentageBasis(basis);
 
   const onSubmit = form.handleSubmit(async (values) => {
     setSubmitError(null);
@@ -75,7 +90,7 @@ export function TaxForm({ initial, onDone, onCancel }: TaxFormProps) {
         </Alert>
       )}
 
-      <FormSection title="Rule" description="Name and jurisdiction.">
+      <FormSection title="Rule" description="Name, jurisdiction and what it covers.">
         <FormGrid cols={2}>
           <Input
             label="Rule name"
@@ -83,18 +98,13 @@ export function TaxForm({ initial, onDone, onCancel }: TaxFormProps) {
             {...form.register("name")}
             error={form.formState.errors.name?.message}
           />
-          <Input
-            label="Region"
-            required
-            hint="Country, union or 'Global'"
+          <Select
+            label="Jurisdiction"
+            options={JURISDICTION_OPTIONS}
+            hint="Matched against the destination country"
             {...form.register("region")}
             error={form.formState.errors.region?.message}
           />
-        </FormGrid>
-      </FormSection>
-
-      <FormSection title="Rate" description="What it applies to and how it's charged.">
-        <FormGrid cols={2}>
           <Select
             label="Applies to"
             options={CATEGORY_OPTIONS}
@@ -102,17 +112,50 @@ export function TaxForm({ initial, onDone, onCancel }: TaxFormProps) {
             error={form.formState.errors.category?.message}
           />
           <Input
-            label="Rate (%)"
+            label="Priority"
             type="number"
             min={0}
-            max={100}
-            step="0.1"
-            {...form.register("rate")}
-            error={form.formState.errors.rate?.message}
+            step="1"
+            hint="Lower is charged first"
+            {...form.register("priority")}
+            error={form.formState.errors.priority?.message}
           />
+        </FormGrid>
+      </FormSection>
+
+      <FormSection title="Charge" description="How much, measured against what.">
+        <FormGrid cols={2}>
+          <Select
+            label="Charged on"
+            options={statusOptions(TAX_BASES)}
+            {...form.register("basis")}
+            error={form.formState.errors.basis?.message}
+          />
+          {percentage ? (
+            <Input
+              label="Rate (%)"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              {...form.register("rate")}
+              error={form.formState.errors.rate?.message}
+            />
+          ) : (
+            <Input
+              label="Amount (USD)"
+              type="number"
+              min={0}
+              step="0.01"
+              hint="Multiplied by the count the basis implies"
+              {...form.register("amount")}
+              error={form.formState.errors.amount?.message ?? form.formState.errors.rate?.message}
+            />
+          )}
           <Select
             label="Type"
             options={statusOptions(TAX_TYPES)}
+            hint="Inclusive tax is shown but never added to the total"
             {...form.register("type")}
             error={form.formState.errors.type?.message}
           />
@@ -121,6 +164,23 @@ export function TaxForm({ initial, onDone, onCancel }: TaxFormProps) {
             options={statusOptions(TAX_STATUSES)}
             {...form.register("status")}
             error={form.formState.errors.status?.message}
+          />
+        </FormGrid>
+      </FormSection>
+
+      <FormSection title="Effective window" description="Leave blank for always on.">
+        <FormGrid cols={2}>
+          <Input
+            label="From"
+            type="date"
+            {...form.register("effectiveFrom")}
+            error={form.formState.errors.effectiveFrom?.message}
+          />
+          <Input
+            label="To"
+            type="date"
+            {...form.register("effectiveTo")}
+            error={form.formState.errors.effectiveTo?.message}
           />
         </FormGrid>
       </FormSection>

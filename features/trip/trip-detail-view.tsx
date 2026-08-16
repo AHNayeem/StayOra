@@ -6,7 +6,9 @@ import {
   AlertTriangle,
   ArrowLeft,
   CalendarDays,
+  CalendarPlus,
   Clock,
+  Download,
   FileText,
   Loader2,
   MapPin,
@@ -27,16 +29,23 @@ import {
   subscribe as subscribeToDomain,
 } from "@/features/dashboard/domain";
 import { VERTICALS } from "@/constants/verticals";
-import { cancelTripComponent, retryTripComponent } from "@/services/trip.service";
+import {
+  cancelTripComponent,
+  cancelWholeTrip,
+  quoteTripCancellation,
+  retryTripComponent,
+} from "@/services/trip.service";
 import { useLocale } from "@/features/i18n";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { CardImage } from "@/components/ui/card-image";
+import { Modal } from "@/components/ui/modal";
 import { VerticalIcon } from "@/components/shared/vertical-icon";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { removeTripComponent, tripStatus, useTrip } from "./trips-store";
 import { ComponentStatusBadge, TripStatusBadge } from "./components/trip-status-badge";
 import { RecommendationRail } from "./components/recommendation-rail";
+import { downloadItinerary, downloadTripICS } from "./itinerary";
 
 /**
  * TripDetailView — managing one booked trip.
@@ -51,6 +60,7 @@ export function TripDetailView({ tripId }: { tripId: string }) {
   const trip = useTrip(tripId);
   const { money, date, dateTime } = useLocale();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancellingTrip, setCancellingTrip] = useState(false);
 
   // Timelines live on the platform bookings; subscribe to the store revision so
   // a retry or an admin action re-renders without this view owning any state.
@@ -89,6 +99,9 @@ export function TripDetailView({ tripId }: { tripId: string }) {
   const confirmed = trip.components.filter((c) =>
     ["confirmed", "checked_in", "completed"].includes(c.status),
   );
+  // Quoted per leg, against each supplier's own policy — the whole point of the
+  // dialog is that the traveller sees the difference before committing.
+  const cancelQuote = quoteTripCancellation(trip);
 
   const onRetry = async (component: TripComponent) => {
     setBusyId(component.bookingId);
@@ -126,6 +139,39 @@ export function TripDetailView({ tripId }: { tripId: string }) {
       });
     } catch {
       toast.error("This booking can't be cancelled at its current stage.");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  /**
+   * Cancel every cancellable leg. Deliberately sequential and non-atomic: each
+   * leg is its own contract with its own supplier, so one refusing must not
+   * stop the others — the result reports exactly what moved.
+   */
+  const onCancelTrip = async () => {
+    setCancellingTrip(false);
+    setBusyId("trip");
+    try {
+      const result = await cancelWholeTrip(trip);
+      if (result.cancelled.length === 0) {
+        toast.error("Nothing could be cancelled", {
+          description: result.skipped[0]?.reason,
+        });
+      } else if (result.skipped.length > 0) {
+        toast.warning(
+          `${result.cancelled.length} of ${trip.components.length} bookings cancelled`,
+          {
+            description: `${result.skipped.length} couldn't be: ${result.skipped
+              .map((s) => s.title)
+              .join(", ")}. ${result.refundIds.length} refund${result.refundIds.length === 1 ? "" : "s"} raised.`,
+          },
+        );
+      } else {
+        toast.success("Trip cancelled", {
+          description: `${result.refundIds.length} refund${result.refundIds.length === 1 ? "" : "s"} raised — each supplier settles its own.`,
+        });
+      }
     } finally {
       setBusyId(null);
     }
@@ -175,14 +221,47 @@ export function TripDetailView({ tripId }: { tripId: string }) {
             <span className="font-mono">{trip.reference}</span>
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-xs text-muted">Charged</p>
-          <p className="text-h3 font-bold text-accent-600">{money(trip.totalUsd)}</p>
-          {trip.savingsUsd > 0 && (
-            <p className="text-xs font-medium text-emerald-600">
-              Saved {money(trip.savingsUsd)}
-            </p>
-          )}
+        <div className="flex flex-col items-end gap-3">
+          <div className="text-right">
+            <p className="text-xs text-muted">Charged</p>
+            <p className="text-h3 font-bold text-accent-600">{money(trip.totalUsd)}</p>
+            {trip.savingsUsd > 0 && (
+              <p className="text-xs font-medium text-emerald-600">
+                Saved {money(trip.savingsUsd)}
+              </p>
+            )}
+          </div>
+          {/* One document for the whole trip — every leg, in order, under one
+              reference. Per-leg vouchers stay on each booking. */}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              leftIcon={<Download className="size-4" />}
+              onClick={() => downloadItinerary(trip)}
+            >
+              Itinerary
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={<CalendarPlus className="size-4" />}
+              onClick={() => downloadTripICS(trip)}
+            >
+              Add to calendar
+            </Button>
+            {cancelQuote.cancellableCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-danger hover:bg-danger/10"
+                leftIcon={<XCircle className="size-4" />}
+                onClick={() => setCancellingTrip(true)}
+              >
+                Cancel trip
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -428,6 +507,80 @@ export function TripDetailView({ tripId }: { tripId: string }) {
           </div>
         </aside>
       </div>
+
+      {/* Whole-trip cancellation. Each leg is quoted against its own supplier's
+          policy and the traveller sees all of them before committing — a single
+          headline number would hide that a non-refundable tour returns nothing
+          while the flexible hotel returns everything. */}
+      <Modal
+        open={cancellingTrip}
+        onClose={() => setCancellingTrip(false)}
+        title="Cancel the whole trip?"
+        description={`${cancelQuote.cancellableCount} of ${trip.components.length} bookings can be cancelled. Each supplier settles its own refund.`}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setCancellingTrip(false)}>
+              Keep my trip
+            </Button>
+            <Button
+              size="sm"
+              variant="danger"
+              loading={busyId === "trip"}
+              onClick={onCancelTrip}
+            >
+              Cancel {cancelQuote.cancellableCount} booking
+              {cancelQuote.cancellableCount === 1 ? "" : "s"}
+            </Button>
+          </div>
+        }
+      >
+        <ul className="flex flex-col gap-2 text-sm">
+          {cancelQuote.legs.map((leg) => (
+            <li
+              key={leg.bookingId}
+              className={cn(
+                "flex flex-wrap items-start justify-between gap-2 rounded-field border p-3",
+                leg.cancellable ? "border-line" : "border-dashed border-line bg-surface-muted",
+              )}
+            >
+              <div className="min-w-0">
+                <p className="truncate font-medium text-ink">{leg.title}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {VERTICALS[leg.kind].label} · {leg.policyLabel}
+                  {leg.reason ? ` · ${leg.reason}` : ""}
+                </p>
+              </div>
+              <div className="text-right">
+                {leg.cancellable ? (
+                  <>
+                    <p className="font-semibold text-emerald-600">
+                      {money(leg.refundUsd)} back
+                    </p>
+                    {leg.cancellationFeeUsd > 0 && (
+                      <p className="text-xs text-muted">
+                        after {money(leg.cancellationFeeUsd)} fee
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs font-medium text-muted">Left as it is</p>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <dl className="mt-4 space-y-1.5 border-t border-line pt-3 text-sm">
+          <Row label="Total refunded" value={money(cancelQuote.totalRefundUsd)} positive />
+          {cancelQuote.totalFeeUsd > 0 && (
+            <Row label="Cancellation fees" value={money(cancelQuote.totalFeeUsd)} />
+          )}
+        </dl>
+        <p className="mt-3 text-xs text-muted">
+          Refunds are raised against each supplier separately and appear under
+          Account → Refunds. One leg refusing doesn&apos;t stop the others.
+        </p>
+      </Modal>
     </div>
   );
 }

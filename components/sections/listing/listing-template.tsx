@@ -26,6 +26,7 @@ import {
   DEFAULT_RADIUS_KM,
   LocationFilter,
   MapResults,
+  SaveSearchButton,
   coordsFor,
   haversineKm,
   useNearMe,
@@ -170,7 +171,22 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
               view={view}
               onViewChange={setView}
               action={
-                /* Contextual AI entry — narrows this vertical in plain language. */
+                <div className="flex flex-wrap items-center gap-2">
+                {/* Keep this search, and optionally watch its price. */}
+                <SaveSearchButton
+                  vertical={vertical}
+                  query={{
+                    search,
+                    minPrice: price.min,
+                    maxPrice: price.max,
+                    facets: selected,
+                  }}
+                  bounds={bounds}
+                  resultCount={results.length}
+                  cheapestUsd={results[0] ? Math.min(...results.map((l) => l.price.amount)) : 0}
+                  href={config.href}
+                />
+                {/* Contextual AI entry — narrows this vertical in plain language. */}
                 <AskAiButton
                   label="Help me choose"
                   prompt={`Help me choose ${config.labelPlural.toLowerCase()}`}
@@ -185,6 +201,7 @@ export function ListingTemplate({ vertical, listings }: ListingTemplateProps) {
                   }}
                   className="h-9 px-4 text-xs"
                 />
+                </div>
               }
             />
 

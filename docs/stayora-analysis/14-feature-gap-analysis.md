@@ -1,5 +1,9 @@
 # 14 — Feature Gap Analysis
 
+> **Status:** closed out by [15 — Gap Closure](./15-gap-closure.md) and
+> [18 — Audit Implementation](./18-audit-implementation.md). Doc 18 also lists the items below
+> that were already complete when this analysis called them missing.
+
 ## Contradictions found between UI, domain and data
 
 These are cases where one part of the product implies something another part does not deliver. They matter more than missing features, because they mislead.

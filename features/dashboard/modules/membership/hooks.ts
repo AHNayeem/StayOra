@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from "../../data";
 import { useResourceList } from "../../crud";
 import { membershipAdminService } from "../../domain/services";
+import { membershipBillingService, type BillingOutcome } from "../../domain/membership-billing";
 import type {
   MembershipPlan,
   MembershipPlanInput,
@@ -73,7 +74,28 @@ export function useCancelMembership() {
   });
 }
 
-/** Simulated renewal — the prototype has no recurring billing. */
+/**
+ * Retry a declined renewal — what an operator does after the member updates
+ * their card. Resets the dunning counter, so a success ends the dunning cycle.
+ */
+export function useRetryMembershipBilling() {
+  const actor = useDomainActor();
+  return useMutation<BillingOutcome | undefined, string>({
+    mutationFn: async (id) => membershipBillingService.retry(id, Date.now(), actor),
+    invalidateKeys: SIDE_EFFECTS,
+  });
+}
+
+/** The memberships currently failing to bill — the recovery worklist. */
+export function useDunningMemberships() {
+  return useQuery<MembershipSubscription[]>({
+    queryKey: ["membership", "dunning"],
+    queryFn: async () => membershipBillingService.inDunning(),
+    staleTime: 5_000,
+  });
+}
+
+/** Advance one period by hand. */
 export function useRenewMembership() {
   const actor = useDomainActor();
   return useMutation<MembershipSubscription, string>({

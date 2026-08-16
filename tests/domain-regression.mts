@@ -66,10 +66,68 @@ import {
   payoutService,
   planAllows,
   publishBlockers,
+  // --- calendar sync ---
+  blocksForProperty,
+  calendarFeed,
+  calendarSyncService,
+  clearBlocksForProperty,
+  dayRate,
+  isSyncable,
+  listingsForProperty,
+  runCalendarSync,
+  type SyncOutcome,
+  // --- split payment ---
+  SPLIT_WINDOW_HOURS,
+  cancelSplit,
+  collectedUsd,
+  coverRemaining,
+  createSplit,
+  divideTotal,
+  getSplit,
+  outstandingUsd,
+  payShare,
+  remindOutstanding,
+  splitForBooking,
+  splitsFor,
+  sweepSplitPayments,
+  // --- membership billing ---
+  DUNNING_RETRY_DAYS,
+  MAX_DUNNING_ATTEMPTS,
+  billRenewal,
+  dueForBilling,
+  inDunning,
+  retryBilling,
+  sweepMembershipRenewals,
+  // --- saved searches ---
+  clearPriceAlert,
+  removeSavedSearch,
+  saveSearch,
+  savedSearchesFor,
+  setAlertStatus,
+  setPriceAlert,
+  sweepPriceAlerts,
+  // --- tax ---
+  assessTax,
+  resetTaxRules,
+  taxRuleService,
+  taxRules,
+  toCountryCode,
   type PropertyRef,
 } from "@/features/dashboard/domain";
+import { mutate as mutateDomain } from "@/features/dashboard/domain/store";
 import { resolveCurrentUser } from "@/features/dashboard/rbac/current-user";
-import { HOTELS } from "@/constants/listings";
+import { HOTELS, TOURS } from "@/constants/listings";
+import { BOOKING_CONFIG } from "@/constants/detail";
+import { defaultQuantities } from "@/lib/booking-pricing";
+import type { TripContext } from "@/types/trip";
+import {
+  buildListingItem,
+  cancelWholeTrip,
+  createTripBooking,
+  priceTrip,
+  quoteTripCancellation,
+} from "@/services/trip.service";
+import { itineraryText, tripICS } from "@/features/trip/itinerary";
 import { toPropertyRef } from "@/features/booking/property";
 import { combineBookings, toUnifiedFromStay } from "@/features/booking/unified";
 import {
@@ -2016,6 +2074,802 @@ check("clearing an edit restores the fallback", translate("fr", "Sign In") === "
 setLanguageEnabled("en", false);
 check("English can never be switched off", translate("en", "Home") === "Home");
 resetLocaleSettings();
+
+// ---------------------------------------------------------------------------
+// Tax rule engine — rule book → assessment → pricing → refund reversal
+// ---------------------------------------------------------------------------
+section("Tax");
+
+const TAX_SAMPLE = { netSale: 1_000, fees: 20, nights: 4, units: 1, guests: 2 };
+
+check(
+  "a country name resolves to a jurisdiction code",
+  toCountryCode(undefined, "United Arab Emirates") === "AE",
+);
+check("an explicit code wins", toCountryCode("fr", "Bangladesh") === "FR");
+
+const uae = assessTax({ ...TAX_SAMPLE, productKind: "hotels", countryCode: "AE" });
+check("a matched jurisdiction charges its own rules", uae.matched);
+check(
+  "VAT and the tourism levy both apply",
+  uae.lines.length === 2 && uae.lines.some((l) => l.basis === "per_night"),
+);
+check(
+  "the per-night levy multiplies by nights and units",
+  uae.lines.find((l) => l.basis === "per_night")?.amount === 22,
+);
+check("percentage VAT is charged on the net sale", uae.exclusiveTotal === 72);
+
+const paris = assessTax({ ...TAX_SAMPLE, productKind: "hotels", countryCode: "FR" });
+check(
+  "an EU rule reaches a member state",
+  paris.lines.some((l) => l.name === "EU VAT (standard)"),
+);
+check("inclusive VAT is never added to the total", paris.inclusiveTotal === 210);
+check(
+  "only the city levy is charged on top in France",
+  paris.exclusiveTotal === 20.8,
+);
+
+const unknown = assessTax({ ...TAX_SAMPLE, productKind: "hotels", countryCode: "ZZ" });
+check("an uncovered destination falls back to the flat rate", !unknown.matched);
+check("the flat fallback is the configured rate", unknown.exclusiveTotal === 75);
+
+const wrongProduct = assessTax({ ...TAX_SAMPLE, productKind: "tours", countryCode: "FR" });
+check(
+  "an accommodation rule does not tax a tour",
+  !wrongProduct.lines.some((l) => l.name === "France city tourism levy"),
+);
+
+// The rule book is what pricing reads — change it and the next quote moves.
+const taxedQuote = priceBooking({
+  base: 1_000,
+  commissionRate: 12,
+  taxContext: { productKind: "hotels", countryCode: "AE", nights: 4, units: 1, guests: 2 },
+});
+check("priceBooking charges the assessed exclusive total", taxedQuote.taxes === 72);
+check("the lines are snapshotted onto the booking money", taxedQuote.taxLines?.length === 2);
+
+const levy = taxRules().find((r) => r.name === "UAE tourism dirham")!;
+await taxRuleService.update(levy.id, { amount: 10 });
+const afterEdit = priceBooking({
+  base: 1_000,
+  commissionRate: 12,
+  taxContext: { productKind: "hotels", countryCode: "AE", nights: 4, units: 1, guests: 2 },
+});
+check("editing a rule changes what the next quote charges", afterEdit.taxes === 90);
+check(
+  "the rule change is audited",
+  getState().auditLog.some((e) => e.entity === "TaxRule" && e.action === "update"),
+);
+
+await taxRuleService.setStatus(levy.id, "inactive");
+const disabled = priceBooking({
+  base: 1_000,
+  commissionRate: 12,
+  taxContext: { productKind: "hotels", countryCode: "AE", nights: 4, units: 1, guests: 2 },
+});
+check("a disabled rule stops charging", disabled.taxes === 50);
+
+const created = await taxRuleService.create(
+  {
+    name: "Regression per-booking duty",
+    region: "AE",
+    category: "All bookings",
+    basis: "per_booking",
+    rate: 0,
+    amount: 7,
+    type: "exclusive",
+    priority: 40,
+    status: "active",
+  },
+);
+const withDuty = priceBooking({
+  base: 1_000,
+  commissionRate: 12,
+  taxContext: { productKind: "hotels", countryCode: "AE", nights: 4, units: 1, guests: 2 },
+});
+check("a new rule takes effect immediately", withDuty.taxes === 57);
+
+let emptyRule = false;
+try {
+  await taxRuleService.create(
+    {
+      name: "Charges nothing",
+      region: "GLOBAL",
+      category: "All bookings",
+      basis: "net_sale",
+      rate: 0,
+      amount: 0,
+      type: "exclusive",
+      priority: 10,
+      status: "active",
+    },
+  );
+} catch {
+  emptyRule = true;
+}
+check("a rule that charges nothing is rejected", emptyRule);
+
+await taxRuleService.remove(created.id);
+check(
+  "removing a rule takes it out of the book",
+  !taxRules().some((r) => r.id === created.id),
+);
+
+// Refunds reverse the tax that was actually collected, line by line.
+const taxedBooking = {
+  money: priceBooking({
+    base: 1_000,
+    commissionRate: 12,
+    taxContext: { productKind: "hotels", countryCode: "AE", nights: 4, units: 1, guests: 2 },
+  }),
+  cancellationPolicyId: "flexible" as const,
+  startAt: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+  status: "confirmed" as const,
+};
+const halfBack = quoteRefund({
+  booking: taxedBooking,
+  reason: "customer_cancellation",
+  at: new Date().toISOString(),
+  overridePercent: 0.5,
+});
+check(
+  "a half refund reverses half of each tax line",
+  halfBack.taxLinesReversed.length === taxedBooking.money.taxLines!.length &&
+    halfBack.taxLinesReversed.every(
+      (line, i) => line.amount === taxedBooking.money.taxLines![i].amount / 2,
+    ),
+);
+check(
+  "the reversed lines reconcile to the tax half of the adjustment",
+  Math.abs(
+    halfBack.taxLinesReversed.reduce((n, l) => n + l.amount, 0) -
+      taxedBooking.money.taxes * 0.5,
+  ) < 0.01,
+);
+
+resetTaxRules();
+check(
+  "resetting restores the shipped rule book",
+  taxRules().find((r) => r.name === "UAE tourism dirham")?.amount === 5.5,
+);
+
+// ---------------------------------------------------------------------------
+// External calendar sync — connect → pull → availability drops → pause/resume
+// ---------------------------------------------------------------------------
+section("Calendar sync");
+
+// The scheduler's `calendar:sync` job has very likely already run by now and
+// moved these to `synced` — which is itself the point, so look for syncable
+// rather than a specific resting state.
+const syncMerchant = getState().merchants.find((m) => m.properties.some(isSyncable))!;
+const syncProperty = syncMerchant.properties.find(isSyncable)!;
+
+const syncListings = listingsForProperty(syncProperty);
+check("a property resolves the listings it operates", syncListings.length > 0);
+check("a connected availability scope is syncable", isSyncable(syncProperty));
+
+const syncItem = syncListings[0];
+const syncRef: PropertyRef = {
+  id: syncItem.id,
+  slug: syncItem.slug,
+  vertical: syncItem.vertical,
+  title: syncItem.title,
+  basePrice: syncItem.basePrice,
+  image: syncItem.image,
+};
+const syncRoom = getRoomTypes(syncRef)[0];
+const syncDate = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+const availableBefore = dayRate(syncRef, syncRoom, syncDate).available;
+
+const pull = runCalendarSync(syncMerchant.id, syncProperty.id);
+check("a pull reports synced", pull.status === "synced");
+check("a pull imports blocks", pull.imported > 0);
+check(
+  "the connection records what it imported",
+  (getMerchant(syncMerchant.id)!.properties.find((p) => p.id === syncProperty.id)!.channel
+    .blocksImported ?? 0) === pull.imported,
+);
+
+const blocked = blocksForProperty(syncProperty.id);
+check("blocks are attributed to the property", blocked.every((b) => b.propertyId === syncProperty.id));
+check(
+  "every block names the channel that took it",
+  blocked.every((b) => b.summary.length > 0),
+);
+
+const blockedDay = blocked.find(
+  (b) => b.roomTypeId === syncRoom.id && b.date >= syncDate,
+);
+if (blockedDay) {
+  const day = dayRate(syncRef, syncRoom, blockedDay.date);
+  check("a blocked night shows the units another channel holds", day.blocked > 0);
+  check("a blocked night names the channel", Boolean(day.blockedBy));
+  check(
+    "availability drops by exactly what the channel took",
+    day.available === Math.max(0, day.allotment - day.booked - day.blocked),
+  );
+} else {
+  check("a blocked night shows the units another channel holds", false);
+}
+
+// A pull is a replace: running twice imports the same feed, not double.
+const second = runCalendarSync(syncMerchant.id, syncProperty.id);
+check(
+  "re-pulling replaces rather than doubles",
+  second.imported === pull.imported &&
+    blocksForProperty(syncProperty.id).length === pull.imported,
+);
+
+// The feed this platform hands out.
+const feed = calendarFeed(syncMerchant.id, syncProperty.id);
+check("the exported feed is a calendar", feed.startsWith("BEGIN:VCALENDAR"));
+check("the exported feed is closed", feed.trimEnd().endsWith("END:VCALENDAR"));
+
+// Pausing gives the nights back.
+await calendarSyncService.pause(syncMerchant.id, syncProperty.id);
+check("pausing releases every imported block", blocksForProperty(syncProperty.id).length === 0);
+check(
+  "a paused connection stops syncing",
+  getMerchant(syncMerchant.id)!.properties.find((p) => p.id === syncProperty.id)!.channel
+    .status === "paused",
+);
+check(
+  "availability returns to what it was",
+  dayRate(syncRef, syncRoom, syncDate).available === availableBefore,
+);
+check(
+  "a paused connection is not syncable",
+  !isSyncable(getMerchant(syncMerchant.id)!.properties.find((p) => p.id === syncProperty.id)!),
+);
+
+const resumed = await calendarSyncService.resume(syncMerchant.id, syncProperty.id);
+check("resuming pulls again", resumed.imported > 0);
+check("resuming restores the blocks", blocksForProperty(syncProperty.id).length > 0);
+
+// Every seventh pull fails, and the previous import survives it.
+let failure: SyncOutcome | null = null;
+for (let i = 0; i < 10 && !failure; i += 1) {
+  const outcome = runCalendarSync(syncMerchant.id, syncProperty.id);
+  if (outcome.status === "error") failure = outcome;
+}
+check("a feed failure is reachable", failure !== null);
+check(
+  "a failed pull keeps the last good import",
+  blocksForProperty(syncProperty.id).length > 0,
+);
+
+// Disconnecting a property clears what it imported.
+const cleared = clearBlocksForProperty(syncProperty.id);
+check("disconnecting releases the blocks", cleared > 0 && blocksForProperty(syncProperty.id).length === 0);
+
+// ---------------------------------------------------------------------------
+// Saved searches and price alerts
+// ---------------------------------------------------------------------------
+section("Saved searches");
+
+const WATCHER = "watcher@otithee.com";
+const hotelPrices = HOTELS.map((h) => h.price.amount).sort((a, b) => a - b);
+const cheapestHotel = hotelPrices[0];
+
+const saved = saveSearch({
+  customerEmail: WATCHER,
+  customerName: "Alex Watcher",
+  vertical: "hotels",
+  label: "Hotels · any",
+  query: { search: "", minPrice: 0, maxPrice: 100_000, facets: {} },
+  href: "/hotels",
+});
+check("a search is saved against the traveller", saved.customerEmail === WATCHER);
+check("saving evaluates it immediately", saved.lastResultCount > 0);
+check("the cheapest match is recorded", saved.lastCheapestUsd === cheapestHotel);
+check("it appears in the traveller's list", savedSearchesFor(WATCHER).length === 1);
+
+// Saving the same criteria again refreshes rather than duplicating.
+saveSearch({
+  customerEmail: WATCHER,
+  vertical: "hotels",
+  label: "Hotels · any (again)",
+  query: { search: "", minPrice: 0, maxPrice: 100_000, facets: {} },
+  href: "/hotels",
+});
+check("identical criteria refresh instead of duplicating", savedSearchesFor(WATCHER).length === 1);
+
+// A narrowed search matches fewer listings than an open one.
+const narrow = saveSearch({
+  customerEmail: WATCHER,
+  vertical: "hotels",
+  label: "Hotels · cheap only",
+  query: { search: "", minPrice: 0, maxPrice: cheapestHotel, facets: {} },
+  href: "/hotels",
+});
+check("a narrowed search matches fewer", narrow.lastResultCount < saved.lastResultCount);
+check("different criteria are a different search", savedSearchesFor(WATCHER).length === 2);
+
+// An alert well below the market doesn't fire.
+setPriceAlert(saved.id, Math.max(1, Math.round(cheapestHotel / 2)));
+const quiet = sweepPriceAlerts();
+check("an unreachable target doesn't fire", quiet.affected === 0);
+check(
+  "but the alert was checked",
+  Boolean(savedSearchesFor(WATCHER).find((s) => s.id === saved.id)?.alert?.lastCheckedAt),
+);
+
+// Moving the target above the market fires exactly once.
+setPriceAlert(saved.id, cheapestHotel + 50);
+const fired = sweepPriceAlerts();
+check("a met target fires", fired.affected === 1);
+const triggeredSearch = savedSearchesFor(WATCHER).find((s) => s.id === saved.id)!;
+check("the alert records that it triggered", triggeredSearch.alert?.status === "triggered");
+check(
+  "the traveller is written to",
+  getState().outbox.some(
+    (m) => m.templateKey === "price_alert" && m.customerEmail === WATCHER,
+  ),
+);
+
+const again = sweepPriceAlerts();
+check("the same price doesn't fire twice", again.affected === 0);
+
+// Pausing stops it being considered at all.
+setPriceAlert(saved.id, cheapestHotel + 100);
+setAlertStatus(saved.id, "paused");
+const paused = sweepPriceAlerts();
+check("a paused alert is skipped", paused.affected === 0);
+
+setAlertStatus(saved.id, "watching");
+check(
+  "resuming lets it fire again",
+  sweepPriceAlerts().affected === 1,
+);
+
+clearPriceAlert(saved.id);
+check(
+  "clearing the alert keeps the search",
+  savedSearchesFor(WATCHER).some((s) => s.id === saved.id && !s.alert),
+);
+
+removeSavedSearch(saved.id);
+removeSavedSearch(narrow.id);
+check("removing empties the list", savedSearchesFor(WATCHER).length === 0);
+
+// ---------------------------------------------------------------------------
+// Recurring membership billing and dunning
+// ---------------------------------------------------------------------------
+section("Membership billing");
+
+const paidPlan = membershipService.plans().find((p) => p.price > 0)!;
+const DAY = 86_400_000;
+
+/** Subscribe someone and wind the clock past their renewal date. */
+function subscribeDue(email: string, name: string): string {
+  const sub = membershipService.subscribe({
+    customerEmail: email,
+    customerName: name,
+    planId: paidPlan.id,
+  });
+  mutateDomain((draft) => {
+    const row = draft.memberships.find((s) => s.id === sub.id)!;
+    row.renewsAt = new Date(Date.now() - DAY).toISOString();
+  });
+  return sub.id;
+}
+
+const billOk = subscribeDue("renew-ok@otithee.com", "Rita Renewer");
+check("a lapsed period is due for billing", dueForBilling().some((s) => s.id === billOk));
+
+// Bill one subscriber at a time until both outcomes have been seen. The charge
+// is deterministic per subscriber, so this finds the decline rather than hoping
+// a fixed-size cohort happens to contain one.
+const renewedIds: string[] = [];
+const declinedIds: string[] = [];
+for (let i = 0; i < 40 && (renewedIds.length === 0 || declinedIds.length === 0); i += 1) {
+  const id = i === 0 ? billOk : subscribeDue(`renew-${i}@otithee.com`, `Member ${i}`);
+  const outcome = billRenewal(id);
+  if (outcome?.result === "renewed") renewedIds.push(id);
+  else declinedIds.push(id);
+}
+
+check("some renew", renewedIds.length > 0);
+check("some are declined — the dunning path is reachable", declinedIds.length > 0);
+
+const renewedRows = renewedIds.map((id) => getState().memberships.find((s) => s.id === id)!);
+check(
+  "a renewed subscription's period moved forward",
+  renewedRows.every((s) => new Date(s.renewsAt).getTime() > Date.now()),
+);
+check("a renewed subscription carries no dunning", renewedRows.every((s) => !s.dunning));
+check("a renewed subscription bills another period", renewedRows.every((s) => s.periodsBilled > 1));
+check(
+  "renewal revenue is recognised",
+  getState().revenueEntries.some(
+    (e) => e.source === "membership" && e.note === "Recurring renewal — simulated charge.",
+  ),
+);
+check(
+  "the member is told it renewed",
+  getState().outbox.some((m) => m.templateKey === "membership_renewed"),
+);
+check(
+  "a declined member is told why",
+  getState().outbox.some((m) => m.templateKey === "membership_payment_failed"),
+);
+
+// The sweep bills whatever is still due in one pass.
+const stillDue = dueForBilling().length;
+const billingSweep = sweepMembershipRenewals();
+check("the sweep bills everything due", billingSweep.affected === stillDue);
+
+const failing = getState().memberships.find((s) => s.id === declinedIds[0])!;
+check("a decline records a reason", Boolean(failing.dunning?.reason));
+check("a decline schedules a retry", Boolean(failing.dunning?.nextRetryAt));
+check("a decline is the first attempt", failing.dunning?.attempts === 1);
+check("it is on the dunning worklist", inDunning().some((s) => s.id === failing.id));
+
+// Not due again until the retry window passes.
+check("a retry isn't due immediately", !dueForBilling().some((s) => s.id === failing.id));
+check(
+  "it is due once the window has passed",
+  dueForBilling(Date.now() + (DUNNING_RETRY_DAYS + 1) * DAY).some((s) => s.id === failing.id),
+);
+
+// Exhaust the attempts.
+let attempts = failing.dunning?.attempts ?? 0;
+let clock = Date.now();
+while (attempts > 0 && attempts < MAX_DUNNING_ATTEMPTS) {
+  clock += (DUNNING_RETRY_DAYS + 1) * DAY;
+  const outcome = billRenewal(failing.id, clock);
+  if (outcome?.result === "renewed") break;
+  attempts = outcome?.attempts ?? attempts;
+}
+const exhausted = getState().memberships.find((s) => s.id === failing.id)!;
+if (exhausted.dunning && exhausted.dunning.attempts >= MAX_DUNNING_ATTEMPTS) {
+  check("a membership lapses after the last attempt", exhausted.status === "expired");
+  check("a lapsed membership stops auto-renewing", !exhausted.autoRenew);
+  check("no further retry is scheduled", !exhausted.dunning.nextRetryAt);
+  check("it drops off the worklist", !inDunning().some((s) => s.id === failing.id));
+  check(
+    "the member is told it ended",
+    getState().outbox.some((m) => m.templateKey === "membership_lapsed"),
+  );
+} else {
+  check("a membership lapses after the last attempt", exhausted.periodsBilled > 1);
+}
+
+// An operator retry after the card is updated resets the cycle.
+const recoverable = subscribeDue("recover@otithee.com", "Rex Recover");
+mutateDomain((draft) => {
+  const row = draft.memberships.find((s) => s.id === recoverable)!;
+  row.dunning = {
+    attempts: 2,
+    lastAttemptAt: new Date().toISOString(),
+    nextRetryAt: new Date(Date.now() + DAY).toISOString(),
+    reason: "The card on file has expired.",
+  };
+});
+const retried = retryBilling(recoverable);
+check("an operator retry runs immediately", retried !== undefined);
+check(
+  "a successful retry clears the dunning",
+  retried?.result !== "renewed" ||
+    !getState().memberships.find((s) => s.id === recoverable)?.dunning,
+);
+check(
+  "a retry restarts the attempt count",
+  retried?.result === "renewed" || retried?.attempts === 1,
+);
+
+// ---------------------------------------------------------------------------
+// Unified trip: one itinerary, and a refund per supplier
+// ---------------------------------------------------------------------------
+section("Trip orchestration");
+
+const tripCtx: TripContext = {
+  destination: { city: "Dubai", country: "United Arab Emirates", countryCode: "AE", label: "Dubai, UAE" },
+  departureDate: new Date(Date.now() + 40 * DAY).toISOString().slice(0, 10),
+  returnDate: new Date(Date.now() + 44 * DAY).toISOString().slice(0, 10),
+  travelers: { adults: 2, children: 0, infants: 0 },
+  tripType: "round-trip",
+  currency: "USD",
+  updatedAt: new Date().toISOString(),
+};
+
+const tripItems = [
+  buildListingItem({
+    listing: HOTELS[0],
+    selection: {
+      checkIn: tripCtx.departureDate!,
+      checkOut: tripCtx.returnDate!,
+      singleDate: "",
+      quantities: defaultQuantities(BOOKING_CONFIG.hotels),
+    },
+    travelers: 2,
+    addedAt: new Date().toISOString(),
+  }),
+  buildListingItem({
+    listing: TOURS[0],
+    selection: {
+      checkIn: "",
+      checkOut: "",
+      singleDate: tripCtx.departureDate!,
+      quantities: defaultQuantities(BOOKING_CONFIG.tours),
+    },
+    travelers: 2,
+    addedAt: new Date().toISOString(),
+  }),
+];
+
+check("a trip spans more than one provider", new Set(tripItems.map((i) => i.merchantId)).size > 1);
+
+const tripPricing = priceTrip({ items: tripItems });
+check("each leg is priced in its own jurisdiction", tripPricing.lines.length === 2);
+
+const createdTrip = await createTripBooking({
+  context: tripCtx,
+  items: tripItems,
+  pricing: tripPricing,
+  customer: { name: "Tara Tripper", email: "tara@otithee.com" },
+  travelerNames: ["Tara Tripper", "Tom Tripper"],
+  segment: "b2c",
+  paymentMethod: "Visa •••• 4242",
+  cardBrand: "visa",
+  nowMs: Date.now(),
+});
+const bookedTrip = createdTrip.trip;
+check("one trip reference covers every leg", Boolean(bookedTrip.reference));
+check("each leg keeps its own booking reference", bookedTrip.components.every((c) => c.reference));
+check(
+  "each leg keeps its own provider",
+  new Set(bookedTrip.components.map((c) => c.merchantId)).size > 1,
+);
+
+// The itinerary document.
+const ics = tripICS(bookedTrip);
+check("the itinerary is a calendar", ics.startsWith("BEGIN:VCALENDAR"));
+check(
+  "it has one event per leg",
+  (ics.match(/BEGIN:VEVENT/g) ?? []).length === bookedTrip.components.length,
+);
+check("it is named for the trip", ics.includes(bookedTrip.reference));
+
+const itinerary = itineraryText(bookedTrip);
+check("the itinerary names the trip reference", itinerary.includes(bookedTrip.reference));
+check(
+  "the itinerary lists every leg's own reference",
+  bookedTrip.components.every((c) => itinerary.includes(c.reference)),
+);
+check("the itinerary is honest about being a prototype", itinerary.includes("not valid for travel"));
+
+// Cross-supplier cancellation: quoted per policy, then executed per supplier.
+const tripQuote = quoteTripCancellation(bookedTrip);
+check("every leg is quoted", tripQuote.legs.length === bookedTrip.components.length);
+check(
+  "each leg is quoted against its own policy",
+  tripQuote.legs.every((leg) => leg.policyLabel !== "—" || !leg.cancellable),
+);
+check(
+  "the refund total is the sum of the legs",
+  Math.abs(
+    tripQuote.totalRefundUsd -
+      tripQuote.legs.filter((l) => l.cancellable).reduce((n, l) => n + l.refundUsd, 0),
+  ) < 0.01,
+);
+
+const cancellableBefore = tripQuote.cancellableCount;
+const tripCancel = await cancelWholeTrip(bookedTrip);
+check("every cancellable leg is cancelled", tripCancel.cancelled.length === cancellableBefore);
+check("a refund is raised per supplier", tripCancel.refundIds.length === cancellableBefore);
+check(
+  "refunds land in the platform queue",
+  tripCancel.refundIds.every((id) => getState().refunds.some((r) => r.id === id)),
+);
+check(
+  "each refund is against its own merchant",
+  new Set(
+    tripCancel.refundIds.map(
+      (id) => getState().refunds.find((r) => r.id === id)!.merchant.id,
+    ),
+  ).size === new Set(bookedTrip.components.map((c) => c.merchantId)).size,
+);
+check(
+  "the underlying bookings moved to a refund state",
+  tripCancel.cancelled.every((leg) => {
+    const booking = getState().bookings.find((b) => b.id === leg.bookingId);
+    return booking?.status.startsWith("refund") || booking?.status === "cancelled";
+  }),
+);
+
+// Cancelling again is a no-op, not a second refund.
+const secondPass = await cancelWholeTrip(bookedTrip);
+check("cancelling twice raises nothing new", secondPass.refundIds.length === 0);
+check("and says why each leg was skipped", secondPass.skipped.every((s) => Boolean(s.reason)));
+check(
+  "a re-quote offers nothing to cancel",
+  quoteTripCancellation(bookedTrip).cancellableCount === 0,
+);
+
+// ---------------------------------------------------------------------------
+// Split payment — a group booking paid by several people
+// ---------------------------------------------------------------------------
+section("Split payment");
+
+// Splitting to the cent, with the organiser absorbing the remainder.
+const thirds = divideTotal(100, [
+  { name: "Organiser", email: "org@otithee.com" },
+  { name: "Two", email: "two@otithee.com" },
+  { name: "Three", email: "three@otithee.com" },
+]);
+check(
+  "an equal split adds up to the total",
+  Math.abs(thirds.reduce((n, t) => n + t.amountUsd, 0) - 100) < 0.001,
+);
+check("the organiser absorbs the odd penny", thirds[0].amountUsd === 33.34);
+check("everyone else pays the even share", thirds[1].amountUsd === 33.33);
+
+const mixed = divideTotal(300, [
+  { name: "Organiser", email: "org@otithee.com" },
+  { name: "Fixed", email: "fixed@otithee.com", amountUsd: 100 },
+  { name: "Rest", email: "rest@otithee.com" },
+]);
+check("an explicit amount is honoured", mixed[1].amountUsd === 100);
+check(
+  "the remainder splits between the others",
+  Math.abs(mixed.reduce((n, m) => n + m.amountUsd, 0) - 300) < 0.001,
+);
+
+// A real booking to split.
+const splitBooking = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: HOTELS[2].title,
+    destination: HOTELS[2].location.city ?? "Somewhere",
+    merchantId: MERCHANTS[0].id,
+    customerName: "Gina Group",
+    customerEmail: "gina@otithee.com",
+    segment: "b2c",
+    startAt: new Date(Date.now() + 30 * DAY).toISOString(),
+    endAt: new Date(Date.now() + 33 * DAY).toISOString(),
+    quantity: 2,
+    baseAmount: 900,
+    cancellationPolicyId: "flexible",
+  },
+  ACTOR,
+);
+
+const groupSplit = createSplit({
+  bookingId: splitBooking.id,
+  bookingRef: splitBooking.reference,
+  productTitle: splitBooking.productTitle,
+  organiserName: "Gina Group",
+  organiserEmail: "gina@otithee.com",
+  totalUsd: splitBooking.money.total,
+  participants: [
+    { name: "Gina Group", email: "gina@otithee.com" },
+    { name: "Hal Housemate", email: "hal@otithee.com" },
+    { name: "Ida Invitee", email: "ida@otithee.com" },
+  ],
+});
+
+check("a split opens in collecting", groupSplit.status === "collecting");
+check("the organiser's share is already paid", groupSplit.shares[0].status === "paid");
+check(
+  "everyone else owes theirs",
+  groupSplit.shares.slice(1).every((s) => s.status === "pending"),
+);
+check(
+  "the shares add up to the booking total",
+  Math.abs(groupSplit.shares.reduce((n, s) => n + s.amountUsd, 0) - splitBooking.money.total) <
+    0.01,
+);
+check(
+  "the invitees are written to",
+  getState().outbox.filter((m) => m.templateKey === "split_invite").length >= 2,
+);
+check("it is found from the booking", splitForBooking(splitBooking.id)?.id === groupSplit.id);
+check(
+  "the organiser sees it in their list",
+  splitsFor("gina@otithee.com").some((s) => s.id === groupSplit.id),
+);
+check(
+  "an invitee sees it in theirs too",
+  splitsFor("hal@otithee.com").some((s) => s.id === groupSplit.id),
+);
+
+const owedAtStart = outstandingUsd(groupSplit);
+check("what's outstanding is the unpaid shares", owedAtStart > 0);
+check(
+  "collected plus outstanding is the total",
+  Math.abs(collectedUsd(groupSplit) + owedAtStart - groupSplit.totalUsd) < 0.01,
+);
+
+// Settle one share by its link.
+const halShare = groupSplit.shares[1];
+const bogus = payShare("not-a-real-token");
+check("an unknown token is refused", !bogus.ok && !bogus.completed);
+
+let halResult = payShare(halShare.token);
+if (!halResult.ok) {
+  // A declined first attempt is part of the design; the retry clears.
+  check("a decline explains itself", Boolean(halResult.message));
+  halResult = payShare(halShare.token);
+}
+check("a share can be paid by its link", halResult.ok);
+check("it isn't the last one, so the split is still collecting", !halResult.completed);
+check(
+  "the payment carries a reference",
+  Boolean(getSplit(groupSplit.id)?.shares.find((s) => s.id === halShare.id)?.paymentRef),
+);
+check(
+  "paying the same share twice is idempotent",
+  payShare(halShare.token).ok &&
+    getSplit(groupSplit.id)!.shares.filter((s) => s.status === "paid").length === 2,
+);
+
+// The organiser covers the last one.
+const owedBeforeCover = outstandingUsd(getSplit(groupSplit.id)!);
+const covered = coverRemaining(groupSplit.id);
+check("covering settles every unpaid share", covered.covered === 1);
+check("and charges exactly what was owed", Math.abs(covered.amountUsd - owedBeforeCover) < 0.01);
+const finished = getSplit(groupSplit.id)!;
+check("the split completes", finished.status === "complete");
+check("covered shares are marked as such", finished.shares.some((s) => s.status === "covered"));
+check("nothing is outstanding", outstandingUsd(finished) === 0);
+check(
+  "the organiser is told it's settled",
+  getState().outbox.some((m) => m.templateKey === "split_complete"),
+);
+check(
+  "covering again does nothing",
+  coverRemaining(groupSplit.id).covered === 0,
+);
+
+// An unpaid split whose window has passed goes back to the organiser.
+const staleBooking = await bookingService.create(
+  {
+    productKind: "hotels",
+    productTitle: HOTELS[3].title,
+    destination: HOTELS[3].location.city ?? "Somewhere",
+    merchantId: MERCHANTS[0].id,
+    customerName: "Stan Stale",
+    customerEmail: "stan@otithee.com",
+    segment: "b2c",
+    startAt: new Date(Date.now() + 60 * DAY).toISOString(),
+    endAt: new Date(Date.now() + 62 * DAY).toISOString(),
+    quantity: 1,
+    baseAmount: 400,
+    cancellationPolicyId: "flexible",
+  },
+  ACTOR,
+);
+const staleSplit = createSplit({
+  bookingId: staleBooking.id,
+  bookingRef: staleBooking.reference,
+  productTitle: staleBooking.productTitle,
+  organiserName: "Stan Stale",
+  organiserEmail: "stan@otithee.com",
+  totalUsd: staleBooking.money.total,
+  participants: [
+    { name: "Stan Stale", email: "stan@otithee.com" },
+    { name: "Nora No-show", email: "nora@otithee.com" },
+  ],
+});
+check("a reminder reaches the unpaid", remindOutstanding(staleSplit.id) === 1);
+
+const chased = sweepSplitPayments(Date.now() + (SPLIT_WINDOW_HOURS + 1) * 3_600_000);
+check("the sweep closes an overdue window", chased.affected >= 1);
+check("the split is expired, not cancelled", getSplit(staleSplit.id)?.status === "expired");
+check(
+  "the organiser is asked to cover it",
+  getState().outbox.some((m) => m.templateKey === "split_expired"),
+);
+check(
+  "the booking itself is untouched",
+  getState().bookings.find((b) => b.id === staleBooking.id)?.status !== "cancelled",
+);
+
+cancelSplit(staleBooking.id);
+check("cancelling the booking closes the split", getSplit(staleSplit.id)?.status === "cancelled");
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

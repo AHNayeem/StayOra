@@ -1,6 +1,7 @@
 /** Tax module — tax rules configuration (types, schema, service, columns, hooks, UI). */
 export * from "./types";
 export { taxSchema } from "./schemas";
+export { TaxRuleCheck } from "./rule-check";
 export type { TaxFormValues } from "./schemas";
 export { taxesService, taxKeys } from "./service";
 export { taxColumns } from "./columns";
