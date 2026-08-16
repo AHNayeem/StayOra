@@ -20,7 +20,7 @@ import type { RevenueEntry } from "./revenue";
 import type { InsurancePlan, InsurancePolicy, InsuranceProvider } from "./insurance";
 import type { MembershipPlan, MembershipSubscription } from "./membership";
 import type { AdCampaign, Advertiser } from "./advertising";
-import type { PricingRule } from "./revenue-management";
+import type { RecommendationRule } from "./revenue-management";
 import type { B2BSubUser, Booking, ProductKind } from "./types";
 
 const NOW_MS = new Date(PLATFORM_NOW).getTime();
@@ -892,7 +892,7 @@ function spendOf(campaign: AdCampaign): number {
 // Revenue-management rules
 // ---------------------------------------------------------------------------
 
-function pricingRulesSeed(): PricingRule[] {
+function pricingRulesSeed(): RecommendationRule[] {
   const base = {
     threshold: 0,
     unitsRemaining: 0,
@@ -1157,7 +1157,7 @@ export interface MonetizationSeed {
   memberships: MembershipSubscription[];
   advertisers: Advertiser[];
   adCampaigns: AdCampaign[];
-  pricingRules: PricingRule[];
+  recommendationRules: RecommendationRule[];
   b2bSubUsers: B2BSubUser[];
 }
 
@@ -1184,7 +1184,7 @@ export function buildMonetization(bookings: Booking[]): MonetizationSeed {
     memberships,
     advertisers,
     adCampaigns,
-    pricingRules: pricingRulesSeed(),
+    recommendationRules: pricingRulesSeed(),
     b2bSubUsers: subUsersSeed(),
   };
 }

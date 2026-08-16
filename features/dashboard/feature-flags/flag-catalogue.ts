@@ -74,6 +74,16 @@ export const FEATURE_FLAG_CATALOGUE: FeatureFlagDefinition[] = [
     defaultEnabled: true,
   },
   {
+    key: "dynamic-pricing",
+    label: "Dynamic pricing",
+    description:
+      "Seasons, holidays, weekend and demand rules, rate plans, the pricing calendar and manual overrides. Off leaves quotes on the base rate.",
+    group: "Modules",
+    gates:
+      "Menu · /dashboard/catalog/pricing · /dashboard/catalog/pricing/rules · /dashboard/catalog/pricing/rate-plans · /dashboard/settings/pricing",
+    defaultEnabled: true,
+  },
+  {
     key: "disputes",
     label: "Disputes & chargebacks",
     description: "The chargeback case list and evidence workflow.",

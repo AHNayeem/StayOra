@@ -4,7 +4,7 @@ import type { BookingVertical } from "@/types/booking";
 import { VERTICALS } from "@/constants/verticals";
 import { BOOKING_CONFIG } from "@/constants/detail";
 import { getListingBySlug } from "@/services/catalog";
-import { RATE_PLAN_IDS, type RatePlanId } from "@/features/dashboard/domain";
+import { findRatePlan } from "@/features/dashboard/domain";
 import { CheckoutFlow, type CheckoutIntent } from "@/components/checkout/checkout-flow";
 
 export const metadata: Metadata = {
@@ -60,7 +60,10 @@ export default async function CheckoutPage({ searchParams }: SearchParams) {
     units,
     guests,
     roomTypeId: first(params.room) || undefined,
-    ratePlanId: RATE_PLAN_IDS.includes(rate as RatePlanId) ? (rate as RatePlanId) : undefined,
+    // Rate plans are records now, not a closed union: accept any id the
+    // catalogue actually sells and let the quote fall back to standard for the
+    // rest, rather than silently dropping a merchant's own plan from a link.
+    ratePlanId: rate && findRatePlan(rate) ? rate : undefined,
   };
 
   return <CheckoutFlow listing={listing} intent={intent} />;

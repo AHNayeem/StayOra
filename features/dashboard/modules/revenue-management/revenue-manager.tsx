@@ -46,8 +46,8 @@ import {
   useApplyRecommendation,
   useBookingPace,
   useBookingPerformance,
-  usePricingRules,
-  useUpdatePricingRule,
+  useRecommendationRules,
+  useUpdateRecommendationRule,
 } from "./hooks";
 
 /** Default window: the next 30 nights from the demo clock. */
@@ -67,7 +67,7 @@ function isoIn(days: number): string {
 export function RevenueManager({ listings }: { listings: Listing[] }) {
   const scope = useDomainScope();
   const apply = useApplyRecommendation();
-  const updateRule = useUpdatePricingRule();
+  const updateRule = useUpdateRecommendationRule();
 
   const visible = useMemo(
     () =>
@@ -107,7 +107,7 @@ export function RevenueManager({ listings }: { listings: Listing[] }) {
     [property?.id, from, nights],
   );
 
-  const rules = usePricingRules(property?.id);
+  const rules = useRecommendationRules(property?.id);
   const pace = useBookingPace(listing?.id);
   const performance = useBookingPerformance(listing?.id);
 

@@ -41,6 +41,7 @@ export * from "./insurance";
 export * from "./membership";
 export * from "./advertising";
 export * from "./revenue-management";
+export * from "./pricing";
 export * from "./inventory";
 export * from "./tax";
 export { taxRuleService } from "./tax-service";
@@ -105,6 +106,8 @@ export {
 export type { MerchantCampaignInput, SpendEstimate } from "./merchant-advertising";
 export { disputeService } from "./dispute-service";
 export { payoutService } from "./payout-service";
+export { pricingService } from "./pricing-service";
+export type { PricingOverview } from "./pricing-service";
 export {
   allCatalogueItems,
   catalogueForMerchant,

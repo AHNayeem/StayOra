@@ -11,8 +11,8 @@ export {
   useApplyRecommendation,
   useBookingPace,
   useBookingPerformance,
-  useCreatePricingRule,
-  useDeletePricingRule,
-  usePricingRules,
-  useUpdatePricingRule,
+  useCreateRecommendationRule,
+  useDeleteRecommendationRule,
+  useRecommendationRules,
+  useUpdateRecommendationRule,
 } from "./hooks";

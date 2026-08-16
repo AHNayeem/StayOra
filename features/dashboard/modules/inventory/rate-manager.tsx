@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { Listing } from "@/types/catalog";
 import {
-  RATE_PLAN_LIST,
+  allRatePlans,
   bulkUpdateInventory,
   calendar,
   clearOverrides,
@@ -288,7 +288,7 @@ export function RateManager({ listings }: { listings: Listing[] }) {
       <Panel>
         <PanelHeader
           title="Rate plans"
-          description="Multipliers applied to the nightly price above. Shared across the platform."
+          description="Multipliers applied to the nightly price above. Manage them under Pricing → Rate plans."
         />
         <PanelBody className="p-0">
           <table className="w-full text-sm">
@@ -303,8 +303,10 @@ export function RateManager({ listings }: { listings: Listing[] }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {RATE_PLAN_LIST.map((plan) => {
-                const offered = ratePlansFor(listing.vertical).some((p) => p.id === plan.id);
+              {allRatePlans().map((plan) => {
+                const offered = ratePlansFor(listing.vertical, property.id).some(
+                  (p) => p.id === plan.id,
+                );
                 return (
                   <tr key={plan.id} className={cn(!offered && "opacity-50")}>
                     <td className="px-4 py-3">

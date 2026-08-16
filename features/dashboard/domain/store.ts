@@ -51,7 +51,17 @@ import type { RevenueEntry } from "./revenue";
 import type { InsurancePlan, InsurancePolicy, InsuranceProvider } from "./insurance";
 import type { MembershipPlan, MembershipSubscription } from "./membership";
 import type { AdCampaign, Advertiser } from "./advertising";
-import type { PricingRule } from "./revenue-management";
+import type { RecommendationRule } from "./revenue-management";
+import type {
+  PricingConfiguration,
+  PricingRule,
+  RatePlan,
+} from "./pricing/types";
+import {
+  seedPricingConfigs,
+  seedPricingRules,
+  seedRatePlans,
+} from "./pricing/mock-data";
 import type { Merchant } from "./merchants";
 import type { CatalogueStatic, CatalogueWorkflow } from "./catalogue";
 import type { Dispute } from "./disputes";
@@ -70,7 +80,7 @@ import { seedCatalogueDrafts, seedCatalogueWorkflow } from "./seed-catalogue";
 import { buildMonetization } from "./seed-revenue";
 
 /** Bump when a shape changes so stale persisted state is discarded. */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 const STORAGE_KEY = `otithee:domain:v${SCHEMA_VERSION}`;
 
 export interface DomainState {
@@ -121,8 +131,20 @@ export interface DomainState {
   memberships: MembershipSubscription[];
   advertisers: Advertiser[];
   adCampaigns: AdCampaign[];
-  /** Revenue-management automation rules. */
-  pricingRules: PricingRule[];
+  /** Revenue-management automation rules — they *suggest* changes. */
+  recommendationRules: RecommendationRule[];
+
+  // --- dynamic pricing ----------------------------------------------------
+  /**
+   * The rule book the pricing engine reads: seasons, holidays, weekends,
+   * demand bands, booking window, length of stay, guests and discounts, all in
+   * one polymorphic collection so priority and conflict resolution are uniform.
+   */
+  pricingRuleBook: PricingRule[];
+  /** Sellable rate plans, shipped and merchant-created alike. */
+  ratePlans: RatePlan[];
+  /** Weekend days, guard rails and switches — global plus per-property. */
+  pricingConfigs: PricingConfiguration[];
   /** Named users who book under a B2B account. */
   b2bSubUsers: B2BSubUser[];
 
@@ -217,7 +239,10 @@ function freshState(): DomainState {
     memberships: monetization.memberships,
     advertisers: monetization.advertisers,
     adCampaigns: monetization.adCampaigns,
-    pricingRules: monetization.pricingRules,
+    recommendationRules: monetization.recommendationRules,
+    pricingRuleBook: seedPricingRules(),
+    ratePlans: seedRatePlans(),
+    pricingConfigs: seedPricingConfigs(),
     b2bSubUsers: monetization.b2bSubUsers,
     merchants: structuredClone(MERCHANTS_SEED),
     catalogueWorkflow: seedCatalogueWorkflow(),

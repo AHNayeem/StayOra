@@ -23,6 +23,7 @@ import {
   type StayQuote,
 } from "@/features/dashboard/domain";
 import { toPropertyRef, useDomainValue } from "@/features/booking";
+import { PriceReasonSummary } from "./price-breakdown";
 import { useLocale } from "@/features/i18n";
 import { cn } from "@/lib/utils";
 
@@ -274,6 +275,16 @@ export function RoomRateSelector({
                         )}
                       </span>
                     </button>
+
+                    {/* Why this rate is what it is — shown only for the option
+                        the traveller has actually chosen, so the matrix stays
+                        scannable. */}
+                    {isSelected && !blocked && (
+                      <PriceReasonSummary
+                        quote={quote}
+                        className="px-4 pb-3 -mt-1"
+                      />
+                    )}
                   </li>
                 );
               })}

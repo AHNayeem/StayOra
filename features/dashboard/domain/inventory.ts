@@ -1,16 +1,29 @@
 /**
- * Inventory & rate plans — the prototype's availability engine.
+ * Inventory & availability — the prototype's allotment engine, and the caller
+ * that turns a base rate into a price.
  *
- * A property's *baseline* (room types, per-night allotment and price) is derived
- * deterministically from the listing it belongs to, so the whole catalogue has
- * inventory without shipping a multi-megabyte calendar. Everything a human or a
- * booking then *changes* is stored as a delta in the domain store:
+ * A property's *baseline* (room types, per-night allotment and base rate) is
+ * derived deterministically from the listing it belongs to, so the whole
+ * catalogue has inventory without shipping a multi-megabyte calendar.
+ * Everything a human or a booking then *changes* is stored as a delta in the
+ * domain store:
  *
  *   baseline (pure, seeded)  +  overrides (revenue manager)  −  consumed (bookings/holds)
  *
  * That keeps the calendar infinite in both directions, SSR-stable, and small
  * enough to persist. A real backend replaces `dayRate`/`consumed` with a query
  * against the availability table; the signatures below are already the API.
+ *
+ * ## Where prices come from
+ *
+ * This module owns the *base* rate and the availability; it does not decide what
+ * a night costs. That is `domain/pricing`, which turns the base rate into an
+ * effective rate through the configurable rule book (seasons, holidays,
+ * weekends, demand, manual overrides) and turns a set of nights into a room
+ * total (rate plan, booking window, length of stay, guests, discounts). Every
+ * price the product shows — the search card, the room picker, the checkout, the
+ * merchant calendar — comes back through {@link quoteStay} or {@link dayRate},
+ * so there is exactly one pricing path.
  *
  * All prices are base USD, like listing prices and the rest of the domain.
  */
@@ -19,6 +32,22 @@ import type { BookingVertical } from "@/types/booking";
 import { hashString } from "@/lib/random";
 import { getCancellationPolicy } from "./lifecycle";
 import { money } from "./money";
+import {
+  calculateStayPrice,
+  daysBetween,
+  explainDailyRate,
+  includedGuestsFor,
+  legacySeasonTag,
+  listRatePlans,
+  findRatePlan,
+  pricingConfigFor,
+  resolveCached,
+  todayISO,
+  type BookingPriceCalculation,
+  type DailyRate as PricedDay,
+  type RatePlan,
+  type RatePlanId,
+} from "./pricing";
 import { getRevision, getState, mutate, nextId } from "./store";
 import type { CancellationPolicyId } from "./types";
 
@@ -49,6 +78,13 @@ export interface RoomType {
   image: string;
 }
 
+/**
+ * The ids of the plans the product ships with.
+ *
+ * Rate plans are records in the store now, not a frozen constant, so merchants
+ * can add their own — but these four are the ones deep-linked URLs and seeded
+ * bookings refer to, and they are never deleted (disabling archives them).
+ */
 export const RATE_PLAN_IDS = [
   "standard",
   "non_refundable",
@@ -56,27 +92,9 @@ export const RATE_PLAN_IDS = [
   "flexible",
 ] as const;
 
-export type RatePlanId = (typeof RATE_PLAN_IDS)[number];
+export type BuiltInRatePlanId = (typeof RATE_PLAN_IDS)[number];
 
-export interface RatePlan {
-  id: RatePlanId;
-  name: string;
-  description: string;
-  /** Room price × this. Non-refundable is cheaper, flexible dearer. */
-  priceFactor: number;
-  cancellationPolicyId: CancellationPolicyId;
-  includesBreakfast: boolean;
-  refundable: boolean;
-  minStay: number;
-  maxStay: number;
-  /** Weekdays (0 = Sunday) a stay may not *start* on. */
-  closedToArrival: number[];
-  /** Weekdays a stay may not *end* on. */
-  closedToDeparture: number[];
-  badge?: string;
-  /** Perks shown as ticks on the rate card. */
-  inclusions: string[];
-}
+export type { RatePlan, RatePlanId };
 
 /** One night of one room type, fully resolved. */
 export interface DayRate {
@@ -93,6 +111,14 @@ export interface DayRate {
   available: number;
   /** Nightly price for the room type at the *standard* plan, USD. */
   price: number;
+  /** The untouched base rate, before any pricing rule. */
+  baseRate: number;
+  /**
+   * The pricing engine's full working for this night — which rules fired, in
+   * what order, what each did, and what was skipped. The rate calendar renders
+   * it; nothing recomputes it.
+   */
+  pricing: PricedDay;
   stopSell: boolean;
   minStay: number;
   closedToArrival: boolean;
@@ -108,6 +134,10 @@ export interface InventoryOverride {
   date: string;
   allotment?: number;
   price?: number;
+  /** Why the rate was pinned by hand — shown wherever the override is. */
+  priceNote?: string;
+  /** What the pricing engine would have charged when the pin was set. */
+  priceBefore?: number;
   stopSell?: boolean;
   minStay?: number;
   closedToArrival?: boolean;
@@ -160,86 +190,61 @@ export const HOLD_MINUTES = 15;
 
 const DAY_MS = 86_400_000;
 
-/** Rate plans, shared by every property (a real system scopes them per hotel). */
-export const RATE_PLANS: Record<RatePlanId, RatePlan> = {
-  standard: {
-    id: "standard",
-    name: "Standard rate",
-    description: "Room only. Free cancellation up to 5 days before arrival.",
-    priceFactor: 1,
-    cancellationPolicyId: "moderate",
-    includesBreakfast: false,
-    refundable: true,
-    minStay: 1,
-    maxStay: 30,
-    closedToArrival: [],
-    closedToDeparture: [],
-    inclusions: ["Room only", "Free cancellation up to 5 days before"],
-  },
-  non_refundable: {
-    id: "non_refundable",
-    name: "Non-refundable",
-    description: "Our lowest price. Pay now — no changes, no refunds.",
-    priceFactor: 0.86,
-    cancellationPolicyId: "non_refundable",
-    includesBreakfast: false,
-    refundable: false,
-    minStay: 1,
-    maxStay: 30,
-    closedToArrival: [],
-    closedToDeparture: [],
-    badge: "Best price",
-    inclusions: ["14% off the standard rate", "No refund if you cancel"],
-  },
-  breakfast: {
-    id: "breakfast",
-    name: "Breakfast included",
-    description: "Daily breakfast for every guest, plus a moderate policy.",
-    priceFactor: 1.14,
-    cancellationPolicyId: "moderate",
-    includesBreakfast: true,
-    refundable: true,
-    minStay: 1,
-    maxStay: 30,
-    closedToArrival: [],
-    closedToDeparture: [],
-    badge: "Most popular",
-    inclusions: ["Breakfast for all guests", "Free cancellation up to 5 days before"],
-  },
-  flexible: {
-    id: "flexible",
-    name: "Fully flexible",
-    description: "Change or cancel free of charge right up to check-in.",
-    priceFactor: 1.22,
-    cancellationPolicyId: "flexible",
-    includesBreakfast: true,
-    refundable: true,
-    minStay: 1,
-    maxStay: 45,
-    closedToArrival: [],
-    closedToDeparture: [],
-    inclusions: [
-      "Free cancellation up to 24 hours before",
-      "Breakfast included",
-      "Free date changes",
-    ],
-  },
+/**
+ * The last-resort plan.
+ *
+ * `getRatePlan` reads the store, and on a first server render before any state
+ * exists that read can come back empty. Returning `undefined` there would ripple
+ * a null check through every caller for a case that only ever means "the seed
+ * has not loaded", so a plain standard rate stands in.
+ */
+const FALLBACK_PLAN: RatePlan = {
+  id: "standard",
+  name: "Standard rate",
+  description: "Room only.",
+  priceFactor: 1,
+  currency: "USD",
+  cancellationPolicyId: "moderate",
+  mealPlan: "none",
+  includesBreakfast: false,
+  refundable: true,
+  minStay: 1,
+  maxStay: 30,
+  closedToArrival: [],
+  closedToDeparture: [],
+  minAdvanceDays: 0,
+  maxAdvanceDays: 0,
+  status: "active",
+  verticals: [],
+  propertyIds: [],
+  roomTypeIds: [],
+  inclusions: ["Room only"],
+  builtIn: true,
+  createdAt: "1970-01-01T00:00:00.000Z",
+  updatedAt: "1970-01-01T00:00:00.000Z",
+  updatedBy: "system",
 };
 
-export const RATE_PLAN_LIST: RatePlan[] = RATE_PLAN_IDS.map((id) => RATE_PLANS[id]);
-
-export function getRatePlan(id: RatePlanId): RatePlan {
-  return RATE_PLANS[id] ?? RATE_PLANS.standard;
+/** Every active rate plan on the platform. */
+export function allRatePlans(): RatePlan[] {
+  const rows = listRatePlans({ status: "active" });
+  return rows.length > 0 ? rows : [FALLBACK_PLAN];
 }
 
-/** The rate plans a vertical actually sells. */
-export function ratePlansFor(vertical: BookingVertical): RatePlan[] {
-  if (vertical === "hotels" || vertical === "resorts") return RATE_PLAN_LIST;
-  if (vertical === "apartments" || vertical === "shared-rooms") {
-    return [RATE_PLANS.standard, RATE_PLANS.non_refundable, RATE_PLANS.flexible];
-  }
-  // Tours, activities, transport, halls, visas: refundable vs not is enough.
-  return [RATE_PLANS.standard, RATE_PLANS.non_refundable];
+export function getRatePlan(id: RatePlanId): RatePlan {
+  return findRatePlan(id) ?? allRatePlans()[0] ?? FALLBACK_PLAN;
+}
+
+/**
+ * The rate plans a vertical (and optionally one property) actually sells.
+ *
+ * Which plans reach which vertical used to be a `switch`; it is a field on the
+ * plan now, so a merchant adding a "Half board" plan for their resort does not
+ * need a code change to have it offered.
+ */
+export function ratePlansFor(vertical: BookingVertical, propertyId?: string): RatePlan[] {
+  const rows = listRatePlans({ status: "active", vertical, propertyId });
+  return rows.length > 0 ? rows : [FALLBACK_PLAN];
 }
 
 // ---------------------------------------------------------------------------
@@ -549,40 +554,32 @@ export function findRoomType(property: PropertyRef, roomTypeId: string): RoomTyp
 // Day baseline
 // ---------------------------------------------------------------------------
 
-/** Month multipliers — a believable Northern-hemisphere leisure season curve. */
-const SEASON_FACTOR = [
-  0.88, 0.9, 0.95, 1.0, 1.05, 1.15, 1.25, 1.25, 1.08, 0.98, 0.9, 1.12,
-];
-
 function dayOfWeek(date: string): number {
   const [y, m, d] = date.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-function monthOf(date: string): number {
-  return Number(date.slice(5, 7)) - 1;
-}
-
 /**
- * The untouched baseline for one night — before admin overrides and bookings.
- * Seeded by room type + date, so the calendar is identical everywhere.
+ * The untouched baseline for one night — before pricing rules, admin overrides
+ * and bookings. Seeded by room type + date, so the calendar is identical on the
+ * server and in every browser.
+ *
+ * The seasonal curve and weekend uplift that used to be multiplied in here are
+ * gone: they are configurable pricing rules now (`domain/pricing`), which is
+ * what lets a merchant see and change them. What remains is genuinely the
+ * property's own rack rate plus a little per-night jitter so no two days look
+ * copy-pasted.
  */
 function baseline(
   property: PropertyRef,
   room: RoomType,
   date: string,
-): { allotment: number; price: number; stopSell: boolean; season: DayRate["season"] } {
+): { allotment: number; baseRate: number; stopSell: boolean } {
   const seed = hashString(`${room.id}:${date}`);
-  const dow = dayOfWeek(date);
-  const isWeekend = dow === 5 || dow === 6;
-  const seasonFactor = SEASON_FACTOR[monthOf(date)] ?? 1;
-  const weekendFactor = isWeekend ? 1.18 : 1;
   // ±6% jitter so no two days look copy-pasted.
   const jitter = 0.94 + ((seed >>> 8) % 13) / 100;
 
-  const price = money(
-    property.basePrice * room.priceFactor * seasonFactor * weekendFactor * jitter,
-  );
+  const baseRate = money(property.basePrice * room.priceFactor * jitter);
 
   // Occupancy pressure: a slice of each room type is already committed to
   // other channels, and roughly 1 in 22 nights is closed out entirely.
@@ -591,10 +588,7 @@ function baseline(
   const committed = Math.floor((room.totalUnits * (pressure % 60)) / 100);
   const allotment = stopSell ? 0 : Math.max(0, room.totalUnits - committed);
 
-  const season: DayRate["season"] =
-    seasonFactor >= 1.15 ? "peak" : isWeekend ? "weekend" : seasonFactor <= 0.92 ? "low" : undefined;
-
-  return { allotment, price, stopSell, season };
+  return { allotment, baseRate, stopSell };
 }
 
 function overrideKey(roomTypeId: string, date: string): string {
@@ -651,11 +645,23 @@ export function blockedBy(roomTypeId: string, date: string): string | undefined 
   return externalBlockIndex().get(overrideKey(roomTypeId, date))?.summary;
 }
 
-/** One fully-resolved night: baseline + override − consumed. */
-export function dayRate(property: PropertyRef, room: RoomType, date: string): DayRate {
+/**
+ * One fully-resolved night: baseline + pricing rules + override − consumed.
+ *
+ * The price it reports is the *standard plan* rate, which is what a calendar
+ * cell and an availability check want. {@link nightlyRate} resolves the same
+ * night for a specific rate plan, which is what a quote wants — both go through
+ * the same engine, so they can never disagree about why a night costs what it
+ * does.
+ */
+export function dayRate(
+  property: PropertyRef,
+  room: RoomType,
+  date: string,
+  ratePlanId: RatePlanId = "standard",
+): DayRate {
   const base = baseline(property, room, date);
   const override = findOverride(room.id, date);
-  const plan = RATE_PLANS.standard;
 
   const allotment = Math.min(
     room.totalUnits,
@@ -667,6 +673,28 @@ export function dayRate(property: PropertyRef, room: RoomType, date: string): Da
   // own bookings do — that is the whole point of syncing a calendar.
   const blocked = blockedUnits(room.id, date);
 
+  // Demand pricing reads the same occupancy the revenue manager sees: units
+  // committed (ours and the channels') over units offered.
+  const occupancy = allotment > 0 ? Math.min(1, (booked + blocked) / allotment) : 0;
+
+  const pricing = resolveCached({
+    date,
+    baseRate: base.baseRate,
+    propertyId: property.id,
+    roomTypeId: room.id,
+    ratePlanId,
+    vertical: property.vertical,
+    occupancy,
+    override:
+      override?.price === undefined
+        ? undefined
+        : {
+            price: override.price,
+            reason: override.priceNote,
+            calculatedPrice: override.priceBefore,
+          },
+  });
+
   return {
     date,
     roomTypeId: room.id,
@@ -675,13 +703,54 @@ export function dayRate(property: PropertyRef, room: RoomType, date: string): Da
     blocked,
     blockedBy: blocked > 0 ? blockedBy(room.id, date) : undefined,
     available: stopSell ? 0 : Math.max(0, allotment - booked - blocked),
-    price: money(override?.price ?? base.price),
+    price: pricing.effectiveRate,
+    baseRate: pricing.baseRate,
+    pricing,
     stopSell,
-    minStay: override?.minStay ?? plan.minStay,
+    // A minimum stay can come from the day (a revenue-manager edit) or from a
+    // rule that owns the date (a festive window, an Eid holiday).
+    minStay: Math.max(override?.minStay ?? 1, pricing.minStay || 1),
     closedToArrival: override?.closedToArrival ?? false,
     closedToDeparture: override?.closedToDeparture ?? false,
-    season: base.season,
+    season: legacySeasonTag(pricing),
   };
+}
+
+/**
+ * The priced night for a specific rate plan.
+ *
+ * A plan with a contracted `baseRate` replaces the room's own rate before the
+ * rules run, so a negotiated corporate rate still moves with a holiday unless
+ * the holiday is scoped away from that plan.
+ */
+export function nightlyRate(
+  property: PropertyRef,
+  room: RoomType,
+  date: string,
+  plan: RatePlan,
+  occupancy: number,
+): PricedDay {
+  const base = baseline(property, room, date);
+  const override = findOverride(room.id, date);
+  const baseRate = plan.baseRate !== undefined ? plan.baseRate : base.baseRate;
+
+  return resolveCached({
+    date,
+    baseRate,
+    propertyId: property.id,
+    roomTypeId: room.id,
+    ratePlanId: plan.id,
+    vertical: property.vertical,
+    occupancy,
+    override:
+      override?.price === undefined
+        ? undefined
+        : {
+            price: override.price,
+            reason: override.priceNote,
+            calculatedPrice: override.priceBefore,
+          },
+  });
 }
 
 /** `count` consecutive nights from `start` (ISO `YYYY-MM-DD`). */
@@ -702,14 +771,20 @@ export function nightsBetween(checkIn: string, checkOut: string): number {
   return Math.max(0, Math.round(ms / DAY_MS));
 }
 
-/** A calendar strip for the revenue manager / availability display. */
+/**
+ * A calendar strip for the revenue manager / availability display.
+ *
+ * `ratePlanId` selects which plan's rules resolve the nightly rate; it defaults
+ * to the standard plan, which is what an availability view wants.
+ */
 export function calendar(
   property: PropertyRef,
   room: RoomType,
   start: string,
   days: number,
+  ratePlanId: RatePlanId = "standard",
 ): DayRate[] {
-  return dateRange(start, days).map((date) => dayRate(property, room, date));
+  return dateRange(start, days).map((date) => dayRate(property, room, date, ratePlanId));
 }
 
 // ---------------------------------------------------------------------------
@@ -726,6 +801,13 @@ export interface AvailabilityRequest {
   units: number;
   /** People travelling, checked against the room's occupancy. */
   guests?: number;
+  /**
+   * The date the traveller is booking *on*, for booking-window pricing.
+   * Defaults to today. Passing it explicitly is what makes a quote
+   * reproducible — a test, or a re-price of an old booking, must not drift
+   * with the wall clock.
+   */
+  bookingDate?: string;
 }
 
 export type AvailabilityBlocker =
@@ -737,6 +819,8 @@ export type AvailabilityBlocker =
   | "closed_to_departure"
   | "occupancy"
   | "no_dates"
+  | "advance_booking"
+  | "rate_plan_unavailable"
   | "unknown_room";
 
 export interface AvailabilityResult {
@@ -776,7 +860,35 @@ export function checkAvailability(request: AvailabilityRequest): AvailabilityRes
   }
 
   const plan = getRatePlan(ratePlanId);
-  const nights = dateRange(checkIn, nightCount).map((date) => dayRate(property, room, date));
+  const nights = dateRange(checkIn, nightCount).map((date) =>
+    dayRate(property, room, date, plan.id),
+  );
+
+  if (plan.status !== "active") {
+    blockers.push({
+      code: "rate_plan_unavailable",
+      message: `${plan.name} is not on sale at the moment.`,
+    });
+  }
+
+  // Advance-purchase windows: how early or late the plan may be booked. Only
+  // checked when the caller told us the booking date, so a re-price of a stored
+  // booking is never rejected by today's calendar.
+  if (request.bookingDate && (plan.minAdvanceDays > 0 || plan.maxAdvanceDays > 0)) {
+    const lead = daysBetween(request.bookingDate, checkIn);
+    if (plan.minAdvanceDays > 0 && lead < plan.minAdvanceDays) {
+      blockers.push({
+        code: "advance_booking",
+        message: `${plan.name} must be booked at least ${plan.minAdvanceDays} days before arrival.`,
+      });
+    }
+    if (plan.maxAdvanceDays > 0 && lead > plan.maxAdvanceDays) {
+      blockers.push({
+        code: "advance_booking",
+        message: `${plan.name} opens ${plan.maxAdvanceDays} days before arrival.`,
+      });
+    }
+  }
 
   if (guests && guests > room.maxOccupancy * units) {
     blockers.push({
@@ -856,11 +968,17 @@ export function checkAvailability(request: AvailabilityRequest): AvailabilityRes
 
 export interface StayQuoteLine {
   date: string;
+  /** The room's untouched rate, before any pricing rule. */
+  baseRate: number;
   /** Standard-plan nightly rate before the plan factor. */
   basePrice: number;
   /** What this night actually costs on the chosen plan, per unit. */
   price: number;
   season?: DayRate["season"];
+  /** "Peak season +30%", "Weekend +18%" — traveller-safe, no internals. */
+  reasons: string[];
+  /** True when the property pinned this night by hand. */
+  overridden: boolean;
 }
 
 export interface StayQuote {
@@ -876,6 +994,12 @@ export interface StayQuote {
   averageNightly: number;
   /** Room subtotal for all nights × units, before add-ons/fees/tax. */
   roomSubtotal: number;
+  /**
+   * The pricing engine's full working: every night with its rule trace, the
+   * stay-level adjustments (booking window, length of stay, guests) and the
+   * discounts. The breakdown the traveller and the merchant both read.
+   */
+  pricing: BookingPriceCalculation;
   cancellationPolicyId: CancellationPolicyId;
   cancellationSummary: string;
   refundable: boolean;
@@ -889,35 +1013,77 @@ export interface StayQuote {
  * Price a stay night-by-night. This is the *only* place a room price is
  * computed for the customer — the checkout and the detail page both call it,
  * so a price shown can never diverge from the price charged.
+ *
+ * The arithmetic itself lives in `domain/pricing`; this function's job is to
+ * supply it with the base rate, the occupancy and the stay shape, and to hand
+ * back the result in the shape the product already consumes.
  */
 export function quoteStay(request: AvailabilityRequest): StayQuote {
   const { property, roomTypeId, ratePlanId, units } = request;
   const room = findRoomType(property, roomTypeId);
   const plan = getRatePlan(ratePlanId);
   const result = checkAvailability(request);
+  const config = pricingConfigFor(property.id);
+  const guests = Math.max(1, request.guests ?? 1);
+  const bookingDate = request.bookingDate ?? todayISO();
 
-  const lines: StayQuoteLine[] = result.nights.map((night) => ({
+  // Resolve each night again for the *chosen* plan: a rule may be scoped to one
+  // rate plan, and a contracted plan replaces the base rate outright. Both
+  // resolutions are memoised, so this costs a map lookup per night.
+  const priced: PricedDay[] = room
+    ? result.nights.map((night) =>
+        nightlyRate(
+          property,
+          room,
+          night.date,
+          plan,
+          night.allotment > 0
+            ? Math.min(1, (night.booked + night.blocked) / night.allotment)
+            : 0,
+        ),
+      )
+    : [];
+
+  const calculation = calculateStayPrice({
+    nights: priced,
+    ratePlan: plan,
+    roomTypeId,
+    propertyId: property.id,
+    vertical: property.vertical,
+    units,
+    guests,
+    includedGuests: includedGuestsFor(room?.maxOccupancy ?? 2, units),
+    bookingDate,
+    checkIn: request.checkIn,
+    checkOut: request.checkOut || request.checkIn,
+    config,
+  });
+
+  const planFactor = plan.baseRate !== undefined ? 1 : plan.priceFactor;
+  const lines: StayQuoteLine[] = priced.map((night, index) => ({
     date: night.date,
-    basePrice: night.price,
-    price: money(night.price * plan.priceFactor),
-    season: night.season,
+    baseRate: night.baseRate,
+    basePrice: result.nights[index]?.price ?? night.effectiveRate,
+    price: money(night.effectiveRate * planFactor),
+    season: legacySeasonTag(night),
+    reasons: explainDailyRate(night),
+    overridden: night.overridden,
   }));
 
-  const nightCount = lines.length;
-  const perUnit = lines.reduce((sum, line) => sum + line.price, 0);
   const policy = getCancellationPolicy(plan.cancellationPolicyId);
 
   return {
-    currency: "USD",
+    currency: plan.currency || config.currency || "USD",
     roomTypeId,
     roomTypeName: room?.name ?? "Room",
     ratePlanId: plan.id,
     ratePlanName: plan.name,
     nights: lines,
-    nightCount,
+    nightCount: lines.length,
     units,
-    averageNightly: nightCount ? money(perUnit / nightCount) : 0,
-    roomSubtotal: money(perUnit * units),
+    averageNightly: calculation.averageNightly,
+    roomSubtotal: calculation.roomSubtotal,
+    pricing: calculation,
     cancellationPolicyId: plan.cancellationPolicyId,
     cancellationSummary: policy.summary,
     refundable: plan.refundable,
@@ -935,9 +1101,10 @@ export function cheapestQuote(
   checkOut: string,
   units = 1,
   guests?: number,
+  bookingDate?: string,
 ): StayQuote | null {
   const rooms = getRoomTypes(property);
-  const plans = ratePlansFor(property.vertical);
+  const plans = ratePlansFor(property.vertical, property.id);
   let best: StayQuote | null = null;
   for (const room of rooms) {
     for (const plan of plans) {
@@ -949,6 +1116,7 @@ export function cheapestQuote(
         checkOut,
         units,
         guests,
+        bookingDate,
       });
       if (!quote.available) continue;
       if (!best || quote.roomSubtotal < best.roomSubtotal) best = quote;
@@ -1110,6 +1278,13 @@ export interface BulkUpdateInput {
   /** Restrict to these weekdays (0 = Sunday); empty = every day. */
   weekdays?: number[];
   price?: number;
+  /** Why the rate was pinned. Stored alongside it and shown in the calendar. */
+  priceNote?: string;
+  /**
+   * What the pricing engine would have charged, captured so the override can
+   * show "was $210, now $260". Resolved per date when omitted.
+   */
+  priceBefore?: number;
   allotment?: number;
   stopSell?: boolean;
   minStay?: number;
@@ -1142,7 +1317,15 @@ export function bulkUpdateInventory(input: BulkUpdateInput): number {
         };
         draft.inventoryOverrides.push(entry);
       }
-      if (input.price !== undefined) entry.price = money(input.price);
+      if (input.price !== undefined) {
+        entry.price = money(input.price);
+        entry.priceNote = input.priceNote ?? entry.priceNote;
+        // Keep the *first* pre-override rate: editing a pin twice should still
+        // report what the engine originally wanted, not the previous pin.
+        if (entry.priceBefore === undefined && input.priceBefore !== undefined) {
+          entry.priceBefore = money(input.priceBefore);
+        }
+      }
       if (input.allotment !== undefined) entry.allotment = Math.max(0, input.allotment);
       if (input.stopSell !== undefined) entry.stopSell = input.stopSell;
       if (input.minStay !== undefined) entry.minStay = Math.max(1, input.minStay);
@@ -1171,4 +1354,112 @@ export function clearOverrides(roomTypeId: string, from: string, to: string): nu
     removed = before - draft.inventoryOverrides.length;
   });
   return removed;
+}
+
+// ---------------------------------------------------------------------------
+// Manual price override
+// ---------------------------------------------------------------------------
+
+/**
+ * What the pricing engine would charge for a night if nothing were pinned.
+ *
+ * Used to record what an override replaced ("was $210, now $260") and to show
+ * what lifting it would restore. Deliberately ignores any existing override —
+ * that is the whole question being asked.
+ */
+export function calculatedRate(
+  property: PropertyRef,
+  room: RoomType,
+  date: string,
+  ratePlanId: RatePlanId = "standard",
+): number {
+  const base = baseline(property, room, date);
+  const override = findOverride(room.id, date);
+  const allotment = Math.min(
+    room.totalUnits,
+    Math.max(0, override?.allotment ?? base.allotment),
+  );
+  const consumed = consumedUnits(room.id, date) + blockedUnits(room.id, date);
+  return resolveCached({
+    date,
+    baseRate: base.baseRate,
+    propertyId: property.id,
+    roomTypeId: room.id,
+    ratePlanId,
+    vertical: property.vertical,
+    occupancy: allotment > 0 ? Math.min(1, consumed / allotment) : 0,
+  }).effectiveRate;
+}
+
+export interface PriceOverrideInput {
+  propertyId: string;
+  roomTypeId: string;
+  /** Inclusive ISO dates. Pass the same value twice for a single night. */
+  from: string;
+  to: string;
+  /** Restrict to these weekdays; empty = every day in the range. */
+  weekdays?: number[];
+  price: number;
+  reason?: string;
+  /** What the engine charged before the pin, when the caller knows it. */
+  calculatedPrice?: number;
+  updatedBy: string;
+}
+
+/**
+ * Pin a nightly rate by hand.
+ *
+ * A manual override outranks every rule — see the calculation order in
+ * `pricing/engine.ts`. That is deliberate: a merchant on the phone to a group
+ * organiser needs the number they just agreed to be the number the site
+ * charges, and no automation should quietly undo it.
+ */
+export function setPriceOverride(input: PriceOverrideInput): number {
+  if (!Number.isFinite(input.price) || input.price < 0) return 0;
+  return bulkUpdateInventory({
+    propertyId: input.propertyId,
+    roomTypeId: input.roomTypeId,
+    from: input.from,
+    to: input.to,
+    weekdays: input.weekdays,
+    price: input.price,
+    priceNote: input.reason,
+    priceBefore: input.calculatedPrice,
+    updatedBy: input.updatedBy,
+  });
+}
+
+/**
+ * Lift a manual override, returning those nights to the rule engine.
+ *
+ * Only the price is cleared: an allotment or stop-sell set on the same night is
+ * a different decision and survives.
+ */
+export function removePriceOverride(
+  roomTypeId: string,
+  from: string,
+  to: string,
+): number {
+  const days = nightsBetween(from, to) + 1;
+  const dates = new Set(dateRange(from, Math.max(1, days)));
+  return mutate((draft) => {
+    let cleared = 0;
+    draft.inventoryOverrides = draft.inventoryOverrides.filter((entry) => {
+      if (entry.roomTypeId !== roomTypeId || !dates.has(entry.date)) return true;
+      if (entry.price === undefined) return true;
+      cleared += 1;
+      delete entry.price;
+      delete entry.priceNote;
+      delete entry.priceBefore;
+      // Nothing else left on the row? Then it is no longer an override at all.
+      const stillMeaningful =
+        entry.allotment !== undefined ||
+        entry.stopSell !== undefined ||
+        entry.minStay !== undefined ||
+        entry.closedToArrival !== undefined ||
+        entry.closedToDeparture !== undefined;
+      return stillMeaningful;
+    });
+    return cleared;
+  });
 }

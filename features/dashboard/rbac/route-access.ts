@@ -30,6 +30,16 @@ export const ROUTE_RULES: RouteRule[] = [
     anyPermission: ["catalog:read"],
     featureFlag: "revenue-management",
   },
+  {
+    prefix: "/dashboard/catalog/pricing",
+    anyPermission: ["catalog:read"],
+    featureFlag: "dynamic-pricing",
+  },
+  {
+    prefix: "/dashboard/settings/pricing",
+    anyPermission: ["settings:read"],
+    featureFlag: "dynamic-pricing",
+  },
   { prefix: "/dashboard/flights", anyPermission: ["flights:read"] },
   { prefix: "/dashboard/merchants", anyPermission: ["merchants:read"] },
   { prefix: "/dashboard/customers", anyPermission: ["customers:read"] },

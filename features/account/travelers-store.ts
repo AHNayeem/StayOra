@@ -16,6 +16,12 @@ const store = createCollectionStore<SavedTraveler>({
 
 export const useSavedTravelers = store.useAll;
 
+/**
+ * Non-reactive read of the same list. Used by the AI account repository, which
+ * runs outside React (and outside the browser, in tests) and must not subscribe.
+ */
+export const getSavedTravelers = store.get;
+
 export function addTraveler(traveler: SavedTraveler): void {
   store.add(traveler, false);
 }

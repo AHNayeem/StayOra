@@ -121,9 +121,9 @@ import {
   applyRecommendation,
   bookingPace,
   bookingPerformance,
-  pricingRuleStore,
-  type PricingRule,
-  type PricingRuleInput,
+  recommendationRuleStore,
+  type RecommendationRule,
+  type RecommendationRuleInput,
   type Recommendation,
 } from "./revenue-management";
 import { messagingService } from "./messaging";
@@ -3427,15 +3427,15 @@ export const advertisingService = {
 // ---------------------------------------------------------------------------
 
 export const revenueManagementService = {
-  async rules(scope: { propertyId?: string } = {}): Promise<PricingRule[]> {
-    return delay(pricingRuleStore.list(scope));
+  async rules(scope: { propertyId?: string } = {}): Promise<RecommendationRule[]> {
+    return delay(recommendationRuleStore.list(scope));
   },
 
   async createRule(
-    input: PricingRuleInput,
+    input: RecommendationRuleInput,
     actor: DomainActor = SYSTEM_ACTOR,
-  ): Promise<PricingRule> {
-    const rule = pricingRuleStore.create(input, actor.name);
+  ): Promise<RecommendationRule> {
+    const rule = recommendationRuleStore.create(input, actor.name);
     recordAudit({
       actor,
       action: "create",
@@ -3450,10 +3450,10 @@ export const revenueManagementService = {
 
   async updateRule(
     id: string,
-    patch: Partial<PricingRuleInput>,
+    patch: Partial<RecommendationRuleInput>,
     actor: DomainActor = SYSTEM_ACTOR,
-  ): Promise<PricingRule> {
-    const result = pricingRuleStore.update(id, patch, actor.name);
+  ): Promise<RecommendationRule> {
+    const result = recommendationRuleStore.update(id, patch, actor.name);
     if (!result) notFound("Pricing rule");
     recordAudit({
       actor,
@@ -3469,7 +3469,7 @@ export const revenueManagementService = {
   },
 
   async removeRule(id: string, actor: DomainActor = SYSTEM_ACTOR): Promise<void> {
-    const removed = pricingRuleStore.remove(id);
+    const removed = recommendationRuleStore.remove(id);
     if (!removed) notFound("Pricing rule");
     recordAudit({
       actor,

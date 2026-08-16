@@ -65,6 +65,28 @@ export const DASHBOARD_MENU: MenuNode[] = [
         href: "/dashboard/catalog/rates",
       },
       {
+        id: "catalog-pricing",
+        label: "Dynamic pricing",
+        featureFlag: "dynamic-pricing",
+        children: [
+          {
+            id: "catalog-pricing-overview",
+            label: "Pricing overview",
+            href: "/dashboard/catalog/pricing",
+          },
+          {
+            id: "catalog-pricing-rules",
+            label: "Pricing rules",
+            href: "/dashboard/catalog/pricing/rules",
+          },
+          {
+            id: "catalog-pricing-rate-plans",
+            label: "Rate plans",
+            href: "/dashboard/catalog/pricing/rate-plans",
+          },
+        ],
+      },
+      {
         id: "catalog-revenue-management",
         label: "Revenue Management",
         href: "/dashboard/catalog/revenue-management",
@@ -342,6 +364,13 @@ export const DASHBOARD_MENU: MenuNode[] = [
     anyPermission: ["system:read", "settings:read"],
     children: [
       { id: "system-settings", label: "Settings", href: "/dashboard/settings", anyPermission: ["settings:read"] },
+      {
+        id: "system-pricing-settings",
+        label: "Pricing settings",
+        href: "/dashboard/settings/pricing",
+        anyPermission: ["settings:read"],
+        featureFlag: "dynamic-pricing",
+      },
       { id: "system-templates", label: "Templates", href: "/dashboard/system/templates", anyPermission: ["system:read"] },
       { id: "system-logs", label: "Audit Logs", href: "/dashboard/logs", anyPermission: ["logs:read"] },
       { id: "system-login-logs", label: "Login Logs", href: "/dashboard/system/login-logs", anyPermission: ["logs:read"] },

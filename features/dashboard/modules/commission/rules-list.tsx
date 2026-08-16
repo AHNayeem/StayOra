@@ -38,7 +38,7 @@ import {
 } from "../../domain/commission-rules";
 import type { CommissionBasis, ProductKind } from "../../domain/types";
 import { MERCHANTS } from "../../domain/seed";
-import { RATE_PLAN_LIST } from "../../domain/inventory";
+import { allRatePlans } from "../../domain/inventory";
 import { PRODUCT_KIND_LABELS } from "../bookings/types";
 import { useCommissionPreview, useCommissionRules } from "./rules-hooks";
 import { useSubmitCommissionChange } from "./approvals-hooks";
@@ -61,7 +61,7 @@ function targetOptions(scope: CommissionScope): { value: string; label: string }
     case "merchant":
       return MERCHANTS.map((m) => ({ value: m.id, label: m.name }));
     case "rate_plan":
-      return RATE_PLAN_LIST.map((p) => ({ value: p.id, label: p.name }));
+      return allRatePlans().map((p) => ({ value: p.id, label: p.name }));
     default:
       return [];
   }

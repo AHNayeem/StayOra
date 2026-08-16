@@ -24,6 +24,7 @@ import {
   type AlternativeDate,
 } from "@/features/dashboard/domain/alternatives";
 import { AlternativeDates } from "@/components/booking/alternative-dates";
+import { PriceBreakdown } from "@/components/booking/price-breakdown";
 import { WaitlistPrompt } from "@/components/booking/waitlist-prompt";
 import { useLocale } from "@/features/i18n";
 import {
@@ -285,6 +286,15 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
 
           {quote?.available && (alternatives?.length ?? 0) > 0 && (
             <AlternativeDates options={alternatives ?? []} soldOut={false} onPick={pickAlternative} />
+          )}
+
+          {/* Date-by-date pricing with the reason each night costs what it
+              does. The same component checkout uses, reading the same quote. */}
+          {quote?.available && perNight && nights > 0 && (
+            <div className="mt-5 rounded-card border border-line bg-surface p-5">
+              <h3 className="text-sm font-semibold text-ink">Your price, night by night</h3>
+              <PriceBreakdown quote={quote.stay} className="mt-3" />
+            </div>
           )}
 
           {quote?.available && (

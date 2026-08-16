@@ -16,6 +16,9 @@ const store = createCollectionStore<SavedCard>({
 
 export const useSavedCards = store.useAll;
 
+/** Non-reactive read, for callers outside React (the AI payment repository). */
+export const getSavedCards = store.get;
+
 export function addCard(card: SavedCard): void {
   // A newly-added default demotes the others.
   if (card.isDefault) {

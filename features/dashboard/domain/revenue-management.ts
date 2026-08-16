@@ -358,7 +358,7 @@ export function forecastRevenue(rows: DayMetrics[]): RevenueForecast {
 // Pricing rules
 // ---------------------------------------------------------------------------
 
-export const PRICING_RULE_KINDS = [
+export const RECOMMENDATION_RULE_KINDS = [
   "high_demand",
   "low_demand",
   "weekend",
@@ -369,9 +369,9 @@ export const PRICING_RULE_KINDS = [
   "arrival_restriction",
 ] as const;
 
-export type PricingRuleKind = (typeof PRICING_RULE_KINDS)[number];
+export type RecommendationRuleKind = (typeof RECOMMENDATION_RULE_KINDS)[number];
 
-export const RULE_KIND_LABELS: Record<PricingRuleKind, string> = {
+export const RULE_KIND_LABELS: Record<RecommendationRuleKind, string> = {
   high_demand: "High demand — raise price",
   low_demand: "Low demand — discount",
   weekend: "Weekend pricing",
@@ -382,10 +382,10 @@ export const RULE_KIND_LABELS: Record<PricingRuleKind, string> = {
   arrival_restriction: "Arrival / departure restriction",
 };
 
-export interface PricingRule {
+export interface RecommendationRule {
   id: string;
   name: string;
-  kind: PricingRuleKind;
+  kind: RecommendationRuleKind;
   /** Empty = every property in scope. */
   propertyId?: string;
   roomTypeId?: string;
@@ -414,7 +414,7 @@ export interface PricingRule {
 const WEEKEND_DAYS = [5, 6];
 
 /** Does the rule apply to this night? Pure, so previews can reuse it. */
-export function ruleMatches(rule: PricingRule, day: DayMetrics): boolean {
+export function ruleMatches(rule: RecommendationRule, day: DayMetrics): boolean {
   if (rule.status !== "active") return false;
   if (rule.weekdays.length > 0 && !rule.weekdays.includes(day.weekday)) return false;
   if (rule.seasonFrom && day.date < rule.seasonFrom) return false;
@@ -442,40 +442,40 @@ export function ruleMatches(rule: PricingRule, day: DayMetrics): boolean {
   }
 }
 
-export type PricingRuleInput = Omit<
-  PricingRule,
+export type RecommendationRuleInput = Omit<
+  RecommendationRule,
   "id" | "createdAt" | "updatedAt" | "updatedBy"
 >;
 
-export const pricingRuleStore = {
-  list(scope: { propertyId?: string } = {}): PricingRule[] {
+export const recommendationRuleStore = {
+  list(scope: { propertyId?: string } = {}): RecommendationRule[] {
     return getState()
-      .pricingRules.filter(
+      .recommendationRules.filter(
         (r) => !scope.propertyId || !r.propertyId || r.propertyId === scope.propertyId,
       )
       .sort((a, b) => b.priority - a.priority || a.name.localeCompare(b.name));
   },
 
-  create(input: PricingRuleInput, by: string): PricingRule {
+  create(input: RecommendationRuleInput, by: string): RecommendationRule {
     const now = new Date().toISOString();
-    const rule: PricingRule = {
+    const rule: RecommendationRule = {
       ...input,
       id: nextId("prl"),
       createdAt: now,
       updatedAt: now,
       updatedBy: by,
     };
-    mutate((draft) => draft.pricingRules.unshift(rule));
+    mutate((draft) => draft.recommendationRules.unshift(rule));
     return rule;
   },
 
   update(
     id: string,
-    patch: Partial<PricingRuleInput>,
+    patch: Partial<RecommendationRuleInput>,
     by: string,
-  ): { before: PricingRule; after: PricingRule } | undefined {
+  ): { before: RecommendationRule; after: RecommendationRule } | undefined {
     return mutate((draft) => {
-      const row = draft.pricingRules.find((r) => r.id === id);
+      const row = draft.recommendationRules.find((r) => r.id === id);
       if (!row) return undefined;
       const before = structuredClone(row);
       Object.assign(row, patch);
@@ -485,11 +485,11 @@ export const pricingRuleStore = {
     });
   },
 
-  remove(id: string): PricingRule | undefined {
+  remove(id: string): RecommendationRule | undefined {
     return mutate((draft) => {
-      const index = draft.pricingRules.findIndex((r) => r.id === id);
+      const index = draft.recommendationRules.findIndex((r) => r.id === id);
       if (index < 0) return undefined;
-      return draft.pricingRules.splice(index, 1)[0];
+      return draft.recommendationRules.splice(index, 1)[0];
     });
   },
 };
@@ -553,7 +553,7 @@ function pct(value: number): string {
 /**
  * Generate recommendations for a room type across a window.
  *
- * Configured {@link PricingRule}s run first — they are the operator's own
+ * Configured {@link RecommendationRule}s run first — they are the operator's own
  * policy. The built-in heuristics below only fire where no rule already covers
  * the night, so a manager never sees the system arguing with their own setup.
  */
@@ -564,7 +564,7 @@ export function recommendationsFor(
   days: number,
 ): Recommendation[] {
   const rows = roomMetrics(property, room, start, days);
-  const rules = pricingRuleStore
+  const rules = recommendationRuleStore
     .list({ propertyId: property.id })
     .filter((r) => !r.roomTypeId || r.roomTypeId === room.id);
   const out: Recommendation[] = [];

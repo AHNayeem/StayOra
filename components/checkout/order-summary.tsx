@@ -16,6 +16,7 @@ import { VERTICALS } from "@/constants/verticals";
 import { useLocale } from "@/features/i18n";
 import { baseCurrency } from "@/features/dashboard/domain/fx";
 import type { CheckoutQuote } from "@/features/booking";
+import { PriceBreakdown } from "@/components/booking/price-breakdown";
 import { cn } from "@/lib/utils";
 
 interface OrderSummaryProps {
@@ -86,28 +87,16 @@ export function OrderSummary({
 
       {quote.available || quote.money.total > 0 ? (
         <dl className="mt-4 space-y-2 border-t border-line pt-4 text-sm">
-          {showNightly && perNight && (
-            <details className="mb-1 rounded-field bg-surface-muted/50 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-medium text-body">
-                {quote.nights} nights × {money(quote.stay.averageNightly)} average
-              </summary>
-              <ul className="mt-2 space-y-1">
-                {quote.stay.nights.map((night) => (
-                  <li key={night.date} className="flex justify-between text-xs text-muted">
-                    <span>
-                      {date(night.date)}
-                      {night.season === "peak" ? " · peak" : night.season === "weekend" ? " · weekend" : ""}
-                    </span>
-                    <span className="tabular-nums">{money(night.price)}</span>
-                  </li>
-                ))}
-              </ul>
-            </details>
+          {/* The room half of the bill, straight from the pricing engine: every
+              night, why it costs what it does, and the stay-level adjustments.
+              One component, so the listing page and checkout can't diverge. */}
+          {showNightly && perNight ? (
+            <PriceBreakdown quote={quote.stay} className="mb-1" />
+          ) : (
+            <Row label={`${quote.stay.roomTypeName} × ${units}`}>
+              {money(quote.stay.roomSubtotal)}
+            </Row>
           )}
-
-          <Row label={`${quote.stay.roomTypeName} × ${units}`}>
-            {money(quote.stay.roomSubtotal)}
-          </Row>
 
           {quote.addOns.map((addOn) => (
             <Row key={addOn.id} label={`${addOn.label} × ${addOn.quantity}`} muted>

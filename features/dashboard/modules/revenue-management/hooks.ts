@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "../../data";
 import { revenueManagementService } from "../../domain/services";
-import type { PricingRule, PricingRuleInput, Recommendation } from "../../domain/revenue-management";
+import type { RecommendationRule, RecommendationRuleInput, Recommendation } from "../../domain/revenue-management";
 import { useDomainActor, useDomainScope } from "../../domain/use-domain";
 
 export const rmKeys = {
@@ -21,31 +21,31 @@ const SIDE_EFFECTS = [
   ["notifications"],
 ];
 
-export function usePricingRules(propertyId?: string) {
-  return useQuery<PricingRule[]>({
+export function useRecommendationRules(propertyId?: string) {
+  return useQuery<RecommendationRule[]>({
     queryKey: rmKeys.rules(propertyId),
     queryFn: () => revenueManagementService.rules({ propertyId }),
     staleTime: 10_000,
   });
 }
 
-export function useCreatePricingRule() {
+export function useCreateRecommendationRule() {
   const actor = useDomainActor();
-  return useMutation<PricingRule, PricingRuleInput>({
+  return useMutation<RecommendationRule, RecommendationRuleInput>({
     mutationFn: (input) => revenueManagementService.createRule(input, actor),
     invalidateKeys: SIDE_EFFECTS,
   });
 }
 
-export function useUpdatePricingRule() {
+export function useUpdateRecommendationRule() {
   const actor = useDomainActor();
-  return useMutation<PricingRule, { id: string; input: Partial<PricingRuleInput> }>({
+  return useMutation<RecommendationRule, { id: string; input: Partial<RecommendationRuleInput> }>({
     mutationFn: ({ id, input }) => revenueManagementService.updateRule(id, input, actor),
     invalidateKeys: SIDE_EFFECTS,
   });
 }
 
-export function useDeletePricingRule() {
+export function useDeleteRecommendationRule() {
   const actor = useDomainActor();
   return useMutation<void, string>({
     mutationFn: (id) => revenueManagementService.removeRule(id, actor),
