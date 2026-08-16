@@ -1,4 +1,4 @@
-# Welcome to StayOra
+# Welcome to Otithee
 
 ## How We Use Claude
 

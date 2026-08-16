@@ -1,4 +1,4 @@
-You are working on the existing StayOra Booking SaaS frontend prototype.
+You are working on the existing Otithee Booking SaaS frontend prototype.
 
 Your task is to IMPLEMENT A COMPLETE, PRODUCTION-READY FRONTEND PROTOTYPE for a flexible Dynamic Pricing / Rate Management system.
 
@@ -52,7 +52,7 @@ Before making changes:
 5. Do NOT duplicate existing functionality.
 6. Create an internal implementation plan based on the current codebase before modifying files.
 
-The final implementation must feel like a natural extension of the existing StayOra product.
+The final implementation must feel like a natural extension of the existing Otithee product.
 
 ==================================================
 2. CORE FEATURE: DYNAMIC PRICING ENGINE
@@ -520,7 +520,7 @@ Then calculate:
 - Other existing charges
 - Grand total
 
-Use the existing StayOra booking/checkout architecture.
+Use the existing Otithee booking/checkout architecture.
 
 Do NOT create a separate fake booking flow if one already exists.
 
@@ -592,7 +592,7 @@ Show:
 
 Use realistic mock analytics.
 
-The dashboard must fit the existing StayOra visual system.
+The dashboard must fit the existing Otithee visual system.
 
 ==================================================
 17. ADMIN CONTROL
@@ -663,7 +663,7 @@ Use async service interfaces where appropriate so the transition to API is strai
 20. CURRENCY & LOCALIZATION
 ==================================================
 
-Use the existing StayOra currency/localization system.
+Use the existing Otithee currency/localization system.
 
 Do NOT hard-code ৳ or USD inside the pricing engine.
 
@@ -711,7 +711,7 @@ The pricing engine must never produce invalid negative/NaN/infinite prices.
 
 The feature must feel like a real SaaS booking platform.
 
-Follow existing StayOra design language.
+Follow existing Otithee design language.
 
 Use:
 
@@ -816,7 +816,7 @@ Keep the pricing engine framework-independent where practical.
 
 Before modifying anything, identify existing functionality.
 
-If existing StayOra already has:
+If existing Otithee already has:
 
 - Room pricing
 - Booking price calculation
@@ -935,7 +935,7 @@ Then perform a final code audit specifically for:
 DELIVERABLE
 ==================================================
 
-Implement the feature directly in the existing StayOra project.
+Implement the feature directly in the existing Otithee project.
 
 Do not only provide an implementation plan.
 

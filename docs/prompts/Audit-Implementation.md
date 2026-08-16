@@ -1,4 +1,4 @@
-You are working on the StayOra booking platform frontend prototype.
+You are working on the Otithee booking platform frontend prototype.
 
 IMPORTANT CONTEXT
 This is an existing, large, feature-rich prototype. Do NOT assume the audit's "missing" labels are accurate.
@@ -7,7 +7,7 @@ The audit is only a GAP-CHECK CHECKLIST, not a source of truth.
 
 Your primary objective:
 
-> Make the existing StayOra frontend prototype feature-complete and production-ready at the frontend/domain/service level, WITHOUT implementing a real database or backend server.
+> Make the existing Otithee frontend prototype feature-complete and production-ready at the frontend/domain/service level, WITHOUT implementing a real database or backend server.
 
 The prototype must behave as if it were a real production application using mock/in-memory/local persistence.
 
@@ -462,7 +462,7 @@ If two existing stores represent the same business entity:
 UNIFIED BOOKING RULE
 ==================================================
 
-StayOra is intended to support unified travel booking.
+Otithee is intended to support unified travel booking.
 
 Therefore verify that related services can participate in one logical trip/order flow.
 
@@ -567,7 +567,7 @@ Every completed module must have appropriate:
 
 Do not redesign the entire application.
 
-Follow existing StayOra visual language and components.
+Follow existing Otithee visual language and components.
 
 ==================================================
 BACKEND-READY CONTRACTS

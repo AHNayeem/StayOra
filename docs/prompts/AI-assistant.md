@@ -1,6 +1,6 @@
-# StayOra — AI Travel Assistant: Production-Ready Agentic Booking Upgrade
+# Otithee — AI Travel Assistant: Production-Ready Agentic Booking Upgrade
 
-You are working on the existing **StayOra** booking platform.
+You are working on the existing **Otithee** booking platform.
 
 The current AI Travel Assistant is already implemented as a well-architected deterministic mock/demo assistant with:
 
@@ -840,9 +840,9 @@ The assistant should extract the relevant parameters and ask only for missing in
 
 ---
 
-# 20. All StayOra Booking Domains
+# 20. All Otithee Booking Domains
 
-The architecture should support the existing StayOra product types:
+The architecture should support the existing Otithee product types:
 
 * Hotel
 * Apartment
@@ -1385,7 +1385,7 @@ Improve:
 * keyboard navigation
 * screen reader semantics
 
-Follow the existing StayOra visual language.
+Follow the existing Otithee visual language.
 
 Do not introduce an unrelated design system.
 
@@ -1465,7 +1465,7 @@ Deterministic mock data is required for testing.
 
 # 41. Currency & Localization
 
-The assistant must respect StayOra's existing localization/currency architecture.
+The assistant must respect Otithee's existing localization/currency architecture.
 
 Support at minimum:
 
@@ -1481,7 +1481,7 @@ Use a currency service/tool.
 
 ---
 
-# 42. Do Not Break Existing StayOra
+# 42. Do Not Break Existing Otithee
 
 This is critical.
 
@@ -1621,7 +1621,7 @@ It is complete when:
 * The system is mobile/accessibility friendly.
 * The architecture is ready for real API integration.
 * No backend/database is introduced.
-* No existing StayOra functionality is unnecessarily broken.
+* No existing Otithee functionality is unnecessarily broken.
 
 ---
 
