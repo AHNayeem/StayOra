@@ -26,3 +26,13 @@ export function useMediaQuery(query: string): boolean {
 export function useIsDesktop(): boolean {
   return useMediaQuery("(min-width: 768px)");
 }
+
+/**
+ * True from Tailwind's `xl` breakpoint (1280px) up — the point where the site
+ * header shows its full primary nav and drops the hamburger. Keep this in step
+ * with the `xl:` variants in SiteHeader/MobileDrawer: a mismatch leaves a band
+ * of widths where the trigger is visible but the drawer is not.
+ */
+export function useIsDesktopNav(): boolean {
+  return useMediaQuery("(min-width: 1280px)");
+}

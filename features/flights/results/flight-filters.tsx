@@ -177,12 +177,16 @@ export function FlightFilters({
         <FilterGroup title="Airlines">
           <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
             {facets.airlines.map((entry) => (
-              <div key={entry.code} className="flex items-center justify-between gap-2">
+              <div key={entry.code} className="flex min-w-0 items-center justify-between gap-2">
                 <Checkbox
+                  wrapperClassName="min-w-0 flex-1"
                   label={
-                    <span className="flex items-center gap-2">
+                    <span className="flex min-w-0 items-center gap-2">
                       <AirlineLogo code={entry.code} size="xs" />
-                      <span className="truncate">
+                      <span
+                        className="truncate"
+                        title={AIRLINES_BY_CODE[entry.code]?.name ?? entry.code}
+                      >
                         {AIRLINES_BY_CODE[entry.code]?.name ?? entry.code}
                       </span>
                     </span>
@@ -246,8 +250,11 @@ function FilterGroup({
   title: string;
   children: React.ReactNode;
 }) {
+  // `min-w-0` overrides the UA-stylesheet `min-inline-size: min-content` on
+  // fieldset, which otherwise refuses to shrink and pushes long airline names
+  // past the edge of the rail.
   return (
-    <fieldset className="border-t border-line pt-5 first-of-type:border-t-0 first-of-type:pt-0">
+    <fieldset className="min-w-0 border-t border-line pt-5 first-of-type:border-t-0 first-of-type:pt-0">
       <legend className="mb-3 text-sm font-semibold text-ink">{title}</legend>
       <div className="space-y-2.5">{children}</div>
     </fieldset>

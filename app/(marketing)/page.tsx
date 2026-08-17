@@ -126,7 +126,7 @@ export default async function HomePage() {
 
       {/* Homepage featured placements — always labelled, never mixed in with
           organic results. Delivery here drives advertising revenue. */}
-      <SponsoredRail placement="homepage_featured" title="Featured partners" />
+      {/* <SponsoredRail placement="homepage_featured" title="Featured partners" /> */}
 
       {/* AI concierge — the highest-intent entry point on the page, placed
           directly under the hero so it reads as part of "how you search here". */}

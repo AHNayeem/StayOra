@@ -37,6 +37,12 @@ import { Stepper } from "@/components/ui/stepper";
 import { controlClasses } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
+/** One column of the search row: label on top, a 44px control beneath it. */
+const fieldColumn = "flex min-w-0 flex-col gap-1.5";
+const fieldLabel = "text-sm font-medium text-ink";
+const stepperShell =
+  "flex h-11 items-center rounded-field border border-line bg-surface px-3";
+
 /**
  * "Check availability" — the section that turns a listing page into a bookable
  * one.
@@ -181,8 +187,8 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
       <div className="mt-5 rounded-card border border-line bg-surface-muted/40 p-4">
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {config.dateMode !== "none" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-ink">
+            <label className={fieldColumn}>
+              <span className={fieldLabel}>
                 {config.checkInLabel ?? config.singleDateLabel ?? "Date"}
               </span>
               <input
@@ -194,15 +200,13 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
                   else if (checkOut && checkOut <= event.target.value) setCheckOut("");
                   setChoice(null);
                 }}
-                className={cn(controlClasses(false), "h-11")}
+                className={cn(controlClasses(false), "h-11", !checkIn && "text-muted")}
               />
             </label>
           )}
           {config.dateMode === "range" && (
-            <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium text-ink">
-                {config.checkOutLabel ?? "Check-out"}
-              </span>
+            <label className={fieldColumn}>
+              <span className={fieldLabel}>{config.checkOutLabel ?? "Check-out"}</span>
               <input
                 type="date"
                 value={checkOut}
@@ -211,35 +215,45 @@ export function AvailabilitySection({ listing }: { listing: Listing }) {
                   setCheckOut(event.target.value);
                   setChoice(null);
                 }}
-                className={cn(controlClasses(false), "h-11")}
+                className={cn(controlClasses(false), "h-11", !checkOut && "text-muted")}
               />
             </label>
           )}
-          <div className="rounded-field border border-line bg-surface px-4 py-2.5">
-            <Stepper
-              label={noun.many[0].toUpperCase() + noun.many.slice(1)}
-              showLabel
-              value={units}
-              min={1}
-              max={8}
-              onChange={(value) => {
-                setUnits(value);
-                setChoice(null);
-              }}
-            />
+          {/* Steppers repeat the label-above-control shape of the date fields so
+              every column in the row shares one baseline and one 44px control. */}
+          <div className={fieldColumn}>
+            <span className={fieldLabel}>{noun.many[0].toUpperCase() + noun.many.slice(1)}</span>
+            <div className={stepperShell}>
+              <Stepper
+                label={noun.many[0].toUpperCase() + noun.many.slice(1)}
+                value={units}
+                min={1}
+                max={8}
+                size="sm"
+                className="w-full justify-center"
+                onChange={(value) => {
+                  setUnits(value);
+                  setChoice(null);
+                }}
+              />
+            </div>
           </div>
-          <div className="rounded-field border border-line bg-surface px-4 py-2.5">
-            <Stepper
-              label="Guests"
-              showLabel
-              value={guests}
-              min={1}
-              max={16}
-              onChange={(value) => {
-                setGuests(value);
-                setChoice(null);
-              }}
-            />
+          <div className={fieldColumn}>
+            <span className={fieldLabel}>Guests</span>
+            <div className={stepperShell}>
+              <Stepper
+                label="Guests"
+                value={guests}
+                min={1}
+                max={16}
+                size="sm"
+                className="w-full justify-center"
+                onChange={(value) => {
+                  setGuests(value);
+                  setChoice(null);
+                }}
+              />
+            </div>
           </div>
         </div>
       </div>

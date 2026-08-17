@@ -70,32 +70,33 @@ export function FlightHero({
             </h2>
             <ul className="flex flex-wrap gap-2">
               {searches.slice(0, 8).map((entry) => (
-                <li key={entry.id} className="group flex items-center">
+                <li
+                  key={entry.id}
+                  className={cn(
+                    "group flex h-9 items-center rounded-pill border transition-colors",
+                    entry.pinned
+                      ? "border-accent-400/60 bg-accent-500/20"
+                      : "border-white/25 bg-white/10",
+                  )}
+                >
                   <Link
                     href={searchHref(entry.query)}
                     className={cn(
-                      "inline-flex items-center gap-2 rounded-l-pill border border-r-0 py-2 pl-3.5 pr-2.5 text-sm font-medium transition-colors",
+                      "flex h-full min-w-0 items-center gap-2 rounded-l-pill pl-3.5 pr-2 text-sm font-medium transition-colors",
                       entry.pinned
-                        ? "border-accent-400/60 bg-accent-500/20 text-white hover:bg-accent-500/30"
-                        : "border-white/25 bg-white/10 text-white/90 hover:bg-white/20",
+                        ? "text-white hover:bg-accent-500/25"
+                        : "text-white/90 hover:bg-white/10",
                     )}
                   >
                     <Search className="size-3.5 shrink-0 opacity-70" aria-hidden="true" />
                     <span className="max-w-[18rem] truncate">{entry.label}</span>
                   </Link>
-                  <span
-                    className={cn(
-                      "flex items-center rounded-r-pill border border-l-0 py-1.5 pr-1.5",
-                      entry.pinned
-                        ? "border-accent-400/60 bg-accent-500/20"
-                        : "border-white/25 bg-white/10",
-                    )}
-                  >
+                  <span className="flex h-full shrink-0 items-center gap-0.5 pr-1">
                     <button
                       type="button"
                       onClick={() => togglePinned(entry.id)}
                       aria-label={entry.pinned ? "Unpin this search" : "Pin this search"}
-                      className="grid size-7 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+                      className="grid size-7 shrink-0 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/15 hover:text-white"
                     >
                       {entry.pinned ? (
                         <PinOff className="size-3.5" aria-hidden="true" />
@@ -107,7 +108,7 @@ export function FlightHero({
                       type="button"
                       onClick={() => removeSearch(entry.id)}
                       aria-label="Remove this search"
-                      className="grid size-7 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+                      className="grid size-7 shrink-0 place-items-center rounded-full text-white/70 transition-colors hover:bg-white/15 hover:text-white"
                     >
                       <X className="size-3.5" aria-hidden="true" />
                     </button>

@@ -101,7 +101,7 @@ export function ListingFilters({
 
       {/* Facet groups */}
       {groups.map((group) => (
-        <fieldset key={group.key} className="border-t border-line pt-6">
+        <fieldset key={group.key} className="min-w-0 border-t border-line pt-6">
           <legend className="mb-3 text-sm font-semibold text-ink">
             {group.label}
           </legend>

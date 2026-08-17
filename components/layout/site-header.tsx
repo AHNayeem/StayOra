@@ -127,10 +127,14 @@ export function SiteHeader() {
               </>
             )}
 
+            {/* Visible exactly where DesktopNav is not (`xl`). MobileDrawer must
+                use the same breakpoint, or this opens a hidden panel. */}
             <button
               type="button"
               onClick={() => setDrawerOpen(true)}
               aria-label={t("Open menu")}
+              aria-expanded={drawerOpen}
+              aria-haspopup="dialog"
               className="grid size-10 shrink-0 place-items-center rounded-field text-ink transition-colors hover:bg-primary-50 hover:text-primary xl:hidden"
             >
               <Menu className="size-6" aria-hidden="true" />

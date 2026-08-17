@@ -24,6 +24,7 @@ import { SearchDialog } from "@/features/search/global";
 import { Avatar } from "@/components/ui/avatar";
 import { SocialIcon } from "@/components/shared/social-icons";
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll";
+import { useIsDesktopNav } from "@/hooks/use-media-query";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { Logo } from "./logo";
@@ -35,9 +36,10 @@ interface MobileDrawerProps {
 }
 
 /**
- * MobileDrawer — off-canvas navigation for small screens. Mirrors the primary
+ * MobileDrawer — off-canvas navigation for every width below `xl`, where
+ * SiteHeader hides {@link DesktopNav} behind its hamburger. Mirrors the primary
  * nav, expands mega-menu groups as accordions, and closes on route change,
- * Escape, or overlay tap. Body scroll is locked while open.
+ * Escape, or overlay tap. Body scroll is locked while it is actually on screen.
  */
 export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
   const pathname = usePathname();
@@ -46,7 +48,12 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
   const assistant = useOptionalAssistant();
   const [searchOpen, setSearchOpen] = useState(false);
   const t = useT();
-  useLockBodyScroll(open);
+  const isDesktopNav = useIsDesktopNav();
+
+  // The panel is `xl:hidden`, so above that breakpoint "open" paints nothing —
+  // locking scroll there would freeze the page with no visible overlay.
+  const visible = open && !isDesktopNav;
+  useLockBodyScroll(visible);
 
   const handleLogout = async () => {
     onClose();
@@ -61,29 +68,41 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
+  // Widening past `xl` brings the desktop nav back, so drop the drawer state
+  // instead of leaving it primed to reappear on the next resize down.
+  useEffect(() => {
+    if (open && isDesktopNav) onClose();
+  }, [open, isDesktopNav, onClose]);
+
   // Close on Escape.
   useEffect(() => {
-    if (!open) return;
+    if (!visible) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+  }, [visible, onClose]);
 
   return (
     <>
     <div
+      // `xl:hidden` must match the hamburger's `xl:hidden` in SiteHeader — see
+      // useIsDesktopNav. It used to be `lg:hidden`, which left 1024–1279px with
+      // a visible trigger opening a `display: none` panel.
       className={cn(
-        "fixed inset-0 z-60 lg:hidden",
-        open ? "pointer-events-auto" : "pointer-events-none",
+        "fixed inset-0 z-60 xl:hidden",
+        visible ? "pointer-events-auto" : "pointer-events-none",
       )}
-      aria-hidden={!open}
+      aria-hidden={!visible}
+      // The panel stays mounted so it can slide, so take its links out of the
+      // tab order while it is off-canvas.
+      inert={!visible}
     >
       {/* Overlay */}
       <div
         onClick={onClose}
         className={cn(
           "absolute inset-0 bg-ink/50 transition-opacity duration-300",
-          open ? "opacity-100" : "opacity-0",
+          visible ? "opacity-100" : "opacity-0",
         )}
       />
 
@@ -94,10 +113,10 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
         aria-label="Site menu"
         className={cn(
           "absolute right-0 top-0 flex h-full w-[86%] max-w-sm flex-col bg-surface shadow-menu transition-transform duration-300 ease-out",
-          open ? "translate-x-0" : "translate-x-full",
+          visible ? "translate-x-0" : "translate-x-full",
         )}
       >
-        <div className="flex items-center justify-between border-b border-line px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-4">
           <Logo />
           <button
             type="button"
@@ -109,7 +128,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
           </button>
         </div>
 
-        <div className="px-4 pt-4">
+        <div className="shrink-0 px-4 pt-4">
           <button
             type="button"
             onClick={() => {
@@ -137,9 +156,11 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
           )}
         </div>
 
+        {/* min-h-0 lets this actually clip inside the column flex; overscroll-contain
+            keeps a touch flick at either end from scrolling the page behind. */}
         <nav
           aria-label="Mobile"
-          className="flex-1 overflow-y-auto px-2 py-3"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3"
         >
           {/* Renders only while a trip is in progress, so the drawer doesn't
               grow a permanent basket entry for single-product bookers. */}
@@ -162,7 +183,7 @@ export function MobileDrawer({ open, onClose, onSignIn }: MobileDrawerProps) {
           </ul>
         </nav>
 
-        <div className="border-t border-line px-5 py-4">
+        <div className="shrink-0 border-t border-line px-5 py-4">
           {status === "authenticated" && user ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">

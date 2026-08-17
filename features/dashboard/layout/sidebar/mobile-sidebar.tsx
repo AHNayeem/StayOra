@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useShell } from "../shell-context";
 import { SidebarContent } from "./sidebar";
 
@@ -16,8 +17,10 @@ export function MobileSidebar() {
   const { mobileOpen, setMobileOpen } = useShell();
   const panelRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
+  // Matches the `lg:hidden` below and the trigger in TopNav.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  useLockBodyScroll(mobileOpen);
+  useLockBodyScroll(mobileOpen && !isDesktop);
   useFocusTrap(panelRef, mobileOpen, () => setMobileOpen(false));
 
   // Close the drawer whenever the route changes.
@@ -25,7 +28,13 @@ export function MobileSidebar() {
     setMobileOpen(false);
   }, [pathname, setMobileOpen]);
 
-  if (!mobileOpen) return null;
+  // Resizing up to the permanent sidebar hides this panel; drop the state so it
+  // does not hold a scroll lock (or reappear) once nothing is on screen.
+  useEffect(() => {
+    if (mobileOpen && isDesktop) setMobileOpen(false);
+  }, [mobileOpen, isDesktop, setMobileOpen]);
+
+  if (!mobileOpen || isDesktop) return null;
 
   return (
     <div className="fixed inset-0 z-50 lg:hidden">

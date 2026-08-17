@@ -153,7 +153,7 @@ export function HeroSearch2({
           <div className="mt-6 flex justify-center">
             <button
               type="submit"
-              className="inline-flex items-center justify-center gap-2 rounded-field bg-primary px-10 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600"
+              className="inline-flex items-center justify-center gap-2 rounded-pill h-12 bg-primary px-10 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-primary-600"
             >
               <Search className="size-4" aria-hidden="true" />
               {t("Search")}
