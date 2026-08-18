@@ -348,7 +348,7 @@ export interface FlightResultFacets {
   stops: Array<{ stops: number; count: number; fromUsd: number }>;
 }
 
-/** One day in the flexible-dates price strip. */
+/** One day in the fare price strip. */
 export interface FarePricePoint {
   date: string;
   fromUsd: number;
@@ -362,7 +362,7 @@ export interface FlightSearchResult {
   query: FlightSearchQuery;
   offers: FlightOffer[];
   facets: FlightResultFacets;
-  /** Populated when `query.flexibleDates` is set. */
+  /** The fare strip's opening window — wider when `query.flexibleDates` is set. */
   priceCalendar: FarePricePoint[];
   /** Server-side result count before client filters. */
   total: number;

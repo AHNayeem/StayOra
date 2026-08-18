@@ -36,7 +36,7 @@ const MAX_LEGS = 6;
 /** Optional search refinements, rendered as a checkbox row. */
 const TRIP_OPTIONS = [
   { key: "directOnly", label: "Direct flights only", hint: "Non-stop itineraries" },
-  { key: "flexibleDates", label: "Flexible dates", hint: "Show ±3 days of fares" },
+  { key: "flexibleDates", label: "Flexible dates", hint: "Widen the fare strip to ±7 days" },
   { key: "nearbyAirports", label: "Nearby airports", hint: "Include alternatives" },
   { key: "refundableOnly", label: "Refundable only", hint: "Fares you can cancel" },
   { key: "baggageIncluded", label: "Baggage included", hint: "Checked bag in the fare" },

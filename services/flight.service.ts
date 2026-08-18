@@ -240,7 +240,7 @@ export function isQueryComplete(query: FlightSearchQuery): boolean {
 
 /**
  * Run a flight search. Returns the offers plus the facet ranges the filter rail
- * needs, and — when `flexibleDates` is set — a ±3-day price strip.
+ * needs, plus the price strip for the days around the outbound date.
  */
 export function searchFlights(query: FlightSearchQuery): Promise<FlightSearchResult> {
   const normalized = normalizeQuery(query);
@@ -262,12 +262,41 @@ export function searchFlights(query: FlightSearchQuery): Promise<FlightSearchRes
     query: normalized,
     offers,
     facets: buildFacets(offers),
-    priceCalendar: normalized.flexibleDates ? buildPriceCalendar(normalized) : [],
+    priceCalendar: buildPriceCalendar(normalized),
     total: offers.length,
   };
   // Search is the slowest call in the module — the loading state has to earn
   // its keep, so this latency is deliberately realistic.
   return mockDelay(result, 900);
+}
+
+/** Which slice of days a price-calendar call should cover. */
+export interface PriceCalendarWindow {
+  /** First day of the window (ISO date). Defaults to a window centred on the outbound date. */
+  startDate?: string;
+  /** How many days to price. Defaults to {@link priceCalendarSpan}. */
+  days?: number;
+}
+
+/** Days in the default fare strip — a fortnight when the search is flexible. */
+export function priceCalendarSpan(query: FlightSearchQuery): number {
+  return query.flexibleDates ? 15 : 7;
+}
+
+/**
+ * Indicative fares for a window of dates (`GET /flights/price-calendar`).
+ *
+ * Split out from {@link searchFlights} because the strip pages independently of
+ * the results: stepping to next week is a calendar call, not a re-search, so
+ * the offers below it stay put instead of being torn down and rebuilt.
+ */
+export function getPriceCalendar(
+  query: FlightSearchQuery,
+  window: PriceCalendarWindow = {},
+): Promise<FarePricePoint[]> {
+  const normalized = normalizeQuery(query);
+  if (!isQueryComplete(normalized)) return mockDelay<FarePricePoint[]>([], 200);
+  return mockDelay(buildPriceCalendar(normalized, window), 320);
 }
 
 /** Rebuild a single offer from its id (`GET /flights/offers/:id`). */
@@ -351,18 +380,30 @@ function buildFacets(offers: FlightOffer[]): FlightSearchResult["facets"] {
 }
 
 /**
- * Indicative prices for the ±3 days around the outbound date. Estimated from the
- * fare model rather than by running seven full searches — which is exactly what
- * a real price-calendar endpoint does, for the same reason.
+ * Indicative prices for a run of days. Estimated from the fare model rather
+ * than by running one full search per day — which is exactly what a real
+ * price-calendar endpoint does, for the same reason.
+ *
+ * The prices are a pure function of (route, date, cabin), so the window the
+ * strip pages to and the window the next search returns always agree.
  */
-function buildPriceCalendar(query: FlightSearchQuery): FarePricePoint[] {
+function buildPriceCalendar(
+  query: FlightSearchQuery,
+  window: PriceCalendarWindow = {},
+): FarePricePoint[] {
   const leg = query.legs[0];
+  if (!leg) return [];
+
+  const days = Math.max(1, Math.min(62, window.days ?? priceCalendarSpan(query)));
+  // Default window: the outbound date sitting in the middle of the strip.
+  const start = window.startDate ?? addDays(leg.date, -Math.floor(days / 2));
+
   const km = distanceKm(leg.from, leg.to);
   const base = baseFareForDistance(km, query.cabin);
 
   const points: FarePricePoint[] = [];
-  for (let offset = -3; offset <= 3; offset++) {
-    const date = addDays(leg.date, offset);
+  for (let offset = 0; offset < days; offset++) {
+    const date = addDays(start, offset);
     const rng = new SeededRandom(`cal:${leg.from}${leg.to}${date}${query.cabin}`);
     // Weekend departures cost more; midweek is the sweet spot.
     const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();

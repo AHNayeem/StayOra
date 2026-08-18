@@ -204,7 +204,10 @@ export function FlightResultsView({ result, suggestions }: FlightResultsViewProp
             {/* ---- Results ------------------------------------------------- */}
             <div className="min-w-0 space-y-4">
               {priceCalendar.length > 0 && (
-                <PriceCalendar points={priceCalendar} query={query} />
+                // Keyed on the search: a new route or date gets a fresh strip
+                // rather than one holding whatever window the last search
+                // happened to be paged to.
+                <PriceCalendar key={key} points={priceCalendar} query={query} />
               )}
 
               <div className="flex flex-wrap items-center justify-between gap-3">
