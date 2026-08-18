@@ -316,6 +316,16 @@ export const DASHBOARD_MENU: MenuNode[] = [
     ],
   },
   {
+    id: "blog",
+    label: "Blog",
+    icon: "Newspaper",
+    anyPermission: ["cms:read"],
+    children: [
+      { id: "blog-posts", label: "Posts", href: "/dashboard/blog" },
+      { id: "blog-categories", label: "Categories", href: "/dashboard/blog/categories" },
+    ],
+  },
+  {
     id: "destinations",
     label: "Destinations",
     icon: "MapPin",

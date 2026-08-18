@@ -20,19 +20,28 @@ export type {
 } from "./destination";
 export { DESTINATION_STATUS_VALUES } from "./destination";
 
-/** A blog / travel-guide post. */
-export interface BlogPost {
-  id: string;
-  slug: string;
-  title: string;
-  excerpt: string;
-  image: string;
-  category: string;
-  author: string;
-  /** ISO date string. */
-  date: string;
-  readMinutes: number;
-}
+/**
+ * Blog posts are a first-class entity with their own lifecycle, not editorial
+ * decoration, so the model lives in `types/blog`. Re-exported here because
+ * content sections and cards import it alongside the rest of this file — there
+ * is exactly one `BlogPost` type in the codebase.
+ */
+export type {
+  BlogAlign,
+  BlogBlock,
+  BlogCategory,
+  BlogCategoryInput,
+  BlogCategoryPatch,
+  BlogCategoryStatus,
+  BlogComment,
+  BlogDetail,
+  BlogPost,
+  BlogPostInput,
+  BlogPostPatch,
+  BlogSeo,
+  BlogStatus,
+} from "./blog";
+export { BLOG_CATEGORY_STATUS_VALUES, BLOG_STATUS_VALUES } from "./blog";
 
 /** A promotional offer / deal banner. */
 export interface Offer {

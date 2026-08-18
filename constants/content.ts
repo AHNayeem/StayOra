@@ -8,127 +8,17 @@
  * through `features/destinations`.
  */
 
-import type {
-  BlogPost,
-  Feature,
-  Offer,
-  Stat,
-  Testimonial,
-} from "@/types/content";
+import type { Feature, Offer, Stat, Testimonial } from "@/types/content";
 
 const img = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&q=80`;
 
-export const BLOG_POSTS: BlogPost[] = [
-  {
-    id: "blg-1",
-    slug: "10-hidden-beaches-worth-the-trip",
-    title: "10 Hidden Beaches Worth the Trip",
-    excerpt:
-      "Skip the crowds and discover secluded shorelines that still feel like a secret — with tips on when to go and where to stay.",
-    image: img("photo-1507525428034-b723cf961d3e"),
-    category: "Inspiration",
-    author: "Mia Carter",
-    date: "2026-06-18",
-    readMinutes: 6,
-  },
-  {
-    id: "blg-2",
-    slug: "how-to-plan-the-perfect-city-break",
-    title: "How to Plan the Perfect City Break",
-    excerpt:
-      "A practical framework for packing a long weekend with the right mix of sights, food and downtime — without burning out.",
-    image: img("photo-1524562979-3226f2d16f5c"),
-    category: "Guides",
-    author: "Leo Nguyen",
-    date: "2026-05-30",
-    readMinutes: 8,
-  },
-  {
-    id: "blg-3",
-    slug: "budget-travel-that-doesnt-feel-cheap",
-    title: "Budget Travel That Doesn't Feel Cheap",
-    excerpt:
-      "Smart swaps and booking timing that stretch your money further while keeping the experience firmly in the treat-yourself column.",
-    image: img("photo-1436491865332-7a61a109cc05"),
-    category: "Tips",
-    author: "Sofia Rossi",
-    date: "2026-05-12",
-    readMinutes: 5,
-  },
-  {
-    id: "blg-4",
-    slug: "a-first-timers-guide-to-solo-travel",
-    title: "A First-Timer's Guide to Solo Travel",
-    excerpt:
-      "Everything nobody tells you before your first trip alone — from picking a base to staying safe without staying home.",
-    image: img("photo-1469854523086-cc02fe5d8800"),
-    category: "Guides",
-    author: "Leo Nguyen",
-    date: "2026-04-28",
-    readMinutes: 9,
-  },
-  {
-    id: "blg-5",
-    slug: "where-to-eat-like-a-local-in-lisbon",
-    title: "Where to Eat Like a Local in Lisbon",
-    excerpt:
-      "Skip the tourist traps near the castle and follow the tascas, markets and pastry counters that Lisboetas actually love.",
-    image: img("photo-1585208798174-6cedd86e019a"),
-    category: "Food & Drink",
-    author: "Sofia Rossi",
-    date: "2026-04-10",
-    readMinutes: 7,
-  },
-  {
-    id: "blg-6",
-    slug: "seven-under-the-radar-alpine-trails",
-    title: "7 Under-the-Radar Alpine Trails",
-    excerpt:
-      "Trade the crowded classics for quieter ridgelines and valley walks that deliver the views without the queues.",
-    image: img("photo-1464822759023-fed622ff2c3b"),
-    category: "Adventure",
-    author: "Mia Carter",
-    date: "2026-03-22",
-    readMinutes: 8,
-  },
-  {
-    id: "blg-7",
-    slug: "travel-trends-shaping-2026",
-    title: "Travel Trends Shaping 2026",
-    excerpt:
-      "From slow travel to shoulder-season swaps, here's how people are planning trips this year — and what it means for you.",
-    image: img("photo-1503220317375-aaad61436b1b"),
-    category: "News",
-    author: "Leo Nguyen",
-    date: "2026-03-05",
-    readMinutes: 6,
-  },
-  {
-    id: "blg-8",
-    slug: "the-art-of-packing-light",
-    title: "The Art of Packing Light",
-    excerpt:
-      "A carry-on-only system that works for a weekend or a month — the capsule wardrobe, the fold, and the one rule that matters.",
-    image: img("photo-1553531384-cc64ac80f931"),
-    category: "Tips",
-    author: "Sofia Rossi",
-    date: "2026-02-18",
-    readMinutes: 5,
-  },
-  {
-    id: "blg-9",
-    slug: "weekend-wonders-48-hours-in-kyoto",
-    title: "Weekend Wonders: 48 Hours in Kyoto",
-    excerpt:
-      "Temples at dawn, a long lunch, and a route that packs the essentials into two unhurried days without the burnout.",
-    image: img("photo-1493976040374-85c8e12f0c0e"),
-    category: "Inspiration",
-    author: "Mia Carter",
-    date: "2026-02-02",
-    readMinutes: 7,
-  },
-];
+/**
+ * Blog posts moved to `constants/blog-posts.ts` when the blog gained a
+ * lifecycle: they are records the dashboard writes, not static marketing copy,
+ * and keeping a second array here is exactly how a published post fails to
+ * appear on the site. Read them through `features/blog` or `services/content`.
+ */
 
 export const OFFERS: Offer[] = [
   {

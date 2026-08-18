@@ -1,3 +1,13 @@
+/**
+ * CMS page seed.
+ *
+ * Deliberately contains no blog articles. Blog posts have their own lifecycle,
+ * editor and public routes (`features/blog`, `/dashboard/blog`), and seeding
+ * `blog/…` pages here produced a second blog dataset whose "view public page"
+ * links pointed at `/blog/<slug>` articles that did not exist. Pages, legal
+ * copy, FAQs and landing pages live here; articles live in the blog module.
+ */
+
 import type { CmsPage, CmsStatus } from "./types";
 
 /** [title, slug, type, one-line excerpt]. */
@@ -7,13 +17,13 @@ const PAGES: [string, string, string, string][] = [
   ["Contact", "contact", "Page", "Support channels, office addresses and response times."],
   ["Terms of service", "terms", "Legal", "The contract between Otithee and every traveller."],
   ["Privacy policy", "privacy", "Legal", "What we collect, why we keep it and how to have it erased."],
-  ["Top 10 beach resorts", "blog/top-beach-resorts", "Blog", "Ten shorelines worth the flight, ranked by our editors."],
-  ["How to book a group stay", "blog/group-stays", "Blog", "Rooming lists, deposits and the paperwork nobody warns you about."],
+  ["Booking FAQ", "faq/booking", "FAQ", "Holds, confirmations and what happens if a property cancels."],
+  ["Group bookings", "faq/group-bookings", "FAQ", "Rooming lists, deposits and the paperwork nobody warns you about."],
   ["Travel FAQ", "faq/travel", "FAQ", "Visas, luggage, check-in windows and the questions behind them."],
   ["Refund FAQ", "faq/refunds", "FAQ", "When money comes back, how fast, and to which card."],
   ["Partner with us", "partners", "Landing", "Why properties list with Otithee and what commission looks like."],
   ["Careers", "careers", "Page", "Open roles across engineering, operations and partner success."],
-  ["City guides: London", "blog/london-guide", "Blog", "Where to stay in London by neighbourhood, budget and mood."],
+  ["Payments FAQ", "faq/payments", "FAQ", "Cards, wallets, currency conversion and when we take the money."],
 ];
 
 const AUTHORS = ["AH Nayeem", "Ben Silva", "Chen Wong", "Dana Meyer"];

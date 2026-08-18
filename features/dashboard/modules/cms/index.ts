@@ -1,4 +1,4 @@
-/** CMS module — pages/blog/FAQ with a draft → review → published workflow. */
+/** CMS module — pages/FAQ/legal with a draft → review → published workflow. */
 export * from "./types";
 export { cmsPageSchema } from "./schemas";
 export type { CmsPageFormValues } from "./schemas";

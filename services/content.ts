@@ -21,13 +21,7 @@ import type {
   Partner,
   TravelPackage,
 } from "@/types/home";
-import {
-  BLOG_POSTS,
-  FEATURES,
-  OFFERS,
-  STATS,
-  TESTIMONIALS,
-} from "@/constants/content";
+import { FEATURES, OFFERS, STATS, TESTIMONIALS } from "@/constants/content";
 import {
   AWARDS,
   COUNTRY_HIGHLIGHTS,
@@ -36,7 +30,12 @@ import {
   PARTNERS,
   TRAVEL_PACKAGES,
 } from "@/constants/home-data";
-import { buildBlogDetail } from "@/lib/blog-detail";
+import {
+  getBlogCategories as listBlogCategories,
+  getBlogDetail as readBlogDetail,
+  getBlogPostBySlug as readBlogPostBySlug,
+  getBlogPosts as listBlogPosts,
+} from "@/features/blog/service";
 import { getDestinations as listDestinations } from "@/features/destinations/service";
 import { mockDelay } from "./http";
 
@@ -49,37 +48,30 @@ import { mockDelay } from "./http";
 export const getDestinations = (limit?: number): Promise<Destination[]> =>
   listDestinations({ status: "published", limit });
 
+/**
+ * Published blog posts for the home rail and the sitemap.
+ *
+ * Delegates to `features/blog` rather than holding its own array, so a post
+ * published (or archived) in the dashboard changes the home page too. Drafts and
+ * archived posts are excluded by the service, not by the caller.
+ */
 export const getBlogPosts = (limit?: number): Promise<BlogPost[]> =>
-  mockDelay(limit ? BLOG_POSTS.slice(0, limit) : BLOG_POSTS);
+  listBlogPosts({ status: "published", limit });
 
-/** A single post by slug — `undefined` when the slug is unknown. */
+/** A single *published* post by slug — `undefined` when the slug is unknown. */
 export const getBlogPostBySlug = (slug: string): Promise<BlogPost | undefined> =>
-  mockDelay(BLOG_POSTS.find((post) => post.slug === slug));
+  readBlogPostBySlug(slug);
 
 /** The full details payload for a post, or `undefined` for an unknown slug. */
-export const getBlogDetail = (slug: string): Promise<BlogDetail | undefined> => {
-  const post = BLOG_POSTS.find((p) => p.slug === slug);
-  return mockDelay(post ? buildBlogDetail(post, BLOG_POSTS) : undefined);
-};
+export const getBlogDetail = (slug: string): Promise<BlogDetail | undefined> =>
+  readBlogDetail(slug);
 
-/** The most recent posts, for sidebars. */
+/** The most recently published posts, for sidebars. */
 export const getRecentPosts = (limit = 4): Promise<BlogPost[]> =>
-  mockDelay(
-    [...BLOG_POSTS]
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .slice(0, limit),
-  );
+  listBlogPosts({ status: "published", limit });
 
-/** Category names with post counts, newest-defined order preserved. */
-export const getBlogCategories = (): Promise<BlogCategory[]> => {
-  const counts = new Map<string, number>();
-  for (const post of BLOG_POSTS) {
-    counts.set(post.category, (counts.get(post.category) ?? 0) + 1);
-  }
-  return mockDelay(
-    Array.from(counts, ([name, count]) => ({ name, count })),
-  );
-};
+/** Categories with published-post counts, newest-defined order preserved. */
+export const getBlogCategories = (): Promise<BlogCategory[]> => listBlogCategories();
 
 export const getOffers = (): Promise<Offer[]> => mockDelay(OFFERS);
 

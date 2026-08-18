@@ -2,51 +2,58 @@
 
 import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
-import type { BlogCategory } from "@/types/blog";
-import type { BlogPost } from "@/types/content";
 import { BlogCard } from "@/components/cards/blog-card";
 import { Pagination } from "@/components/ui/pagination";
 import { Reveal } from "@/components/shared/reveal";
+import { useBlogCategories, useBlogPosts, useBlogTags } from "@/features/blog/hooks";
 import { BlogSidebar } from "./blog-sidebar";
 
 const PAGE_SIZE = 6;
 
 interface BlogListingProps {
-  posts: BlogPost[];
-  categories: BlogCategory[];
-  recent: BlogPost[];
+  /** Category slug from `?category=` — the URL a sidebar link produced. */
+  initialCategory?: string;
+  /** Tag from `?tag=` — narrows the list without occupying the category facet. */
+  initialTag?: string;
+  initialSearch?: string;
 }
 
 /**
  * BlogListing — the client orchestrator for `/blogs`: owns search, category and
- * page state, derives the visible posts with `useMemo`, and lays out the card
- * grid beside the shared {@link BlogSidebar}. All state changes happen in event
- * handlers (which also reset paging), keeping effects free of setState.
+ * page state, derives the visible posts, and lays out the card grid beside the
+ * shared {@link BlogSidebar}. All state changes happen in event handlers (which
+ * also reset paging), keeping effects free of setState.
+ *
+ * Posts come from the canonical store rather than a prop, for the same reason
+ * `DestinationsIndex` does: the page still renders on the server from the seed
+ * (the hooks hand SSR the seed snapshot, so the list is complete without
+ * JavaScript) and *additionally* picks up posts the author published in this
+ * browser, which the server cannot see in the prototype.
+ *
+ * Only `published` posts are ever returned — the status filter lives in the
+ * service, so this component cannot accidentally show a draft.
  */
-export function BlogListing({ posts, categories, recent }: BlogListingProps) {
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("");
+export function BlogListing({
+  initialCategory = "",
+  initialTag = "",
+  initialSearch = "",
+}: BlogListingProps) {
+  const [query, setQuery] = useState(initialSearch);
+  const [category, setCategory] = useState(initialCategory);
   const [page, setPage] = useState(1);
 
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return [...posts]
-      .sort((a, b) => (a.date < b.date ? 1 : -1))
-      .filter((post) => (category ? post.category === category : true))
-      .filter((post) =>
-        needle
-          ? post.title.toLowerCase().includes(needle) ||
-            post.excerpt.toLowerCase().includes(needle) ||
-            post.category.toLowerCase().includes(needle)
-          : true,
-      );
-  }, [posts, query, category]);
+  const categories = useBlogCategories();
+  const tags = useBlogTags();
+  const filtered = useBlogPosts(
+    initialTag ? { search: query, category, tag: initialTag } : { search: query, category },
+  );
+  const recent = useBlogPosts({ limit: 4 });
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
-  const visible = filtered.slice(
-    (currentPage - 1) * PAGE_SIZE,
-    currentPage * PAGE_SIZE,
+  const visible = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage],
   );
 
   const handleQueryChange = (value: string) => {
@@ -92,6 +99,7 @@ export function BlogListing({ posts, categories, recent }: BlogListingProps) {
       <BlogSidebar
         categories={categories}
         recent={recent}
+        tags={tags.slice(0, 12)}
         query={query}
         onQueryChange={handleQueryChange}
         activeCategory={category}

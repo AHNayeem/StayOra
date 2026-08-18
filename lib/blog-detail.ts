@@ -1,17 +1,22 @@
 /**
- * blog-detail.ts — the pure, deterministic builder that turns a bare
- * {@link BlogPost} into a page-ready {@link BlogDetail}. It assembles an article
- * body, tags, comments and related posts from the editorial pools in
- * `constants/blog`.
+ * blog-detail.ts — deterministic editorial builders for the blog.
  *
- * Framework-free and side-effect-free — no React, no `Date.now`, no `Math.random`
- * (every pick is slug-seeded so server and client render identically). When a
- * real CMS arrives it can return {@link BlogDetail} directly and this builder
- * simply falls away.
+ * Two jobs, both pure and side-effect-free (no React, no `Date.now`, no
+ * `Math.random` — every pick is slug-seeded so server and client render
+ * identically):
+ *
+ *  1. {@link seedBody} / {@link seedTags} assemble article content for the
+ *     *seed* posts from the pools in `constants/blog`. They run once, when the
+ *     seed is built — a post's body then lives on the record like any other
+ *     field, so an editor can change it. This is the difference from the
+ *     previous design, where every article body was derived at render time and
+ *     therefore uneditable.
+ *  2. {@link postComments} still derives reader comments per post. Comments are
+ *     reader-generated, not authored, so there is nothing for the dashboard to
+ *     edit and no reason to store them until a real comments API exists.
  */
 
-import type { BlogPost } from "@/types/content";
-import type { BlogBlock, BlogComment, BlogDetail } from "@/types/blog";
+import type { BlogBlock, BlogComment, BlogPost } from "@/types/blog";
 import {
   BODY_SECTIONS,
   COMMENT_POOL,
@@ -39,16 +44,20 @@ function pick<T>(pool: T[], offset: number, count: number): T[] {
   );
 }
 
-/** Assemble the article body: intro → three sections (with a quote mid-way) → outro. */
-function buildBody(post: BlogPost): BlogBlock[] {
-  const seed = hashString(post.slug);
+/**
+ * Article content for a seed post: intro → three sections (with a pull-quote
+ * mid-way) → outro. Byte-for-byte what `/blog/{slug}` rendered before content
+ * became a stored field, so no existing article changed when it moved.
+ */
+export function seedBody(slug: string): BlogBlock[] {
+  const seed = hashString(slug);
   const blocks: BlogBlock[] = [
     { type: "paragraph", text: INTRO_POOL[seed % INTRO_POOL.length] },
   ];
 
   const sections = pick(BODY_SECTIONS, seed % BODY_SECTIONS.length, 3);
   sections.forEach((section, index) => {
-    blocks.push({ type: "heading", text: section.heading });
+    blocks.push({ type: "heading", text: section.heading, level: 2 });
     section.paragraphs.forEach((text) => blocks.push({ type: "paragraph", text }));
     if (section.list) blocks.push({ type: "list", items: section.list });
     // Drop a pull-quote after the first section.
@@ -61,41 +70,19 @@ function buildBody(post: BlogPost): BlogBlock[] {
   return blocks;
 }
 
-/** Four tags: the post's category first, then a stable sample from the pool. */
-function buildTags(post: BlogPost): string[] {
-  const seed = hashString(post.slug);
+/** Four tags for a seed post: its category first, then a stable pool sample. */
+export function seedTags(slug: string, category: string): string[] {
+  const seed = hashString(slug);
   const sampled = pick(TAG_POOL, seed % TAG_POOL.length, 4);
-  return Array.from(new Set([post.category, ...sampled])).slice(0, 4);
+  return Array.from(new Set([category, ...sampled])).slice(0, 4);
 }
 
-/** A stable subset of comments for the post. */
-function buildComments(post: BlogPost): BlogComment[] {
+/** A stable subset of reader comments for a post. */
+export function postComments(post: Pick<BlogPost, "id" | "slug">): BlogComment[] {
   const seed = hashString(post.slug);
   const count = 2 + (seed % 2); // 2 or 3
   return pick(COMMENT_POOL, seed % COMMENT_POOL.length, count).map((c, i) => ({
     id: `${post.id}-cmt-${i + 1}`,
     ...c,
   }));
-}
-
-/** Related posts: same category first, then fill with the newest others. */
-function buildRelated(post: BlogPost, all: BlogPost[], limit = 3): BlogPost[] {
-  const others = all.filter((p) => p.id !== post.id);
-  const sameCategory = others.filter((p) => p.category === post.category);
-  const rest = others.filter((p) => p.category !== post.category);
-  return [...sameCategory, ...rest].slice(0, limit);
-}
-
-/**
- * Build the full details payload for a post. Pure and deterministic — the single
- * place mock posts are enriched into page-ready content.
- */
-export function buildBlogDetail(post: BlogPost, all: BlogPost[]): BlogDetail {
-  return {
-    post,
-    body: buildBody(post),
-    tags: buildTags(post),
-    comments: buildComments(post),
-    related: buildRelated(post, all),
-  };
 }

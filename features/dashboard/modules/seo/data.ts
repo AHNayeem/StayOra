@@ -55,7 +55,7 @@ const ENTRIES: [string, string, string, boolean][] = [
     true,
   ],
   [
-    "/blog",
+    "/blogs",
     "Travel Guides & Tips | Otithee Blog",
     "Destination guides, travel tips and inspiration to plan your next trip with confidence.",
     true,

@@ -58,7 +58,7 @@ export function publishedContent(slug: string, nowMs = Date.now()): PublishedCon
   };
 }
 
-/** Every live page of a type — e.g. all published blog posts. */
+/** Every live page of a type — e.g. all published FAQ pages. */
 export function publishedByType(type: string, nowMs = Date.now()): PublishedContent[] {
   return pages()
     .filter((p) => p.type.toLowerCase() === type.toLowerCase() && isLive(p, nowMs))
@@ -75,7 +75,8 @@ export function publishedByType(type: string, nowMs = Date.now()): PublishedCont
 /** Where a slug appears on the public site — shown in the CMS list. */
 export function publicHref(slug: string): string {
   if (slug === "home") return "/";
-  if (slug.startsWith("blog/")) return `/${slug}`;
+  // No blog branch: articles are not CMS pages — they are records in
+  // `features/blog` with their own dashboard screens and their own URLs.
   if (slug.startsWith("faq/")) return "/faqs";
   const map: Record<string, string> = {
     about: "/about-us",

@@ -3,6 +3,7 @@ import { siteConfig } from "@/constants/site";
 import { VERTICAL_LIST } from "@/constants/verticals";
 import { getAllListings } from "@/services/catalog";
 import { getBlogPosts } from "@/services/content";
+import { blogPostHref } from "@/features/blog/links";
 import { getDestinations } from "@/features/destinations/service";
 
 const BASE = siteConfig.url;
@@ -75,8 +76,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Blog articles.
   const posts = await getBlogPosts();
   const blogEntries: MetadataRoute.Sitemap = posts.map((post) => ({
-    url: `${BASE}/blog/${post.slug}`,
-    lastModified: new Date(post.date),
+    url: `${BASE}${blogPostHref(post)}`,
+    lastModified: new Date(post.updatedAt),
     changeFrequency: "monthly",
     priority: 0.6,
     images: [post.image],

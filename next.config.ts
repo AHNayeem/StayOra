@@ -51,6 +51,19 @@ const nextConfig: NextConfig = {
         experimental: { turbopackUseBuiltinBabel: false },
       }
     : {}),
+  /**
+   * URL aliases.
+   *
+   * Articles live at `/blog/{slug}` while the index has always been `/blogs`, so
+   * `/blog` on its own was a 404 — a URL people type and links get written to.
+   * Handled here rather than by a page that calls `permanentRedirect`: a page
+   * renders inside the streaming shell and emits a `<meta http-equiv="refresh">`,
+   * which flashes the not-found layout before it moves. A config redirect is a
+   * real 308 with no render at all, and keeps one canonical URL for the index.
+   */
+  async redirects() {
+    return [{ source: "/blog", destination: "/blogs", permanent: true }];
+  },
   images: {
     // Hero and card imagery is sourced from Unsplash during design build-out.
     // Swap these patterns for your own asset host when wiring real data.

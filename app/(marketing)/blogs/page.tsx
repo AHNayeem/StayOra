@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { getBlogCategories, getBlogPosts, getRecentPosts } from "@/services/content";
 import { PageBanner } from "@/components/ui/page-banner";
 import { Section } from "@/components/ui/section";
 import { BlogListing } from "@/components/sections/blog";
@@ -15,17 +14,22 @@ export const metadata: Metadata = {
   alternates: { canonical: "/blogs" },
 };
 
+/** `?category=` / `?tag=` / `?q=` seed the listing's filters from the URL. */
+type SearchParams = {
+  searchParams: Promise<{ category?: string; tag?: string; q?: string }>;
+};
+
 /**
- * Blog listing — a banner over the client-driven {@link BlogListing} (search,
- * category filter and pagination) with a sidebar. Data is fetched here through
- * the service layer and filtered client-side.
+ * Blog listing — a banner over {@link BlogListing}, which reads published posts
+ * from the canonical blog store (search, category filter, tag filter and
+ * pagination all client-side over the same rows the dashboard writes).
+ *
+ * The filters arrive as query parameters so a category or tag link from an
+ * article is a real, shareable URL rather than state that only exists after a
+ * click.
  */
-export default async function BlogsPage() {
-  const [posts, categories, recent] = await Promise.all([
-    getBlogPosts(),
-    getBlogCategories(),
-    getRecentPosts(4),
-  ]);
+export default async function BlogsPage({ searchParams }: SearchParams) {
+  const { category = "", tag = "", q = "" } = await searchParams;
 
   return (
     <main className="flex-1">
@@ -38,7 +42,7 @@ export default async function BlogsPage() {
       />
 
       <Section>
-        <BlogListing posts={posts} categories={categories} recent={recent} />
+        <BlogListing initialCategory={category} initialTag={tag} initialSearch={q} />
       </Section>
 
       <NewsletterSection />

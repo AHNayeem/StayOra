@@ -14,7 +14,7 @@ const ITEMS: [string, MenuLocation, string, boolean][] = [
   ["Visa", "header", "/visa", false],
   ["About us", "footer", "/about", true],
   ["Careers", "footer", "/careers", true],
-  ["Blog", "footer", "/blog", true],
+  ["Blog", "footer", "/blogs", true],
   ["Partners", "footer", "/partners", true],
   ["Help center", "footer", "/help", true],
   ["Contact", "footer", "/contact", true],

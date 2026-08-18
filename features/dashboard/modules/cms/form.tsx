@@ -17,7 +17,8 @@ import { cmsPageSchema } from "./schemas";
 import { useCreateCmsPage, useUpdateCmsPage } from "./hooks";
 import type { CmsPage } from "./types";
 
-const TYPE_OPTIONS = ["Page", "Blog Post", "FAQ", "Legal", "Landing"].map((v) => ({
+/** "Blog Post" is absent on purpose — articles are authored in Blog, not here. */
+const TYPE_OPTIONS = ["Page", "FAQ", "Legal", "Landing"].map((v) => ({
   value: v,
   label: v,
 }));

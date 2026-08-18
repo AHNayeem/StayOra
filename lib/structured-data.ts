@@ -1,4 +1,5 @@
 import { siteConfig } from "@/constants/site";
+import { blogPostHref } from "@/features/blog/links";
 import type { BlogPost } from "@/types/content";
 import type { Destination } from "@/types/destination";
 import type { FaqGroup } from "@/constants/faq";
@@ -75,7 +76,7 @@ export function breadcrumbSchema(
 
 /** BlogPosting node for an article detail page. */
 export function articleSchema(post: BlogPost): JsonLd {
-  const url = `${BASE}/blog/${post.slug}`;
+  const url = `${BASE}${blogPostHref(post)}`;
   return {
     "@context": "https://schema.org",
     "@type": "BlogPosting",
@@ -83,8 +84,9 @@ export function articleSchema(post: BlogPost): JsonLd {
     headline: post.title,
     description: post.excerpt,
     image: post.image,
-    datePublished: post.date,
-    dateModified: post.date,
+    ...(post.tags?.length ? { keywords: post.tags.join(", ") } : {}),
+    datePublished: post.publishedAt ?? post.updatedAt,
+    dateModified: post.updatedAt,
     articleSection: post.category,
     author: { "@type": "Person", name: post.author },
     publisher: { "@id": `${BASE}/#organization` },

@@ -1,5 +1,7 @@
 import { CalendarDays, Clock } from "lucide-react";
 import type { BlogPost } from "@/types/content";
+import { blogPostHref } from "@/features/blog/links";
+import { postDate } from "@/features/blog/service";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -26,18 +28,21 @@ export function BlogCard({ post, className }: { post: BlogPost; className?: stri
     <Card className={className}>
       <CardMedia
         src={post.image}
-        alt={post.title}
+        alt={post.imageAlt || post.title}
         aspect="video"
         badges={<Badge variant="dark">{post.category}</Badge>}
       />
       <CardBody>
         <CardMetaList
           items={[
-            { icon: CalendarDays, label: formatDate(post.date) },
+            { icon: CalendarDays, label: formatDate(postDate(post)) },
             { icon: Clock, label: `${post.readMinutes} min read` },
           ]}
         />
-        <CardTitle href={`/blog/${post.slug}`}>{post.title}</CardTitle>
+        {/* The href comes from the post's canonical slug, never from its title —
+            building a blog URL out of display text is exactly how a card ends up
+            linking to a 404. */}
+        <CardTitle href={blogPostHref(post)}>{post.title}</CardTitle>
         <p className="line-clamp-2 text-sm text-body">{post.excerpt}</p>
       </CardBody>
       <CardFooter className="justify-start gap-2.5">
