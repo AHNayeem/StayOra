@@ -80,6 +80,7 @@ export const ROUTE_RULES: RouteRule[] = [
 
   // Content
   { prefix: "/dashboard/cms", anyPermission: ["cms:read"] },
+  { prefix: "/dashboard/destinations", anyPermission: ["cms:read"] },
   { prefix: "/dashboard/reviews", anyPermission: ["reviews:read"] },
   { prefix: "/dashboard/localization", anyPermission: ["localization:read"] },
 

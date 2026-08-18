@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
-import { getDestinations } from "@/services/content";
-import { DestinationCard } from "@/components/cards/destination-card";
 import { PageBanner } from "@/components/ui/page-banner";
-import { Section } from "@/components/ui/section";
-import { Reveal } from "@/components/shared/reveal";
 import { NewsletterSection } from "@/components/sections/newsletter-section";
+import { DestinationsIndex } from "@/features/destinations";
 
 const BANNER_IMAGE =
   "https://images.unsplash.com/photo-1476514525535-07fb3b4ae5f1?auto=format&fit=crop&w=1600&q=80";
@@ -16,13 +13,20 @@ export const metadata: Metadata = {
   alternates: { canonical: "/destinations" },
 };
 
+/** `?q=` pre-fills the search box (the site-search JSON-LD target lands here). */
+type PageProps = { searchParams: Promise<{ q?: string }> };
+
 /**
- * Destinations — a banner over a simple destination card grid (no filters, per
- * the design blueprint). Cards reveal on scroll for consistency with the rest of
- * the platform.
+ * Destinations index — banner, featured band, search/country facets and the card
+ * grid.
+ *
+ * The grid itself lives in {@link DestinationsIndex}, a client component, for two
+ * reasons: filtering shouldn't cost a round trip, and destinations created in the
+ * dashboard are persisted in the browser. It still server-renders from the seed,
+ * so the page is complete before any JavaScript runs.
  */
-export default async function DestinationsPage() {
-  const destinations = await getDestinations();
+export default async function DestinationsPage({ searchParams }: PageProps) {
+  const { q } = await searchParams;
 
   return (
     <main className="flex-1">
@@ -34,19 +38,7 @@ export default async function DestinationsPage() {
         breadcrumb={[{ label: "Home", href: "/" }, { label: "Destinations" }]}
       />
 
-      <Section>
-        {destinations.length > 0 ? (
-          <div className="grid grid-cols-2 gap-4 sm:gap-6 md:grid-cols-3 lg:grid-cols-4">
-            {destinations.map((destination, index) => (
-              <Reveal key={destination.id} step={index % 4} className="h-full">
-                <DestinationCard destination={destination} className="h-full" />
-              </Reveal>
-            ))}
-          </div>
-        ) : (
-          <p className="text-center text-body">No destinations available yet.</p>
-        )}
-      </Section>
+      <DestinationsIndex initialSearch={q ?? ""} />
 
       <NewsletterSection />
     </main>

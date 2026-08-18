@@ -21,6 +21,8 @@ import { PriceTag } from "@/components/ui/price-tag";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { useLockBodyScroll } from "@/hooks/use-lock-body-scroll";
 import { cn } from "@/lib/utils";
+import { destinationHref } from "@/features/destinations/links";
+import { matchPublishedDestination } from "@/features/destinations/service";
 import { clearRecentSearches, useRecentSearches } from "./recent-searches";
 import { useGlobalSearch } from "./use-global-search";
 
@@ -89,6 +91,16 @@ export function SearchDialog({ onClose }: { onClose: () => void }) {
       router.push(listingHref(item.listing));
     } else if (item.kind === "vertical" || item.kind === "airport") {
       router.push(item.hit.href);
+    } else if (item.kind === "destination") {
+      // A place we publish a guide for opens the guide; anything else stays a
+      // keyword search, so a suggestion can never point at a page that isn't there.
+      const term = item.term.trim();
+      if (!term) return;
+      remember(term);
+      const destination = matchPublishedDestination(term);
+      router.push(
+        destination ? destinationHref(destination) : `/search?q=${encodeURIComponent(term)}`,
+      );
     } else {
       const term = item.term.trim();
       if (!term) return;

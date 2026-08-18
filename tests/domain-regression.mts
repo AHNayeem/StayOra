@@ -139,6 +139,20 @@ import {
   transition,
 } from "@/features/dashboard/modules/cms/workflow";
 import { cmsService } from "@/features/dashboard/modules/cms/service";
+import {
+  archiveDestination,
+  createDestination,
+  getDestinationBySlug,
+  getDestinations,
+  isDestinationSlugAvailable,
+  publishDestination,
+  setDestinationStatus,
+  suggestDestinationSlug,
+  updateDestination,
+} from "@/features/destinations/service";
+import { destinationRepository } from "@/features/destinations/repository";
+import { destinationRelations } from "@/features/destinations/related";
+import { slugify } from "@/features/destinations/slug";
 import { DEMO_ORIGIN, coordsFor, haversineKm } from "@/features/discovery/geo";
 import { roleService } from "@/features/dashboard/rbac/role-service";
 import { derivePermissions } from "@/features/dashboard/rbac/current-user";
@@ -2870,6 +2884,136 @@ check(
 
 cancelSplit(staleBooking.id);
 check("cancelling the booking closes the split", getSplit(staleSplit.id)?.status === "cancelled");
+
+// ---------------------------------------------------------------------------
+section("Destinations — slugs, lifecycle, public visibility, catalogue links");
+// ---------------------------------------------------------------------------
+
+check("Bali resolves by slug", Boolean(await getDestinationBySlug("bali")));
+check("an unknown slug resolves to nothing", (await getDestinationBySlug("atlantis")) === undefined);
+
+const seeded = await getDestinations({ status: "any" });
+check(
+  "every seeded slug is unique",
+  new Set(seeded.map((d) => d.slug)).size === seeded.length,
+);
+check("every seeded id is unique", new Set(seeded.map((d) => d.id)).size === seeded.length);
+check(
+  "every seeded slug is already canonical",
+  seeded.every((d) => d.slug === slugify(d.slug)),
+);
+
+// A draft and an archived destination ship with the seed; neither may be public.
+const publicList = await getDestinations();
+check("the public list is published-only", publicList.every((d) => d.status === "published"));
+check(
+  "the seeded draft is hidden from the public list",
+  !publicList.some((d) => d.slug === "cappadocia"),
+);
+check("a draft slug does not resolve publicly", (await getDestinationBySlug("cappadocia")) === undefined);
+check(
+  "a draft slug does resolve in preview",
+  Boolean(await getDestinationBySlug("cappadocia", { preview: true })),
+);
+check(
+  "the seeded archive is hidden from the public list",
+  !publicList.some((d) => d.slug === "phuket"),
+);
+check("featured destinations sort first", Boolean(publicList[0]?.featured));
+
+check("slugify handles multi-word names", slugify("New York City") === "new-york-city");
+check("slugify drops apostrophes", slugify("Cox's Bazar") === "coxs-bazar");
+check("slugify transliterates accents", slugify("Türkiye") === "turkiye");
+check("an existing slug is not available", !isDestinationSlugAvailable("bali"));
+check("a suggestion avoids a clash", suggestDestinationSlug("Bali") === "bali-2");
+
+// --- create → publish → view → edit → archive -------------------------------
+const newDestination = await createDestination({
+  name: "Hoi An",
+  country: "Vietnam",
+  region: "Quang Nam",
+  description:
+    "A lantern-lit riverside town of tailors and merchant houses, an hour from Da Nang's beaches.",
+  shortDescription: "Lanterns, tailors and the best food in central Vietnam.",
+  image: "https://images.unsplash.com/photo-1528181304800-259b08848526",
+  status: "draft",
+  featured: false,
+  slug: "",
+});
+check("a created destination gets an id", newDestination.id.startsWith("dst_"));
+check("a blank slug is derived from the name", newDestination.slug === "hoi-an");
+check("a new draft is not public", (await getDestinationBySlug("hoi-an")) === undefined);
+
+const publishedNew = await publishDestination(newDestination.id);
+check("publishing makes it live", publishedNew.status === "published");
+check("a published destination resolves publicly", Boolean(await getDestinationBySlug("hoi-an")));
+
+const edited = await updateDestination(newDestination.id, { shortDescription: "Lanterns and tailors." });
+check("an edit lands on the public record", edited.shortDescription === "Lanterns and tailors.");
+check("an edit preserves untouched fields", edited.country === "Vietnam");
+check("an edit preserves the slug", edited.slug === "hoi-an");
+
+let slugClashRejected = false;
+try {
+  await updateDestination(newDestination.id, { slug: "bali" });
+} catch {
+  slugClashRejected = true;
+}
+check("a slug already in use is rejected", slugClashRejected);
+check(
+  "the rejected write left the slug alone",
+  (await getDestinationBySlug("bali"))?.name === "Bali",
+);
+
+const archived = await archiveDestination(newDestination.id);
+check("archiving is allowed from published", archived.status === "archived");
+check(
+  "an archived destination leaves the public list",
+  !(await getDestinations()).some((d) => d.slug === "hoi-an"),
+);
+check("an archived slug stops resolving", (await getDestinationBySlug("hoi-an")) === undefined);
+
+let illegalJump = false;
+try {
+  await setDestinationStatus(newDestination.id, "published");
+} catch {
+  illegalJump = true;
+}
+check("archived cannot publish directly", illegalJump);
+check(
+  "archived can return to draft",
+  (await setDestinationStatus(newDestination.id, "draft")).status === "draft",
+);
+
+// --- catalogue relationships ------------------------------------------------
+const bali = (await getDestinationBySlug("bali"))!;
+const balirelations = destinationRelations(bali, { destinations: publicList });
+check("Bali matches catalogue inventory", balirelations.listingCount > 0);
+check("Bali offers stays", balirelations.stays.length > 0);
+check(
+  "matched stays are actually in Indonesia",
+  balirelations.stays.every(
+    (l) =>
+      /bali|ubud/i.test(l.location.city ?? l.location.label) ||
+      /indonesia/i.test(l.location.country ?? l.location.label),
+  ),
+);
+check(
+  "related destinations exclude the destination itself",
+  !balirelations.related.some((d) => d.id === bali.id),
+);
+check(
+  "related destinations are published only",
+  balirelations.related.every((d) => d.status === "published"),
+);
+check(
+  "an empty pool yields no listings",
+  destinationRelations(bali, { pool: [], destinations: [] }).listingCount === 0,
+);
+check(
+  "the repository snapshot is a stable reference",
+  destinationRepository.snapshot() === destinationRepository.snapshot(),
+);
 
 // ---------------------------------------------------------------------------
 console.log(`\n${passed} passed, ${failed} failed`);

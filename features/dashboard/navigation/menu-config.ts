@@ -316,6 +316,13 @@ export const DASHBOARD_MENU: MenuNode[] = [
     ],
   },
   {
+    id: "destinations",
+    label: "Destinations",
+    icon: "MapPin",
+    href: "/dashboard/destinations",
+    anyPermission: ["cms:read"],
+  },
+  {
     id: "reviews",
     label: "Reviews",
     icon: "Star",

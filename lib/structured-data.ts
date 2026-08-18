@@ -1,5 +1,6 @@
 import { siteConfig } from "@/constants/site";
 import type { BlogPost } from "@/types/content";
+import type { Destination } from "@/types/destination";
 import type { FaqGroup } from "@/constants/faq";
 
 /**
@@ -103,5 +104,52 @@ export function faqSchema(groups: FaqGroup[]): JsonLd {
         acceptedAnswer: { "@type": "Answer", text: item.answer },
       })),
     ),
+  };
+}
+
+/**
+ * TouristDestination node for a destination detail page.
+ *
+ * Built entirely from the destination record — the same values the page renders —
+ * so a place added in the dashboard is described correctly without anyone
+ * touching this file.
+ */
+export function destinationSchema(destination: Destination): JsonLd {
+  const url = `${BASE}/destinations/${destination.slug}`;
+  const attractions = destination.attractions ?? [];
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "TouristDestination",
+    "@id": `${url}/#destination`,
+    name: destination.name,
+    description:
+      destination.metadata?.seoDescription ??
+      destination.shortDescription ??
+      destination.description,
+    url,
+    image: [destination.image, ...(destination.gallery ?? [])],
+    address: {
+      "@type": "PostalAddress",
+      addressCountry: destination.country,
+      ...(destination.region ? { addressRegion: destination.region } : {}),
+    },
+    ...(destination.latitude !== undefined && destination.longitude !== undefined
+      ? {
+          geo: {
+            "@type": "GeoCoordinates",
+            latitude: destination.latitude,
+            longitude: destination.longitude,
+          },
+        }
+      : {}),
+    ...(attractions.length > 0
+      ? {
+          includesAttraction: attractions.map((name) => ({
+            "@type": "TouristAttraction",
+            name,
+          })),
+        }
+      : {}),
   };
 }

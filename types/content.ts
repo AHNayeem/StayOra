@@ -5,20 +5,20 @@
  * `components/shared/lucide-icon`.
  */
 
-import type { Price } from "./booking";
-
-/** A place shown in "Top destinations" grids. */
-export interface Destination {
-  id: string;
-  slug: string;
-  name: string;
-  country?: string;
-  image: string;
-  /** Number of listings available there. */
-  propertyCount: number;
-  /** Cheapest listing price, for a "from $X" hint. */
-  startingPrice?: Price;
-}
+/**
+ * Destinations are a first-class entity with their own lifecycle, not editorial
+ * decoration, so the model lives in `types/destination`. Re-exported here
+ * because content sections and cards import it alongside the rest of this file
+ * — there is exactly one `Destination` type in the codebase.
+ */
+export type {
+  Destination,
+  DestinationInput,
+  DestinationPatch,
+  DestinationSeo,
+  DestinationStatus,
+} from "./destination";
+export { DESTINATION_STATUS_VALUES } from "./destination";
 
 /** A blog / travel-guide post. */
 export interface BlogPost {

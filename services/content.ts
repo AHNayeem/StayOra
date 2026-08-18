@@ -6,12 +6,12 @@
 
 import type {
   BlogPost,
-  Destination,
   Feature,
   Offer,
   Stat,
   Testimonial,
 } from "@/types/content";
+import type { Destination } from "@/types/destination";
 import type { BlogCategory, BlogDetail } from "@/types/blog";
 import type {
   Award,
@@ -23,7 +23,6 @@ import type {
 } from "@/types/home";
 import {
   BLOG_POSTS,
-  DESTINATIONS,
   FEATURES,
   OFFERS,
   STATS,
@@ -38,10 +37,17 @@ import {
   TRAVEL_PACKAGES,
 } from "@/constants/home-data";
 import { buildBlogDetail } from "@/lib/blog-detail";
+import { getDestinations as listDestinations } from "@/features/destinations/service";
 import { mockDelay } from "./http";
 
+/**
+ * Published destinations for the home rails.
+ *
+ * Delegates to `features/destinations` rather than holding its own array, so a
+ * destination published (or archived) in the dashboard changes the home page too.
+ */
 export const getDestinations = (limit?: number): Promise<Destination[]> =>
-  mockDelay(limit ? DESTINATIONS.slice(0, limit) : DESTINATIONS);
+  listDestinations({ status: "published", limit });
 
 export const getBlogPosts = (limit?: number): Promise<BlogPost[]> =>
   mockDelay(limit ? BLOG_POSTS.slice(0, limit) : BLOG_POSTS);

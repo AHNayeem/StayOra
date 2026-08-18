@@ -3,6 +3,7 @@ import { siteConfig } from "@/constants/site";
 import { VERTICAL_LIST } from "@/constants/verticals";
 import { getAllListings } from "@/services/catalog";
 import { getBlogPosts } from "@/services/content";
+import { getDestinations } from "@/features/destinations/service";
 
 const BASE = siteConfig.url;
 
@@ -23,9 +24,11 @@ const STATIC_ROUTES: {
 
 /**
  * sitemap.xml — enumerates every indexable URL: static content pages, each
- * vertical's listing page, all listing detail pages, and every blog article.
- * Detail and blog URLs are pulled from the service layer so the sitemap stays
- * in sync with the catalogue (and with `generateStaticParams`) automatically.
+ * vertical's listing page, all listing detail pages, every published destination
+ * and every blog article. Detail, destination and blog URLs are pulled from the
+ * service layer so the sitemap stays in sync with the catalogue (and with
+ * `generateStaticParams`) automatically — an archived destination drops out of
+ * it the moment it is archived.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const lastModified = new Date();
@@ -59,6 +62,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   );
   const detailEntries = listingsByVertical.flat();
 
+  // Published destinations. Drafts and archives are excluded by the service.
+  const destinations = await getDestinations({ status: "published" });
+  const destinationEntries: MetadataRoute.Sitemap = destinations.map((destination) => ({
+    url: `${BASE}/destinations/${destination.slug}`,
+    lastModified: new Date(destination.updatedAt),
+    changeFrequency: "weekly",
+    priority: 0.7,
+    images: [destination.image],
+  }));
+
   // Blog articles.
   const posts = await getBlogPosts();
   const blogEntries: MetadataRoute.Sitemap = posts.map((post) => ({
@@ -69,5 +82,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     images: [post.image],
   }));
 
-  return [...staticEntries, ...verticalEntries, ...detailEntries, ...blogEntries];
+  return [
+    ...staticEntries,
+    ...verticalEntries,
+    ...detailEntries,
+    ...destinationEntries,
+    ...blogEntries,
+  ];
 }

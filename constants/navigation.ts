@@ -75,6 +75,7 @@ export const PRIMARY_NAV: NavItem[] = [
 /** Footer quick links. */
 export const FOOTER_QUICK_LINKS: NavLink[] = [
   { label: "About Us", href: "/about-us" },
+  { label: "Destinations", href: "/destinations" },
   { label: "Become a Partner", href: "/partner" },
   { label: "Flights", href: VERTICALS.flights.href },
   { label: "Tours", href: VERTICALS.tours.href },

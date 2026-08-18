@@ -2,11 +2,14 @@
  * Mock editorial / marketing content. Typed against `types/content`. Icons are
  * Lucide names (strings) resolved at render by `components/shared/lucide-icon`.
  * Consumed via `services/content`.
+ *
+ * Destinations are *not* here: they have their own lifecycle and are authored in
+ * the dashboard, so their seed lives in `constants/destinations.ts` and is read
+ * through `features/destinations`.
  */
 
 import type {
   BlogPost,
-  Destination,
   Feature,
   Offer,
   Stat,
@@ -15,63 +18,6 @@ import type {
 
 const img = (id: string) =>
   `https://images.unsplash.com/${id}?auto=format&fit=crop&w=1200&q=80`;
-
-export const DESTINATIONS: Destination[] = [
-  {
-    id: "dst-1",
-    slug: "paris",
-    name: "Paris",
-    country: "France",
-    image: img("photo-1502602898657-3e91760cbb34"),
-    propertyCount: 1280,
-    startingPrice: { amount: 89, unit: "per night" },
-  },
-  {
-    id: "dst-2",
-    slug: "bali",
-    name: "Bali",
-    country: "Indonesia",
-    image: img("photo-1537996194471-e657df975ab4"),
-    propertyCount: 940,
-    startingPrice: { amount: 42, unit: "per night" },
-  },
-  {
-    id: "dst-3",
-    slug: "santorini",
-    name: "Santorini",
-    country: "Greece",
-    image: img("photo-1533105079780-92b9be482077"),
-    propertyCount: 512,
-    startingPrice: { amount: 120, unit: "per night" },
-  },
-  {
-    id: "dst-4",
-    slug: "tokyo",
-    name: "Tokyo",
-    country: "Japan",
-    image: img("photo-1540959733332-eab4deabeeaf"),
-    propertyCount: 1670,
-    startingPrice: { amount: 78, unit: "per night" },
-  },
-  {
-    id: "dst-5",
-    slug: "dubai",
-    name: "Dubai",
-    country: "UAE",
-    image: img("photo-1512453979798-5ea266f8880c"),
-    propertyCount: 830,
-    startingPrice: { amount: 96, unit: "per night" },
-  },
-  {
-    id: "dst-6",
-    slug: "new-york",
-    name: "New York",
-    country: "USA",
-    image: img("photo-1496442226666-8d4d0e62e6e9"),
-    propertyCount: 2040,
-    startingPrice: { amount: 145, unit: "per night" },
-  },
-];
 
 export const BLOG_POSTS: BlogPost[] = [
   {
