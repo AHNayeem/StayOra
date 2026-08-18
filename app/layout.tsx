@@ -3,6 +3,7 @@ import { Rubik } from "next/font/google";
 import { siteConfig } from "@/constants/site";
 import { Toaster } from "@/components/ui/toaster";
 import { OfflineBanner } from "@/components/shared/offline-banner";
+import { LocatorInit } from "@/components/dev/locator-init";
 import "./globals.css";
 
 const rubik = Rubik({
@@ -68,6 +69,7 @@ export default function RootLayout({
         <OfflineBanner />
         {children}
         <Toaster />
+        {process.env.NODE_ENV === "development" ? <LocatorInit /> : null}
       </body>
     </html>
   );
